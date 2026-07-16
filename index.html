@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fundova — Thrift Savings</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#1a1a1a;background:#f5f5f3;min-height:100vh}
+.app{max-width:920px;margin:0 auto;padding:1.5rem 1rem}
+.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90vh;gap:1rem}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:.5rem}
+.brand-icon{width:44px;height:44px;border-radius:12px;background:#1D9E75;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px}
+.brand h1{font-size:24px;font-weight:600;color:#1a1a1a}
+.login-card{background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.75rem;width:360px;display:flex;flex-direction:column;gap:14px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.login-card h2{font-size:17px;font-weight:600}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;color:#666;font-weight:500}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;font-size:14px;font-family:inherit;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1D9E75;box-shadow:0 0 0 3px #1D9E7515}
+input.warn{border-color:#D97706;background:#FFFBEB}
+textarea{resize:vertical;min-height:70px}
+.btn{padding:9px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:14px;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+.btn:hover{background:#f5f5f3}
+.btn-primary{background:#1D9E75;color:#fff;border-color:#1D9E75;font-weight:500}
+.btn-primary:hover{background:#0F6E56}
+.btn-danger{color:#A32D2D}.btn-danger:hover{background:#fff0f0}
+.btn-warn{background:#FFF3CD;color:#856404;border-color:#FDEFC3;font-weight:500}.btn-warn:hover{background:#FFE69C}
+.btn-edit{color:#185FA5}.btn-edit:hover{background:#EBF4FF}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.header{display:flex;align-items:center;justify-content:space-between;padding:0 0 1rem;border-bottom:1px solid #e5e5e2;margin-bottom:1.25rem}
+.header-left{display:flex;align-items:center;gap:10px}
+.avatar{width:32px;height:32px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#0F6E56}
+.tabs{display:flex;gap:4px;margin-bottom:1.25rem;background:#ece9e6;padding:3px;border-radius:9px;width:fit-content;flex-wrap:wrap}
+.tab{padding:6px 14px;border-radius:7px;border:none;font-size:13px;cursor:pointer;background:none;color:#666;font-family:inherit;font-weight:500}
+.tab.active{background:#fff;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.notif-badge{display:inline-flex;align-items:center;justify-content:center;background:#E53E3E;color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:18px;height:18px;padding:0 5px;margin-left:5px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem}
+.stat{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid #e5e5e2}
+.stat-label{font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.stat-val{font-size:22px;font-weight:600}
+.card{background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1rem}
+.card h3{font-size:14px;font-weight:600;margin-bottom:1rem}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;color:#888;font-weight:500;border-bottom:1px solid #e5e5e2;white-space:nowrap;font-size:12px}
+td{padding:10px;border-bottom:1px solid #f0f0ee;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;border:1px solid #e5e5e2;padding:1.75rem;width:440px;display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.15)}
+.modal h3{font-size:17px;font-weight:600}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:.25rem}
+.divider{border:none;border-top:1px solid #e5e5e2}
+.empty{text-align:center;padding:2.5rem;color:#888;font-size:13px}
+.accrued-box{background:linear-gradient(135deg,#1D9E75,#0F6E56);border-radius:14px;padding:1.5rem;margin-bottom:1rem;color:#fff}
+.accrued-label{font-size:11px;color:#9FE1CB;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;font-weight:500}
+.accrued-amount{font-size:30px;font-weight:700}
+.accrued-breakdown{font-size:12px;color:#9FE1CB;margin-top:4px}
+.accrued-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}
+.accrued-sub{background:rgba(255,255,255,.15);border-radius:10px;padding:10px 14px}
+.accrued-sub-label{font-size:11px;color:#9FE1CB;margin-bottom:3px}
+.accrued-sub-val{font-size:17px;font-weight:600}
+.error{color:#A32D2D;font-size:12px;min-height:16px}
+.warn-box{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400E;display:flex;gap:8px;align-items:flex-start}
+.info-box{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;font-size:13px;color:#1E40AF}
+.admin-tag{display:inline-block;background:#E6F1FB;color:#185FA5;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
+.spinner-dark{border:2px solid #e5e5e2;border-top-color:#1D9E75}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-full{display:flex;align-items:center;justify-content:center;min-height:60vh;gap:10px;color:#888}
+.contrib-header{display:flex;align-items:center;gap:14px;margin-bottom:1.25rem;padding:1.25rem;background:#fff;border:1px solid #e5e5e2;border-radius:14px}
+.contrib-name{font-size:17px;font-weight:600}
+.contrib-sub{font-size:12px;color:#888;margin-top:3px}
+.green{color:#0F6E56}.amber{color:#854F0B}
+.status-pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.pill-pending{background:#FFF3CD;color:#856404}
+.pill-approved{background:#D1FAE5;color:#065F46}
+.pill-rejected{background:#FEE2E2;color:#991B1B}
+.withdraw-banner{background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:1rem;font-size:13px}
+.pending-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;gap:1rem;padding:2rem}
+.pending-icon{width:72px;height:72px;border-radius:50%;background:#FFF3CD;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:.5rem}
+.checkbox-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#444;cursor:pointer}
+.checkbox-row input[type=checkbox]{width:16px;height:16px;margin-top:2px;flex-shrink:0;cursor:pointer}
+.step-indicator{display:flex;gap:6px;margin-bottom:1rem}
+.step-dot{width:8px;height:8px;border-radius:50%;background:#ddd}
+.step-dot.active{background:#1D9E75}
+@media(max-width:600px){
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .modal{width:95vw;padding:1.25rem}
+  .accrued-grid{grid-template-columns:1fr}
+  .login-card{width:95vw}
+}
+
+.contact-footer{background:#fff;border-top:1px solid #e5e5e2;padding:14px 1rem;display:flex;align-items:center;justify-content:center;gap:12px;position:fixed;bottom:0;left:0;right:0;z-index:50;flex-wrap:wrap}
+.contact-footer a{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;text-decoration:none;padding:6px 12px;border-radius:20px;transition:background .15s}
+.cf-phone{color:#0F6E56;background:#E1F5EE}.cf-phone:hover{background:#BBF7D0}
+.cf-wa{color:#065F46;background:#D1FAE5}.cf-wa:hover{background:#A7F3D0}
+.cf-ig{color:#9D174D;background:#FDE8F5}.cf-ig:hover{background:#FBCFE8}
+.app{padding-bottom:60px}
+</style>
+</head>
+<body>
+<div class="app" id="app"><div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading Fundova…</div></div>
+<div class="modal-bg" id="modal-bg"><div class="modal" id="modal-content"></div></div>
+<script>
+const SB_URL='https://btcpkjlyifwvsybscpxz.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Y3Bramx5aWZ3dnN5YnNjcHh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxNTA1NTUsImV4cCI6MjA5OTcyNjU1NX0.tDcHjN69-rvp0LTItWRbmfW8OO6Y8-abQYYyqOzcAdg';
+const RESEND_KEY='re_EQaE3axY_KYu7QKzQvWvEK7GeeAJkbChv';
+const SITE_URL='https://www.fundova.africa';
+const RATE=0.10;
+const WEEKDAYS_PER_YEAR=261;
+let currentUser=null;
+let adminTab='contributors';
+let signupStep=1;
+
+async function sb(path,opts={}){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+    const res=await fetch(SB_URL+'/rest/v1/'+path,{
+      signal:controller.signal,
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
+      ...opts
+    });
+    clearTimeout(timeout);
+    if(!res.ok){const e=await res.text();throw new Error(e);}
+    const text=await res.text();
+    return text?JSON.parse(text):null;
+  }catch(e){
+    clearTimeout(timeout);
+    if(e.name==='AbortError')throw new Error('Request timed out. Check your internet connection.');
+    throw e;
+  }
+}
+
+async function sendEmail(to,name,pin){
+  try{
+    await fetch('/.netlify/functions/send-email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({to,name,pin})
+    });
+  }catch(e){console.error('Email error:',e);}
+}
+
+function countWeekdays(startDate,endDate){
+  let count=0;const d=new Date(startDate);const end=new Date(endDate);
+  d.setHours(0,0,0,0);end.setHours(0,0,0,0);
+  while(d<end){const day=d.getDay();if(day!==0&&day!==6)count++;d.setDate(d.getDate()+1);}
+  return count;
+}
+function calcAccruedInterest(amount,payDate){
+  const today=new Date();today.setHours(0,0,0,0);
+  const start=new Date(payDate);start.setHours(0,0,0,0);
+  if(start>=today)return 0;
+  return+(Number(amount)*RATE*(countWeekdays(start,today)/WEEKDAYS_PER_YEAR)).toFixed(2);
+}
+function fmt(n){return'₦'+Number(n).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
+function initials(name){return(name||'?').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();}
+function setHTML(html){document.getElementById('app').innerHTML=html;}
+function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-bg').classList.add('open');}
+function closeModal(){document.getElementById('modal-bg').classList.remove('open');}
+document.getElementById('modal-bg').addEventListener('click',function(e){if(e.target===this)closeModal();});
+function toast(msg,color='#1D9E75'){
+  const b=document.createElement('div');
+  b.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${color};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)`;
+  b.innerHTML=msg;document.body.appendChild(b);setTimeout(()=>b.remove(),3500);
+}
+
+async function render(){
+  if(!currentUser){renderLogin();return;}
+  if(currentUser.role==='admin')await renderAdmin();
+  else if(currentUser.role==='pending')renderPendingScreen();
+  else await renderContributor();
+}
+
+// ─── LOGIN ───────────────────────────────────────────────
+function renderLogin(){
+  setHTML(`
+  <div style="min-height:100vh;background:#f5f5f3">
+    <div style="background:linear-gradient(135deg,#0F6E56 0%,#1D9E75 60%,#26C48A 100%);padding:3rem 1rem 4rem;text-align:center;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.06)"></div>
+      <div style="position:absolute;bottom:-60px;left:-30px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.05)"></div>
+      <div style="position:relative;max-width:600px;margin:0 auto">
+        <div style="margin-bottom:1.5rem">
+          <img src="/logo.png" alt="Fundova" style="width:120px;height:120px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        </div>
+        <h1 style="color:#fff;font-size:clamp(28px,5vw,44px);font-weight:800;line-height:1.2;margin-bottom:1rem;letter-spacing:-.02em">Save together.<br>Grow together.</h1>
+        <p style="color:#9FE1CB;font-size:clamp(14px,2.5vw,17px);line-height:1.7;margin-bottom:1.75rem;max-width:480px;margin-left:auto;margin-right:auto">Fundova is a cooperative thrift savings platform where members save at their own pace and earn daily interest on every naira contributed. No fixed amounts, no pressure — just consistent saving that builds up over time.</p>
+        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:30px;padding:8px 18px;color:#fff;font-size:13px;font-weight:500">
+          <span style="font-size:16px">😄</span> Save small small before your salary go disappear small small
+        </div>
+      </div>
+    </div>
+    <div style="max-width:700px;margin:-2rem auto 0;padding:0 1rem;position:relative;z-index:1">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:2rem">
+        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-chart-line"></i></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Daily interest accrual</div>
+          <div style="font-size:12px;color:#888;line-height:1.5">Earn 10% p.a. calculated every weekday from the day your money lands</div>
+        </div>
+        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-eye"></i></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Full transparency</div>
+          <div style="font-size:12px;color:#888;line-height:1.5">Track exactly what you have saved and how much interest you have earned, in real time</div>
+        </div>
+        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-users"></i></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Community-driven</div>
+          <div style="font-size:12px;color:#888;line-height:1.5">A trusted cooperative built on accountability and shared growth</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <p style="font-size:14px;color:#555;margin-bottom:1rem">Join Fundova today and start earning on your savings from day one.</p>
+        <button onclick="renderSignup()" class="btn btn-primary" style="padding:12px 28px;font-size:15px;border-radius:10px"><i class="ti ti-user-plus"></i> Apply to join</button>
+      </div>
+      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:2rem">
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:1.25rem">Already a member? Sign in</h2>
+        <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+        <div class="field" style="margin-bottom:12px"><label>PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
+        <div class="error" id="l-err" style="margin-bottom:8px"></div>
+        <button class="btn btn-primary" id="l-btn" onclick="doLogin()" style="width:100%"><i class="ti ti-login"></i> Sign in</button>
+      </div>
+      <!-- CONTACT US -->
+      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:1.5rem">
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">Contact us</h2>
+        <p style="font-size:13px;color:#888;margin-bottom:1.25rem">Have questions? We're happy to help.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <a href="tel:08035257262" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
+            <div style="width:36px;height:36px;border-radius:9px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;color:#0F6E56;font-size:18px;flex-shrink:0"><i class="ti ti-phone"></i></div>
+            <div>
+              <div style="font-weight:600">Phone call</div>
+              <div style="color:#888;font-size:12px;margin-top:1px">08035257262</div>
+            </div>
+            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
+          </a>
+          <a href="https://wa.me/2348035257262" target="_blank" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
+            <div style="width:36px;height:36px;border-radius:9px;background:#D1FAE5;display:flex;align-items:center;justify-content:center;color:#065F46;font-size:18px;flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></div>
+            <div>
+              <div style="font-weight:600">WhatsApp</div>
+              <div style="color:#888;font-size:12px;margin-top:1px">08035257262</div>
+            </div>
+            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
+          </a>
+          <a href="https://instagram.com/fundova_cooperative" target="_blank" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
+            <div style="width:36px;height:36px;border-radius:9px;background:#FDE8F5;display:flex;align-items:center;justify-content:center;color:#9D174D;font-size:18px;flex-shrink:0"><i class="ti ti-brand-instagram"></i></div>
+            <div>
+              <div style="font-weight:600">Instagram</div>
+              <div style="color:#888;font-size:12px;margin-top:1px">@fundova_cooperative</div>
+            </div>
+            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
+          </a>
+        </div>
+      </div>
+
+      <p style="text-align:center;font-size:12px;color:#aaa;padding-bottom:2rem">© 2025 Fundova Cooperative. All rights reserved.</p>
+    </div>
+  </div>`);
+  document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+}
+
+async function doLogin(){
+  const email=document.getElementById('l-email').value.trim().toLowerCase();
+  const pin=document.getElementById('l-pin').value.trim();
+  const err=document.getElementById('l-err');
+  const btn=document.getElementById('l-btn');
+  if(!email||!pin){err.textContent='Please enter your email and PIN.';return;}
+  btn.innerHTML='<span class="spinner"></span> Signing in…';btn.disabled=true;
+  try{
+    const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
+    if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
+    currentUser=users[0];await render();
+  }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
+}
+function doLogout(){currentUser=null;signupStep=1;render();}
+function setAdminTab(tab){adminTab=tab;renderAdmin();}
+
+// ─── SIGNUP ───────────────────────────────────────────────
+function renderSignup(){
+  signupStep=1;
+  setHTML(`<div class="login-wrap" style="padding:2rem 1rem">
+    <div class="brand"><div class="brand-icon"><i class="ti ti-currency-naira"></i></div><h1>Fundova</h1></div>
+    <div class="login-card" style="width:420px;max-width:95vw">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2>Join Fundova</h2>
+        <div class="step-indicator">
+          <div class="step-dot active" id="sd1"></div>
+          <div class="step-dot" id="sd2"></div>
+        </div>
+      </div>
+      <div id="signup-body"></div>
+    </div>
+    <div style="font-size:13px;color:#888">Already have an account? <a href="#" onclick="renderLogin()" style="color:#1D9E75;font-weight:500;text-decoration:none">Sign in</a></div>
+  </div>`);
+  renderSignupStep1();
+}
+
+function renderSignupStep1(){
+  document.getElementById('sd1').classList.add('active');
+  document.getElementById('sd2').classList.remove('active');
+  document.getElementById('signup-body').innerHTML=`
+    <p style="font-size:13px;color:#666;margin-top:-6px">Step 1 of 2 — Personal details</p>
+    <div class="field"><label>Full name</label><input id="s-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
+    <div class="field"><label>Email address</label><input id="s-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+    <div class="error" id="s-err1"></div>
+    <button class="btn btn-primary" id="s-btn1" onclick="goSignupStep2()">Next <i class="ti ti-arrow-right"></i></button>`;
+}
+
+function goSignupStep2(){
+  const name=document.getElementById('s-name').value.trim();
+  const email=document.getElementById('s-email').value.trim().toLowerCase();
+  const err=document.getElementById('s-err1');
+  if(!name){err.textContent='Please enter your full name.';return;}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err.textContent='Please enter a valid email address.';return;}
+  window._sName=name;window._sEmail=email;
+  signupStep=2;
+  document.getElementById('sd1').classList.add('active');
+  document.getElementById('sd2').classList.add('active');
+  document.getElementById('signup-body').innerHTML=`
+    <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 — Bank details for payout</p>
+    <div class="field"><label>Bank name</label><input id="s-bank" placeholder="e.g. First Bank, GTBank, Zenith"></div>
+    <div class="field"><label>Account number</label><input id="s-anum" type="text" maxlength="10" placeholder="10-digit account number" oninput="checkNameMatch()"></div>
+    <div class="field"><label>Account name <span style="color:#888;font-weight:400">(as shown on your bank account)</span></label><input id="s-aname" placeholder="e.g. Adaeze Okonkwo" oninput="checkNameMatch()"></div>
+    <div id="s-mismatch" style="display:none" class="warn-box"><i class="ti ti-alert-triangle" style="margin-top:1px;flex-shrink:0"></i><div>Your account name <strong id="s-aname-val"></strong> doesn't seem to match your registered name <strong>${window._sName}</strong>. Please confirm this is correct before proceeding.</div></div>
+    <label class="checkbox-row" id="s-consent-row" style="display:none"><input type="checkbox" id="s-consent"> I confirm that the bank account details above are correct and belong to me.</label>
+    <hr style="border:none;border-top:1px solid #e5e5e2">
+    <div class="field"><label>Referred by <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="s-referral" placeholder="Full name of person who referred you" autocomplete="off"></div>
+    <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;font-size:12px;color:#065F46;display:flex;gap:8px;align-items:flex-start"><i class="ti ti-gift" style="margin-top:1px;flex-shrink:0"></i><div><strong>Earn &#x20A6;500 per referral!</strong> For every person you refer who makes their first contribution, you will receive a one-time bonus of <strong>&#x20A6;500 only</strong> credited to your thrift savings account.</div></div>
+    <div class="error" id="s-err2"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="renderSignupStep1()"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-primary" id="s-btn2" onclick="submitSignup()" style="flex:1">Submit application <i class="ti ti-send"></i></button>
+    </div>`;
+}
+
+function checkNameMatch(){
+  const accountName=(document.getElementById('s-aname').value||'').trim().toLowerCase();
+  const registeredName=(window._sName||'').trim().toLowerCase();
+  const mismatch=document.getElementById('s-mismatch');
+  const consentRow=document.getElementById('s-consent-row');
+  const anameVal=document.getElementById('s-aname-val');
+  if(accountName.length>2&&registeredName.length>2){
+    const aParts=accountName.split(' ');
+    const rParts=registeredName.split(' ');
+    const overlap=aParts.filter(p=>p.length>1&&rParts.some(r=>r.includes(p)||p.includes(r)));
+    if(overlap.length===0){
+      anameVal.textContent=document.getElementById('s-aname').value.trim();
+      mismatch.style.display='flex';
+      consentRow.style.display='flex';
+      document.getElementById('s-aname').classList.add('warn');
+    } else {
+      mismatch.style.display='none';
+      consentRow.style.display='none';
+      document.getElementById('s-aname').classList.remove('warn');
+    }
+  }
+}
+
+async function submitSignup(){
+  const bank_name=document.getElementById('s-bank').value.trim();
+  const referred_by=(document.getElementById('s-referral')?.value||'').trim();
+  const account_number=document.getElementById('s-anum').value.trim();
+  const account_name=document.getElementById('s-aname').value.trim();
+  const err=document.getElementById('s-err2');
+  const btn=document.getElementById('s-btn2');
+  const mismatchVisible=document.getElementById('s-mismatch').style.display!=='none';
+  const consentChecked=mismatchVisible?document.getElementById('s-consent').checked:true;
+  if(!bank_name||!account_number||!account_name){err.textContent='All fields are required.';return;}
+  if(!/^\d{10}$/.test(account_number)){err.textContent='Account number must be exactly 10 digits.';return;}
+  if(mismatchVisible&&!consentChecked){err.textContent='Please tick the consent box to confirm your bank details before submitting.';return;}
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    // Check email not already registered
+    const existing=await sb(`users?email=eq.${encodeURIComponent(window._sEmail)}&select=id`);
+    if(existing&&existing.length){err.textContent='This email is already registered. Please sign in.';btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;return;}
+    // Check not already in signup_requests
+    const existingReq=await sb(`signup_requests?email=eq.${encodeURIComponent(window._sEmail)}&select=id`);
+    if(existingReq&&existingReq.length){err.textContent='An application with this email already exists.';btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;return;}
+    await sb('signup_requests',{method:'POST',body:JSON.stringify({
+      name:window._sName,email:window._sEmail,
+      bank_name,account_number,account_name,
+      name_mismatch:mismatchVisible,referred_by:referred_by||null,status:'pending'
+    })});
+    renderSignupSuccess();
+  }catch(e){
+    err.textContent='Error submitting application. Please try again.';
+    btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;
+  }
+}
+
+function renderSignupSuccess(){
+  setHTML(`<div class="login-wrap">
+    <div class="pending-screen">
+      <div class="pending-icon"><i class="ti ti-circle-check" style="color:#1D9E75"></i></div>
+      <h2 style="font-size:20px;font-weight:700">Application submitted!</h2>
+      <p style="color:#666;max-width:320px;line-height:1.6">Thank you, <strong>${window._sName}</strong>. Your application is being reviewed. You'll receive an email at <strong>${window._sEmail}</strong> once your account is approved.</p>
+      <button class="btn btn-primary" onclick="renderLogin()"><i class="ti ti-login"></i> Back to sign in</button>
+    </div>
+  </div>`);
+}
+
+// ─── PENDING SCREEN ───────────────────────────────────────
+function renderPendingScreen(){
+  setHTML(`<div class="login-wrap">
+    <div class="pending-screen">
+      <div class="pending-icon"><i class="ti ti-clock" style="color:#856404"></i></div>
+      <h2 style="font-size:20px;font-weight:700">Account pending approval</h2>
+      <p style="color:#666;max-width:320px;line-height:1.6">Hi <strong>${currentUser.name}</strong>, your account is currently being reviewed by the admin. You'll receive an email once it's approved.</p>
+      <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+    </div>
+  </div>`);
+}
+
+// ─── ADMIN ───────────────────────────────────────────────
+async function renderAdmin(){
+  if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
+  try{
+    const [contributors,payments,requests,signups]=await Promise.all([
+      sb('users?role=eq.contributor&select=*&order=created_at.asc'),
+      sb('payments?select=*'),
+      sb('withdrawal_requests?select=*&order=created_at.desc'),
+      sb('signup_requests?select=*&order=created_at.desc')
+    ]);
+    const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
+    const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
+    const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
+    const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    setHTML(`
+    <div class="header">
+      <div class="header-left">
+        <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+        <span style="font-weight:600;font-size:16px">Fundova</span>
+        <span class="admin-tag">Admin</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="avatar">${initials(currentUser.name)}</div>
+        <span style="font-size:13px;font-weight:500">${currentUser.name}</span>
+        <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Contributors</div><div class="stat-val">${contributors.length}</div></div>
+      <div class="stat"><div class="stat-label">Total savings</div><div class="stat-val green">${fmt(totalPrincipal)}</div></div>
+      <div class="stat"><div class="stat-label">Interest accrued</div><div class="stat-val amber">${fmt(totalInterest)}</div></div>
+      <div class="stat"><div class="stat-label">Total value</div><div class="stat-val">${fmt(totalPrincipal+totalInterest)}</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab ${adminTab==='contributors'?'active':''}" onclick="setAdminTab('contributors')">Contributors</button>
+      <button class="tab ${adminTab==='payments'?'active':''}" onclick="setAdminTab('payments')">All payments</button>
+      <button class="tab ${adminTab==='requests'?'active':''}" onclick="setAdminTab('requests')">Withdrawals${pendingWithdrawals>0?`<span class="notif-badge">${pendingWithdrawals}</span>`:''}</button>
+      <button class="tab ${adminTab==='signups'?'active':''}" onclick="setAdminTab('signups')">New applications${pendingSignups>0?`<span class="notif-badge">${pendingSignups}</span>`:''}</button>
+      <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
+    </div>
+    ${adminTab==='contributors'?buildContributorsTab(contributors,payments):
+      adminTab==='payments'?buildPaymentsTab(payments,contributors):
+      adminTab==='requests'?buildRequestsTab(requests,contributors):
+      adminTab==='signups'?buildSignupsTab(signups):
+      buildCredentialsTab(contributors)}
+    `);
+  }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
+}
+
+function buildContributorsTab(contributors,payments){
+  if(!contributors.length)return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No contributors yet.<br><br><button class="btn btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add first contributor</button></div></div>`;
+  const rows=contributors.map(c=>{
+    const pays=payments.filter(p=>p.user_id===c.id);
+    const principal=pays.reduce((a,p)=>a+Number(p.amount),0);
+    const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    return`<tr>
+      <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div><div style="font-weight:500">${c.name}</div><div style="font-size:11px;color:#888">${c.email}</div></div></div></td>
+      <td style="color:#888">${pays.length}</td>
+      <td>${fmt(principal)}</td>
+      <td class="green">${fmt(interest)}</td>
+      <td><strong>${fmt(principal+interest)}</strong></td>
+      <td><div style="display:flex;gap:5px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="openAddPayment('${c.id}','${c.name.replace(/'/g,"\\'")}')"><i class="ti ti-plus"></i> Payment</button>
+        <button class="btn btn-sm" onclick="openViewContributor('${c.id}','${c.name.replace(/'/g,"\\'")}')"><i class="ti ti-eye"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="deleteContributor('${c.id}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h3 style="margin:0">All contributors</h3>
+      <button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Name</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+function buildPaymentsTab(payments,contributors){
+  const sorted=[...payments].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!sorted.length)return`<div class="card"><div class="empty">No payments recorded yet.</div></div>`;
+  const today=new Date();today.setHours(0,0,0,0);
+  const rows=sorted.map(p=>{
+    const user=contributors.find(u=>u.id===p.user_id);
+    const interest=calcAccruedInterest(p.amount,p.date);
+    const start=new Date(p.date);start.setHours(0,0,0,0);
+    const weekdays=countWeekdays(start,today);
+    return`<tr>
+      <td style="font-weight:500">${user?user.name:'Unknown'}</td>
+      <td>${fmtDate(p.date)}</td>
+      <td>${fmt(p.amount)}</td>
+      <td style="color:#888;font-size:11px">${weekdays} weekdays</td>
+      <td class="green">${fmt(interest)}</td>
+      <td><strong>${fmt(Number(p.amount)+interest)}</strong></td>
+      <td><div style="display:flex;gap:5px;justify-content:flex-end">
+        <button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card">
+    <h3>All payments <span style="font-size:12px;color:#888;font-weight:400">— interest accrued to today</span></h3>
+    <div class="table-wrap"><table>
+      <tr><th>Contributor</th><th>Payment date</th><th>Amount</th><th>Weekdays elapsed</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+function buildRequestsTab(requests,contributors){
+  if(!requests||!requests.length)return`<div class="card"><div class="empty"><i class="ti ti-inbox" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No withdrawal requests yet.</div></div>`;
+  const rows=requests.map(r=>{
+    const user=contributors.find(u=>u.id===r.user_id);
+    const pill=r.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:r.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
+    const actions=r.status==='pending'?`
+      <button class="btn btn-sm btn-primary" onclick="updateRequest('${r.id}','approved')"><i class="ti ti-check"></i> Approve</button>
+      <button class="btn btn-sm btn-danger" onclick="updateRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
+    return`<tr>
+      <td><div style="font-weight:500">${user?user.name:'Unknown'}</div><div style="font-size:11px;color:#888">${user?user.email:''}</div></td>
+      <td>${fmt(r.amount)}</td>
+      <td style="font-size:12px;color:#666;max-width:180px">${r.note||'—'}</td>
+      <td>${fmtDate(r.created_at)}</td>
+      <td>${pill}</td>
+      <td><div style="display:flex;gap:5px">${actions}</div></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card">
+    <h3>Withdrawal requests</h3>
+    <div class="table-wrap"><table>
+      <tr><th>Contributor</th><th>Amount</th><th>Note</th><th>Date</th><th>Status</th><th>Action</th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+function buildSignupsTab(signups){
+  if(!signups||!signups.length)return`<div class="card"><div class="empty"><i class="ti ti-user-plus" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No applications yet.</div></div>`;
+  const rows=signups.map(s=>{
+    const pill=s.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:s.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
+    const mismatchFlag=s.name_mismatch?`<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:4px;margin-left:6px"><i class="ti ti-alert-triangle"></i> Name mismatch</span>`:'';
+    const actions=s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}')"><i class="ti ti-check"></i> Approve</button>
+      <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
+    return`<tr>
+      <td><div style="font-weight:500">${s.name}${mismatchFlag}</div><div style="font-size:11px;color:#888">${s.email}</div></td>
+      <td><div style="font-size:12px">${s.bank_name}</div><div style="font-family:monospace;font-size:12px">${s.account_number}</div><div style="font-size:11px;color:#888">${s.account_name}</div></td>
+      <td>${s.referred_by?`<span style="font-size:12px"><i class="ti ti-users" style="color:#1D9E75"></i> ${s.referred_by}</span>`:`<span style="color:#aaa;font-size:12px">—</span>`}</td>
+      <td>${fmtDate(s.created_at)}</td>
+      <td>${pill}</td>
+      <td><div style="display:flex;gap:5px">${actions}</div></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card">
+    <h3>New contributor applications</h3>
+    <div class="table-wrap"><table>
+      <tr><th>Applicant</th><th>Bank details</th><th>Referred by</th><th>Applied</th><th>Status</th><th>Action</th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+function openApproveSignup(id,name,email,bankName,accountName,accountNumber){
+  openModal(`
+  <h3>Approve application</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Set a PIN for <strong>${name}</strong>. They'll receive an email with their login details.</p>
+  <div class="info-box"><i class="ti ti-info-circle"></i> An approval email will be sent to <strong>${email}</strong> with the sign-in link and PIN.</div>
+  <div style="background:#f5f5f3;border-radius:8px;padding:12px;font-size:13px">
+    <div style="margin-bottom:4px"><span style="color:#888">Bank:</span> ${bankName}</div>
+    <div style="margin-bottom:4px"><span style="color:#888">Account name:</span> ${accountName}</div>
+    <div><span style="color:#888">Account number:</span> <span style="font-family:monospace">${accountNumber}</span></div>
+  </div>
+  <div class="field"><label>Set PIN for contributor</label><input id="as-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
+  <div class="error" id="as-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="as-btn" onclick="approveSignup('${id}','${name.replace(/'/g,"\\'")}','${email}','${bankName.replace(/'/g,"\\'")}','${accountName.replace(/'/g,"\\'")}','${accountNumber}')"><i class="ti ti-check"></i> Approve & send email</button>
+  </div>`);
+}
+
+async function approveSignup(id,name,email,bankName,accountName,accountNumber){
+  const pin=document.getElementById('as-pin').value.trim();
+  const err=document.getElementById('as-err');
+  const btn=document.getElementById('as-btn');
+  if(!pin||pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}
+  btn.innerHTML='<span class="spinner"></span> Approving…';btn.disabled=true;
+  try{
+    // Create user account
+    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor'})});
+    const newUser=newUsers&&newUsers[0];
+    // Save bank details
+    if(newUser){
+      await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:newUser.id,bank_name:bankName,account_name:accountName,account_number:accountNumber})});
+    }
+    // Mark signup request approved
+    await sb(`signup_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
+    // Send email
+    await sendEmail(email,name,pin);
+    closeModal();
+    toast('<i class="ti ti-check"></i> Approved and email sent!');
+    await renderAdmin();
+  }catch(e){
+    err.textContent=e.message.includes('unique')||e.message.includes('duplicate')?'This email is already registered.':'Error approving. Please try again.';
+    btn.innerHTML='<i class="ti ti-check"></i> Approve & send email';btn.disabled=false;
+  }
+}
+
+async function rejectSignup(id){
+  if(!confirm('Reject this application?'))return;
+  try{
+    await sb(`signup_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})});
+    await renderAdmin();
+  }catch(e){alert('Error rejecting application.');}
+}
+
+function buildCredentialsTab(contributors){
+  if(!contributors.length)return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No contributors yet.</div></div>`;
+  const rows=contributors.map(c=>`<tr>
+    <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div style="font-weight:500">${c.name}</div></div></td>
+    <td>${c.email}</td>
+    <td><div style="display:flex;align-items:center;gap:8px">
+      <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
+      <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
+    </div></td>
+    <td><button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button></td>
+  </tr>`).join('');
+  return`<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h3 style="margin:0">Contributor credentials</h3>
+      <span style="font-size:12px;color:#888"><i class="ti ti-lock"></i> Keep this confidential</span>
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Name</th><th>Email</th><th>PIN</th><th></th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+function togglePin(id,pin){
+  const d=document.getElementById(`pin-display-${id}`);
+  const b=document.getElementById(`pin-toggle-${id}`);
+  if(d.textContent==='••••••'){d.textContent=pin;b.innerHTML='<i class="ti ti-eye-off"></i>';}
+  else{d.textContent='••••••';b.innerHTML='<i class="ti ti-eye"></i>';}
+}
+
+function openEditCredentials(userId,userName,userEmail){
+  openModal(`
+  <h3>Edit credentials</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">${userName}</p>
+  <div class="field"><label>Email address</label><input id="ec-email" type="email" value="${userEmail}"></div>
+  <div class="field"><label>New PIN <span style="color:#aaa;font-weight:400">(leave blank to keep current)</span></label><input id="ec-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
+  <div class="error" id="ec-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ec-btn" onclick="saveEditCredentials('${userId}')"><i class="ti ti-device-floppy"></i> Save changes</button>
+  </div>`);
+}
+
+async function saveEditCredentials(userId){
+  const email=document.getElementById('ec-email').value.trim().toLowerCase();
+  const pin=document.getElementById('ec-pin').value.trim();
+  const err=document.getElementById('ec-err');
+  const btn=document.getElementById('ec-btn');
+  if(!email){err.textContent='Email is required.';return;}
+  const update={email};
+  if(pin){if(pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}update.pin=pin;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify(update)});
+    closeModal();await renderAdmin();
+  }catch(e){
+    err.textContent=e.message.includes('unique')||e.message.includes('duplicate')?'That email is already in use.':'Error saving.';
+    btn.innerHTML='<i class="ti ti-device-floppy"></i> Save changes';btn.disabled=false;
+  }
+}
+
+async function updateRequest(id,status){
+  try{await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});await renderAdmin();}
+  catch(e){alert('Error updating request.');}
+}
+
+// ─── CONTRIBUTOR DASHBOARD ────────────────────────────────
+async function renderContributor(){
+  setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
+  try{
+    const [payments,requests,bankArr]=await Promise.all([
+      sb(`payments?user_id=eq.${currentUser.id}&select=*&order=date.asc`),
+      sb(`withdrawal_requests?user_id=eq.${currentUser.id}&select=*&order=created_at.desc`),
+      sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
+    ]);
+    const bank=bankArr&&bankArr.length?bankArr[0]:null;
+    const principal=payments.reduce((a,p)=>a+Number(p.amount),0);
+    const interest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const currentTotal=+(principal+interest).toFixed(2);
+    const today=new Date();today.setHours(0,0,0,0);
+    const hasPending=(requests||[]).some(r=>r.status==='pending');
+
+    const rows=payments.map(p=>{
+      const int=calcAccruedInterest(p.amount,p.date);
+      const start=new Date(p.date);start.setHours(0,0,0,0);
+      const weekdays=countWeekdays(start,today);
+      return`<tr>
+        <td>${fmtDate(p.date)}</td><td>${fmt(p.amount)}</td>
+        <td style="color:#888">${weekdays}</td>
+        <td class="green">${fmt(int)}</td>
+        <td><strong>${fmt(Number(p.amount)+int)}</strong></td>
+      </tr>`;
+    }).join('');
+
+    const reqRows=(requests||[]).map(r=>{
+      const pill=r.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:r.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
+      return`<tr><td>${fmtDate(r.created_at)}</td><td>${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'—'}</td><td>${pill}</td></tr>`;
+    }).join('');
+
+    setHTML(`
+    <div class="header">
+      <div class="header-left">
+        <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+        <span style="font-weight:600;font-size:16px">Fundova</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="avatar">${initials(currentUser.name)}</div>
+        <span style="font-size:13px;font-weight:500">${currentUser.name}</span>
+        <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+      </div>
+    </div>
+    <div class="contrib-header">
+      <div class="avatar" style="width:48px;height:48px;font-size:17px">${initials(currentUser.name)}</div>
+      <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} · Thrift savings 2025</div></div>
+      <button class="btn btn-sm" onclick="openChangePin()" style="white-space:nowrap"><i class="ti ti-lock"></i> Change PIN</button>
+    </div>
+
+    <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:14px;padding:1.5rem;margin-bottom:1rem;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
+      <div style="position:absolute;bottom:-30px;left:-10px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
+      <div style="position:relative">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <div style="width:32px;height:32px;border-radius:8px;background:#C9A84C;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1a1a2e">₦</div>
+          <div>
+            <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.06em;font-weight:500">Make your contribution</div>
+            <div style="font-size:13px;font-weight:600;color:#C9A84C">First Bank</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 14px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account number</div>
+            <div style="font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;color:#fff">3070379829</div>
+          </div>
+          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 14px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account name</div>
+            <div style="font-size:14px;font-weight:600;color:#fff">Ajonibode Damilola</div>
+          </div>
+        </div>
+        <div style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#C9A84C;line-height:1.5">
+          <i class="ti ti-rocket"></i> <strong>Start your savings journey right here!</strong> Make your contribution into this account and notify your admin once done. Remember — your interest starts counting from the day your payment is recorded. 😉
+        </div>
+      </div>
+    </div>
+    ${payments.length?`
+    <div class="accrued-box">
+      <div class="accrued-label">Current total value</div>
+      <div class="accrued-amount">${fmt(currentTotal)}</div>
+      <div class="accrued-breakdown">Interest grows every weekday automatically</div>
+      <div class="accrued-grid">
+        <div class="accrued-sub"><div class="accrued-sub-label">Principal saved</div><div class="accrued-sub-val">${fmt(principal)}</div></div>
+        <div class="accrued-sub"><div class="accrued-sub-label">Interest accrued</div><div class="accrued-sub-val">${fmt(interest)}</div></div>
+      </div>
+    </div>
+    ${hasPending?`<div class="withdraw-banner"><i class="ti ti-clock" style="color:#856404;font-size:20px"></i><div><strong>Withdrawal request pending</strong><br><span style="color:#856404">Your request is being reviewed by the admin.</span></div></div>`:`
+    <div style="margin-bottom:1rem;display:flex;justify-content:flex-end">
+      <button class="btn btn-warn" onclick="openWithdrawRequest(${currentTotal})"><i class="ti ti-cash"></i> Request withdrawal</button>
+    </div>`}
+    <div class="card">
+      <h3>Your payment history</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Payment date</th><th>Amount</th><th>Weekdays elapsed</th><th>Interest accrued</th><th>Current value</th></tr>
+        ${rows}
+      </table></div>
+    </div>
+    ${requests&&requests.length?`<div class="card">
+      <h3>Your withdrawal requests</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Date</th><th>Amount</th><th>Note</th><th>Status</th></tr>
+        ${reqRows}
+      </table></div>
+    </div>`:''}
+    <div class="card">
+      <h3>Your payout bank details</h3>
+      ${bank?`
+      <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div><div class="stat-label">Bank name</div><div style="font-weight:600;margin-top:4px">${bank.bank_name}</div></div>
+        <div><div class="stat-label">Account name</div><div style="font-weight:600;margin-top:4px">${bank.account_name}</div></div>
+        <div><div class="stat-label">Account number</div><div style="font-weight:600;font-family:monospace;font-size:16px;margin-top:4px">${bank.account_number}</div></div>
+      </div>
+      <p style="font-size:12px;color:#888;margin-top:10px"><i class="ti ti-info-circle"></i> If any of these details are incorrect, contact your admin immediately.</p>`
+      :`<div class="empty" style="padding:1.5rem"><i class="ti ti-building-bank" style="font-size:28px;display:block;margin-bottom:8px;color:#ccc"></i>No bank details on file yet.<br>Contact your admin.</div>`}
+    </div>`:`<div class="card"><div class="empty"><i class="ti ti-clock" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No payments recorded yet.<br>Contact your admin.</div></div>`}
+    `);
+  }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
+}
+
+function openWithdrawRequest(currentTotal){
+  openModal(`
+  <h3>Request withdrawal</h3>
+  <p style="font-size:13px;color:#666">Your current total is <strong>${fmt(currentTotal)}</strong>. You cannot request more than this amount.</p>
+  <div class="field"><label>Amount to withdraw (₦)</label><input id="wr-amt" type="number" min="1" step="0.01" placeholder="e.g. 50000"></div>
+  <div style="font-size:12px;color:#888;margin-top:-6px">Maximum: ${fmt(currentTotal)}</div>
+  <div class="field"><label>Note <span style="color:#aaa;font-weight:400">(optional)</span></label><textarea id="wr-note" placeholder="e.g. I need funds for school fees"></textarea></div>
+  <div class="error" id="wr-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-warn" id="wr-btn" onclick="saveWithdrawRequest(${currentTotal})"><i class="ti ti-cash"></i> Submit request</button>
+  </div>`);
+  document.getElementById('wr-amt').addEventListener('input',function(){
+    const val=parseFloat(this.value);
+    const err=document.getElementById('wr-err');
+    if(val>currentTotal)err.textContent=`Amount cannot exceed your total of ${fmt(currentTotal)}.`;
+    else err.textContent='';
+  });
+}
+
+async function saveWithdrawRequest(currentTotal){
+  const amount=parseFloat(document.getElementById('wr-amt').value);
+  const note=document.getElementById('wr-note').value.trim();
+  const err=document.getElementById('wr-err');
+  const btn=document.getElementById('wr-btn');
+  if(!amount||amount<=0){err.textContent='Please enter a valid amount.';return;}
+  if(amount>currentTotal){err.textContent=`Amount cannot exceed your current total of ${fmt(currentTotal)}.`;return;}
+  btn.innerHTML='<span class="spinner" style="border-top-color:#856404"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount,note,status:'pending'})});
+    closeModal();await renderContributor();
+  }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-cash"></i> Submit request';btn.disabled=false;}
+}
+
+// ─── ADMIN CONTRIBUTOR MANAGEMENT ─────────────────────────
+function openAddContributor(){
+  openModal(`
+  <h3>Add contributor</h3>
+  <div class="field"><label>Full name</label><input id="nc-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="off"></div>
+  <div class="field"><label>Email address</label><input id="nc-email" type="email" placeholder="adaeze@email.com" autocomplete="off"></div>
+  <div class="field"><label>PIN</label><input id="nc-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
+  <div class="error" id="nc-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="nc-btn" onclick="saveContributor()"><i class="ti ti-user-plus"></i> Add contributor</button>
+  </div>`);
+}
+
+async function saveContributor(){
+  const name=document.getElementById('nc-name').value.trim();
+  const email=document.getElementById('nc-email').value.trim().toLowerCase();
+  const pin=document.getElementById('nc-pin').value.trim();
+  const err=document.getElementById('nc-err');
+  const btn=document.getElementById('nc-btn');
+  if(!name||!email||!pin){err.textContent='All fields are required.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor'})});
+    closeModal();await renderAdmin();
+  }catch(e){
+    err.textContent=e.message.includes('unique')||e.message.includes('duplicate')?'That email already exists.':'Error saving.';
+    btn.innerHTML='<i class="ti ti-user-plus"></i> Add contributor';btn.disabled=false;
+  }
+}
+
+async function deleteContributor(id){
+  if(!confirm('Delete this contributor and all their data? This cannot be undone.'))return;
+  try{
+    await sb(`payments?user_id=eq.${id}`,{method:'DELETE'});
+    await sb(`withdrawal_requests?user_id=eq.${id}`,{method:'DELETE'});
+    await sb(`bank_details?user_id=eq.${id}`,{method:'DELETE'});
+    await sb(`users?id=eq.${id}`,{method:'DELETE'});
+    await renderAdmin();
+  }catch(e){alert('Error deleting contributor.');}
+}
+
+function openAddPayment(userId,userName){
+  const today=new Date().toISOString().split('T')[0];
+  openModal(`
+  <h3>Record payment</h3>
+  <p style="font-size:13px;color:#888;margin-top:-6px">${userName}</p>
+  <div class="field"><label>Payment date</label><input id="np-date" type="date" value="${today}"></div>
+  <div class="field"><label>Amount (₦)</label><input id="np-amt" type="number" min="1" placeholder="e.g. 5000"></div>
+  <p style="font-size:12px;color:#888"><i class="ti ti-info-circle"></i> Interest accrues automatically each weekday from the payment date.</p>
+  <div class="error" id="np-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="np-btn" onclick="savePayment('${userId}')"><i class="ti ti-device-floppy"></i> Save payment</button>
+  </div>`);
+}
+
+async function savePayment(userId){
+  const date=document.getElementById('np-date').value;
+  const amount=parseFloat(document.getElementById('np-amt').value);
+  const err=document.getElementById('np-err');
+  const btn=document.getElementById('np-btn');
+  if(!date||!amount){err.textContent='All fields required.';return;}
+  if(amount<=0){err.textContent='Amount must be greater than 0.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount,date})});
+    closeModal();await renderAdmin();
+  }catch(e){err.textContent='Error saving payment.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Save payment';btn.disabled=false;}
+}
+
+function openEditPayment(payId,currentDate,currentAmount,userName){
+  openModal(`
+  <h3>Edit payment</h3>
+  <p style="font-size:13px;color:#888;margin-top:-6px">${userName}</p>
+  <div class="field"><label>Payment date</label><input id="ep-date" type="date" value="${currentDate}"></div>
+  <div class="field"><label>Amount (₦)</label><input id="ep-amt" type="number" min="1" value="${currentAmount}"></div>
+  <div class="error" id="ep-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ep-btn" onclick="saveEditPayment('${payId}')"><i class="ti ti-device-floppy"></i> Save changes</button>
+  </div>`);
+}
+
+async function saveEditPayment(payId){
+  const date=document.getElementById('ep-date').value;
+  const amount=parseFloat(document.getElementById('ep-amt').value);
+  const err=document.getElementById('ep-err');
+  const btn=document.getElementById('ep-btn');
+  if(!date||!amount){err.textContent='All fields required.';return;}
+  if(amount<=0){err.textContent='Amount must be greater than 0.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb(`payments?id=eq.${payId}`,{method:'PATCH',body:JSON.stringify({date,amount})});
+    closeModal();await renderAdmin();
+  }catch(e){err.textContent='Error saving.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Save changes';btn.disabled=false;}
+}
+
+async function deletePayment(id){
+  if(!confirm('Delete this payment? This cannot be undone.'))return;
+  try{await sb(`payments?id=eq.${id}`,{method:'DELETE'});await renderAdmin();}
+  catch(e){alert('Error deleting payment.');}
+}
+
+async function openViewContributor(userId,userName){
+  openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;margin:0 auto 10px"></div>Loading…</div>`);
+  try{
+    const [pays,bankArr]=await Promise.all([
+      sb(`payments?user_id=eq.${userId}&select=*&order=date.asc`),
+      sb(`bank_details?user_id=eq.${userId}&select=*`)
+    ]);
+    const bank=bankArr&&bankArr.length?bankArr[0]:null;
+    const principal=pays.reduce((a,p)=>a+Number(p.amount),0);
+    const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const today=new Date();today.setHours(0,0,0,0);
+    const rows=pays.length?pays.map(p=>{
+      const int=calcAccruedInterest(p.amount,p.date);
+      const start=new Date(p.date);start.setHours(0,0,0,0);
+      const weekdays=countWeekdays(start,today);
+      return`<tr>
+        <td>${fmtDate(p.date)}</td><td>${fmt(p.amount)}</td>
+        <td style="color:#888">${weekdays}d</td>
+        <td class="green">${fmt(int)}</td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${userName.replace(/'/g,"\\'")}')"><i class='ti ti-pencil'></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deletePaymentFromView('${p.id}','${userId}','${userName.replace(/'/g,"\\'")}')"><i class='ti ti-trash'></i></button>
+        </div></td>
+      </tr>`;
+    }).join(''):`<tr><td colspan="5" style="text-align:center;color:#aaa;padding:1.5rem">No payments yet</td></tr>`;
+
+    const bankSection=bank?`
+    <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div class="stat-label">Bank name</div><div style="font-weight:500;margin-top:3px">${bank.bank_name}</div></div>
+      <div><div class="stat-label">Account name</div><div style="font-weight:500;margin-top:3px">${bank.account_name}</div></div>
+      <div><div class="stat-label">Account number</div><div style="font-weight:500;font-family:monospace;margin-top:3px">${bank.account_number}</div></div>
+    </div>
+    <div style="text-align:right;margin-top:-4px">
+      <button class="btn btn-sm btn-edit" onclick="openEditBankDetails('${userId}','${userName.replace(/'/g,"\\'")}','${bank.id}','${bank.bank_name.replace(/'/g,"\\'")}','${bank.account_name.replace(/'/g,"\\'")}','${bank.account_number}')"><i class="ti ti-pencil"></i> Edit bank details</button>
+    </div>`:`
+    <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;color:#92400E"><i class="ti ti-alert-triangle"></i> No bank details yet</span>
+      <button class="btn btn-sm btn-primary" onclick="openEditBankDetails('${userId}','${userName.replace(/'/g,"\\'")}',null,'','','')"><i class="ti ti-plus"></i> Add</button>
+    </div>`;
+
+    openModal(`
+    <h3>${userName}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="stat"><div class="stat-label">Principal</div><div style="font-size:16px;font-weight:600">${fmt(principal)}</div></div>
+      <div class="stat"><div class="stat-label">Interest</div><div style="font-size:16px;font-weight:600" class="green">${fmt(interest)}</div></div>
+      <div class="stat"><div class="stat-label">Total</div><div style="font-size:16px;font-weight:600">${fmt(principal+interest)}</div></div>
+    </div>
+    <hr class="divider">
+    <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Payout bank details</div>
+    ${bankSection}
+    <hr class="divider">
+    <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Payment history</div>
+    <div class="table-wrap"><table>
+      <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest</th><th></th></tr>
+      ${rows}
+    </table></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="openAddPayment('${userId}','${userName.replace(/'/g,"\\'")}')"><i class="ti ti-plus"></i> Add payment</button>
+      <button class="btn" onclick="closeModal()">Close</button>
+    </div>`);
+  }catch(e){openModal(`<div style="color:#A32D2D;padding:1rem">Error loading data: ${e.message}</div>`);}
+}
+
+function openEditBankDetails(userId,userName,bankId,bankName,accountName,accountNumber){
+  openModal(`
+  <h3>${bankId&&bankId!=='null'?'Edit':'Add'} bank details</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">${userName}</p>
+  <div class="field"><label>Bank name</label><input id="bd-bank" placeholder="e.g. First Bank" value="${bankName}"></div>
+  <div class="field"><label>Account name</label><input id="bd-aname" placeholder="e.g. Adaeze Okonkwo" value="${accountName}"></div>
+  <div class="field"><label>Account number</label><input id="bd-anum" type="text" maxlength="10" placeholder="e.g. 0123456789" value="${accountNumber}"></div>
+  <div class="error" id="bd-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="openViewContributor('${userId}','${userName.replace(/'/g,"\\'")}')">Cancel</button>
+    <button class="btn btn-primary" id="bd-btn" onclick="saveBankDetails('${userId}','${userName.replace(/'/g,"\\'")}','${bankId}')"><i class="ti ti-device-floppy"></i> Save details</button>
+  </div>`);
+}
+
+async function saveBankDetails(userId,userName,bankId){
+  const bank_name=document.getElementById('bd-bank').value.trim();
+  const account_name=document.getElementById('bd-aname').value.trim();
+  const account_number=document.getElementById('bd-anum').value.trim();
+  const err=document.getElementById('bd-err');
+  const btn=document.getElementById('bd-btn');
+  if(!bank_name||!account_name||!account_number){err.textContent='All fields are required.';return;}
+  if(!/^\d{10}$/.test(account_number)){err.textContent='Account number must be exactly 10 digits.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    if(bankId&&bankId!=='null'){
+      await sb(`bank_details?id=eq.${bankId}`,{method:'PATCH',body:JSON.stringify({bank_name,account_name,account_number})});
+    } else {
+      await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:userId,bank_name,account_name,account_number})});
+    }
+    await openViewContributor(userId,userName);
+  }catch(e){err.textContent='Error saving.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Save details';btn.disabled=false;}
+}
+
+async function deletePaymentFromView(payId,userId,userName){
+  if(!confirm('Delete this payment?'))return;
+  try{await sb(`payments?id=eq.${payId}`,{method:'DELETE'});await openViewContributor(userId,userName);}
+  catch(e){alert('Error deleting payment.');}
+}
+
+function openChangePin(){
+  openModal(`
+  <h3>Change PIN</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Choose a new PIN you'll use to sign in.</p>
+  <div class="field"><label>Current PIN</label><input id="cp-current" type="password" maxlength="6" placeholder="Enter your current PIN"></div>
+  <div class="field"><label>New PIN</label><input id="cp-new" type="password" maxlength="6" placeholder="Choose a new PIN"></div>
+  <div class="field"><label>Confirm new PIN</label><input id="cp-confirm" type="password" maxlength="6" placeholder="Repeat new PIN"></div>
+  <div class="error" id="cp-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="cp-btn" onclick="saveChangePin()"><i class="ti ti-lock-check"></i> Update PIN</button>
+  </div>`);
+}
+
+async function saveChangePin(){
+  const current=document.getElementById('cp-current').value.trim();
+  const newPin=document.getElementById('cp-new').value.trim();
+  const confirm=document.getElementById('cp-confirm').value.trim();
+  const err=document.getElementById('cp-err');
+  const btn=document.getElementById('cp-btn');
+  if(!current||!newPin||!confirm){err.textContent='All fields are required.';return;}
+  if(current!==currentUser.pin){err.textContent='Current PIN is incorrect.';return;}
+  if(newPin.length<4){err.textContent='New PIN must be at least 4 digits.';return;}
+  if(newPin!==confirm){err.textContent='New PINs do not match.';return;}
+  if(newPin===current){err.textContent='New PIN must be different from your current PIN.';return;}
+  btn.innerHTML='<span class="spinner"></span> Updating…';btn.disabled=true;
+  try{
+    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({pin:newPin})});
+    currentUser.pin=newPin;
+    closeModal();
+    toast('<i class="ti ti-check"></i> PIN updated successfully');
+  }catch(e){err.textContent='Error updating PIN.';btn.innerHTML='<i class="ti ti-lock-check"></i> Update PIN';btn.disabled=false;}
+}
+
+render();
+</script>
+<div class="contact-footer">
+  <span style="font-size:12px;color:#aaa;font-weight:500">Contact us:</span>
+  <a href="tel:08035257262" class="cf-phone"><i class="ti ti-phone"></i> 08035257262</a>
+  <a href="https://wa.me/2348035257262" target="_blank" class="cf-wa"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
+  <a href="https://instagram.com/fundova_cooperative" target="_blank" class="cf-ig"><i class="ti ti-brand-instagram"></i> @fundova_cooperative</a>
+</div>
+</body>
+</html>
+ 
