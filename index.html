@@ -694,8 +694,50 @@ async function saveEditCredentials(userId){
 }
 
 async function updateRequest(id,status){
-  try{await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});await renderAdmin();}
-  catch(e){alert('Error updating request.');}
+  try{
+    if(status==='approved'){
+      const requests=await sb(`withdrawal_requests?id=eq.${id}&select=*`);
+      if(!requests||!requests.length)throw new Error('Request not found');
+      const req=requests[0];
+      let remaining=Number(req.amount);
+
+      // Fetch payments oldest first
+      const payments=await sb(`payments?user_id=eq.${req.user_id}&select=*&order=date.asc`);
+      if(!payments||!payments.length)throw new Error('No payments found');
+
+      const today=new Date().toISOString().split('T')[0];
+
+      for(const p of payments){
+        if(remaining<=0)break;
+        const principal=Number(p.amount);
+        const interest=calcAccruedInterest(principal,p.date);
+        const totalValue=+(principal+interest).toFixed(2);
+
+        if(totalValue<=remaining){
+          // Consume this payment entirely (principal + interest)
+          await sb(`payments?id=eq.${p.id}`,{method:'DELETE'});
+          remaining=+(remaining-totalValue).toFixed(2);
+        } else {
+          // Partially consume this payment
+          // Delete the original payment
+          await sb(`payments?id=eq.${p.id}`,{method:'DELETE'});
+          // Calculate leftover
+          const leftover=+(totalValue-remaining).toFixed(2);
+          remaining=0;
+          // Store leftover as a new payment entry dated today
+          if(leftover>0){
+            await sb('payments',{method:'POST',body:JSON.stringify({
+              user_id:req.user_id,
+              amount:leftover,
+              date:today
+            })});
+          }
+        }
+      }
+    }
+    await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    await renderAdmin();
+  }catch(e){alert('Error updating request: '+e.message);}
 }
 
 // ─── CONTRIBUTOR DASHBOARD ────────────────────────────────
