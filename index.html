@@ -154,11 +154,15 @@ function countWeekdays(startDate,endDate){
   while(d<end){const day=d.getDay();if(day!==0&&day!==6)count++;d.setDate(d.getDate()+1);}
   return count;
 }
-function calcAccruedInterest(amount,payDate){
+function calcAccruedInterest(amount,payDate,withdrawnAt){
   const today=new Date();today.setHours(0,0,0,0);
   const start=new Date(payDate);start.setHours(0,0,0,0);
   if(start>=today)return 0;
-  return+(Number(amount)*RATE*(countWeekdays(start,today)/WEEKDAYS_PER_YEAR)).toFixed(2);
+  // If withdrawn, interest only accrued up to the withdrawal date
+  const end=withdrawnAt?new Date(withdrawnAt):today;
+  end.setHours(0,0,0,0);
+  if(start>=end)return 0;
+  return+(Number(amount)*RATE*(countWeekdays(start,end)/WEEKDAYS_PER_YEAR)).toFixed(2);
 }
 function fmt(n){return'₦'+Number(n).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -421,9 +425,10 @@ function renderPendingScreen(){
 async function renderAdmin(){
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [contributors,payments,requests,signups]=await Promise.all([
+    const [contributors,payments,allPayments,requests,signups]=await Promise.all([
       sb('users?role=eq.contributor&select=*&order=created_at.asc'),
-      sb('payments?select=*'),
+      sb('payments?withdrawn=eq.false&select=*'),
+      sb('payments?select=*&order=date.asc'),
       sb('withdrawal_requests?select=*&order=created_at.desc'),
       sb('signup_requests?select=*&order=created_at.desc')
     ]);
@@ -431,6 +436,8 @@ async function renderAdmin(){
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
+    const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
     setHTML(`
     <div class="header">
       <div class="header-left">
@@ -446,9 +453,11 @@ async function renderAdmin(){
     </div>
     <div class="stats-grid">
       <div class="stat"><div class="stat-label">Contributors</div><div class="stat-val">${contributors.length}</div></div>
-      <div class="stat"><div class="stat-label">Total savings</div><div class="stat-val green">${fmt(totalPrincipal)}</div></div>
+      <div class="stat"><div class="stat-label">Lifetime inflow</div><div class="stat-val" style="color:#185FA5">${fmt(lifetimeInflow)}</div></div>
+      <div class="stat"><div class="stat-label">Total withdrawals</div><div class="stat-val" style="color:#A32D2D">${fmt(totalWithdrawals)}</div></div>
+      <div class="stat"><div class="stat-label">Current savings</div><div class="stat-val green">${fmt(totalPrincipal)}</div></div>
       <div class="stat"><div class="stat-label">Interest accrued</div><div class="stat-val amber">${fmt(totalInterest)}</div></div>
-      <div class="stat"><div class="stat-label">Total value</div><div class="stat-val">${fmt(totalPrincipal+totalInterest)}</div></div>
+      <div class="stat"><div class="stat-label">Total current value</div><div class="stat-val">${fmt(totalPrincipal+totalInterest)}</div></div>
     </div>
     <div class="tabs">
       <button class="tab ${adminTab==='contributors'?'active':''}" onclick="setAdminTab('contributors')">Contributors</button>
@@ -458,7 +467,7 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
     </div>
     ${adminTab==='contributors'?buildContributorsTab(contributors,payments):
-      adminTab==='payments'?buildPaymentsTab(payments,contributors):
+      adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
       adminTab==='requests'?buildRequestsTab(requests,contributors):
       adminTab==='signups'?buildSignupsTab(signups):
       buildCredentialsTab(contributors)}
@@ -503,19 +512,21 @@ function buildPaymentsTab(payments,contributors){
   const today=new Date();today.setHours(0,0,0,0);
   const rows=sorted.map(p=>{
     const user=contributors.find(u=>u.id===p.user_id);
-    const interest=calcAccruedInterest(p.amount,p.date);
+    const interest=calcAccruedInterest(p.amount,p.date,p.withdrawn_at);
+    const endDate=p.withdrawn_at?new Date(p.withdrawn_at):today;
     const start=new Date(p.date);start.setHours(0,0,0,0);
-    const weekdays=countWeekdays(start,today);
-    return`<tr>
-      <td style="font-weight:500">${user?user.name:'Unknown'}</td>
+    const weekdays=countWeekdays(start,endDate);
+    const wBadge=p.withdrawn?'<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:2px 6px;border-radius:4px;margin-left:5px">Withdrawn</span>':'';
+    return`<tr style="${p.withdrawn?'opacity:.6':''}">
+      <td style="font-weight:500">${user?user.name:'Unknown'}${wBadge}</td>
       <td>${fmtDate(p.date)}</td>
       <td>${fmt(p.amount)}</td>
-      <td style="color:#888;font-size:11px">${weekdays} weekdays</td>
+      <td style="color:#888;font-size:11px">${weekdays} weekdays${p.withdrawn?' (to withdrawal)':''}</td>
       <td class="green">${fmt(interest)}</td>
       <td><strong>${fmt(Number(p.amount)+interest)}</strong></td>
       <td><div style="display:flex;gap:5px;justify-content:flex-end">
-        <button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>
+        ${!p.withdrawn?`<button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>`:''}
+        ${!p.withdrawn?`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
       </div></td>
     </tr>`;
   }).join('');
@@ -701,35 +712,35 @@ async function updateRequest(id,status){
       const req=requests[0];
       let remaining=Number(req.amount);
 
-      // Fetch payments oldest first
-      const payments=await sb(`payments?user_id=eq.${req.user_id}&select=*&order=date.asc`);
-      if(!payments||!payments.length)throw new Error('No payments found');
+      // Fetch only active (non-withdrawn) payments oldest first
+      const payments=await sb(`payments?user_id=eq.${req.user_id}&withdrawn=eq.false&select=*&order=date.asc`);
+      if(!payments||!payments.length)throw new Error('No active payments found');
 
       const today=new Date().toISOString().split('T')[0];
 
       for(const p of payments){
         if(remaining<=0)break;
         const principal=Number(p.amount);
-        const interest=calcAccruedInterest(principal,p.date);
+        const interest=calcAccruedInterest(principal,p.date,null);
         const totalValue=+(principal+interest).toFixed(2);
 
         if(totalValue<=remaining){
-          // Consume this payment entirely (principal + interest)
-          await sb(`payments?id=eq.${p.id}`,{method:'DELETE'});
+          // Mark this payment as fully withdrawn
+          await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
           remaining=+(remaining-totalValue).toFixed(2);
         } else {
           // Partially consume this payment
-          // Delete the original payment
-          await sb(`payments?id=eq.${p.id}`,{method:'DELETE'});
-          // Calculate leftover
+          // Mark original as withdrawn
+          await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
+          // Calculate leftover and create new active payment dated today
           const leftover=+(totalValue-remaining).toFixed(2);
           remaining=0;
-          // Store leftover as a new payment entry dated today
           if(leftover>0){
             await sb('payments',{method:'POST',body:JSON.stringify({
               user_id:req.user_id,
               amount:leftover,
-              date:today
+              date:today,
+              withdrawn:false
             })});
           }
         }
@@ -744,8 +755,9 @@ async function updateRequest(id,status){
 async function renderContributor(){
   setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [payments,requests,bankArr]=await Promise.all([
-      sb(`payments?user_id=eq.${currentUser.id}&select=*&order=date.asc`),
+    const [payments,withdrawnPayments,requests,bankArr]=await Promise.all([
+      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&select=*&order=date.asc`),
+      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.true&select=*&order=date.asc`),
       sb(`withdrawal_requests?user_id=eq.${currentUser.id}&select=*&order=created_at.desc`),
       sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
     ]);
@@ -843,6 +855,22 @@ async function renderContributor(){
       <div class="table-wrap"><table>
         <tr><th>Date</th><th>Amount</th><th>Note</th><th>Status</th></tr>
         ${reqRows}
+      </table></div>
+    </div>`:''}
+
+    ${withdrawnPayments&&withdrawnPayments.length?`<div class="card">
+      <h3>Contribution history <span style="font-size:12px;color:#888;font-weight:400">— withdrawn payments</span></h3>
+      <div class="table-wrap"><table>
+        <tr><th>Payment date</th><th>Amount</th><th>Withdrawn on</th><th>Interest earned</th></tr>
+        ${withdrawnPayments.map(p=>{
+          const int=calcAccruedInterest(Number(p.amount),p.date,p.withdrawn_at);
+          return '<tr style="opacity:.65">'
+            +'<td>'+fmtDate(p.date)+'</td>'
+            +'<td>'+fmt(p.amount)+'</td>'
+            +'<td>'+fmtDate(p.withdrawn_at)+'</td>'
+            +'<td style="color:#0F6E56">'+fmt(int)+'</td>'
+            +'</tr>';
+        }).join('')}
       </table></div>
     </div>`:''}
     <div class="card">
@@ -1002,7 +1030,7 @@ async function openViewContributor(userId,userName){
   openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;margin:0 auto 10px"></div>Loading…</div>`);
   try{
     const [pays,bankArr]=await Promise.all([
-      sb(`payments?user_id=eq.${userId}&select=*&order=date.asc`),
+      sb(`payments?user_id=eq.${userId}&withdrawn=eq.false&select=*&order=date.asc`),
       sb(`bank_details?user_id=eq.${userId}&select=*`)
     ]);
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
