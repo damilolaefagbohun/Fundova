@@ -138,12 +138,12 @@ async function sb(path,opts={}){
   }
 }
 
-async function sendEmail(to,name,pin){
+async function sendEmail(payload){
   try{
     await fetch('/.netlify/functions/send-email',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({to,name,pin})
+      body:JSON.stringify(payload)
     });
   }catch(e){console.error('Email error:',e);}
 }
@@ -625,7 +625,7 @@ async function approveSignup(id,name,email,bankName,accountName,accountNumber){
     // Mark signup request approved
     await sb(`signup_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
     // Send email
-    await sendEmail(email,name,pin);
+    await sendEmail({type:'approval',to:email,name,pin});
     closeModal();
     toast('<i class="ti ti-check"></i> Approved and email sent!');
     await renderAdmin();
@@ -989,6 +989,16 @@ async function savePayment(userId){
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
     await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount,date})});
+    // Send payment notification email
+    const contributor=db_contributors?db_contributors.find(u=>u.id===userId):null;
+    try{
+      const contribs=await sb('users?id=eq.'+userId+'&select=name,email');
+      if(contribs&&contribs.length){
+        const fmtAmt=Number(amount).toLocaleString('en-NG',{minimumFractionDigits:2});
+        const fmtDt=new Date(date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+        await sendEmail({type:'payment',to:contribs[0].email,name:contribs[0].name,amount:fmtAmt,date:fmtDt});
+      }
+    }catch(emailErr){console.error('Payment email error:',emailErr);}
     closeModal();await renderAdmin();
   }catch(e){err.textContent='Error saving payment.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Save payment';btn.disabled=false;}
 }
