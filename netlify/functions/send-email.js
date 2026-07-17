@@ -34,14 +34,18 @@ function sendResendEmail(to, subject, html) {
 }
 
 exports.handler = async function(event) {
+  console.log('Function called, method:', event.httpMethod);
+  console.log('Body received:', event.body);
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
 
   try {
     const body = JSON.parse(event.body);
-    const type = body.type || 'approval';
+    console.log('Parsed body type:', body.type, 'to:', body.to);
 
+    const type = body.type || 'approval';
     let to, subject, html;
 
     if (type === 'approval') {
@@ -49,7 +53,10 @@ exports.handler = async function(event) {
       const name = body.name;
       const pin = body.pin;
 
+      console.log('Approval email to:', to, 'name:', name);
+
       if (!to || !name || !pin) {
+        console.log('Missing fields');
         return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
       }
 
@@ -85,7 +92,7 @@ exports.handler = async function(event) {
         + '<a href="' + SITE_URL + '" style="display:inline-block;background:#1D9E75;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px">Sign in to Fundova</a>'
         + '</div>'
         + '<p style="color:#888;font-size:12px;line-height:1.7;margin-bottom:8px">Need help? Reach us on WhatsApp <strong>08035257262</strong> or Instagram <strong>@fundova_cooperative</strong>.</p>'
-        + '<p style="color:#aaa;font-size:12px;font-style:italic">Remember — save small small before your salary go disappear small small &#x1F604;</p>'
+        + '<p style="color:#aaa;font-size:12px;font-style:italic">Remember — save small small before your salary go disappear small small!</p>'
         + '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
         + '<p style="color:#bbb;font-size:11px;text-align:center">2025 Fundova Cooperative. All rights reserved.</p>'
         + '</div>';
@@ -96,7 +103,10 @@ exports.handler = async function(event) {
       const amount = body.amount;
       const date = body.date;
 
+      console.log('Payment email to:', to, 'name:', name, 'amount:', amount);
+
       if (!to || !name || !amount || !date) {
+        console.log('Missing payment fields');
         return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
       }
 
@@ -109,21 +119,24 @@ exports.handler = async function(event) {
         + '<p style="color:#555;line-height:1.7;margin-bottom:20px">Dear ' + name + ', we have successfully recorded the following payment to your Fundova savings account:</p>'
         + '<div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:20px;margin-bottom:24px;text-align:center">'
         + '<div style="font-size:12px;color:#065F46;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Amount recorded</div>'
-        + '<div style="font-size:32px;font-weight:700;color:#0F6E56">&#x20A6;' + Number(amount).toLocaleString('en-NG', {minimumFractionDigits:2}) + '</div>'
+        + '<div style="font-size:32px;font-weight:700;color:#0F6E56">N' + amount + '</div>'
         + '<div style="font-size:13px;color:#888;margin-top:6px">Date: ' + date + '</div>'
         + '</div>'
         + '<div style="text-align:center;margin-bottom:24px">'
         + '<a href="' + SITE_URL + '" style="display:inline-block;background:#1D9E75;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px">View my dashboard</a>'
         + '</div>'
-        + '<p style="color:#888;font-size:12px;line-height:1.7">Your interest starts accruing from the payment date every weekday automatically. Log in to your dashboard to view your updated balance and accrued interest.</p>'
+        + '<p style="color:#888;font-size:12px;line-height:1.7">Your interest starts accruing from the payment date every weekday automatically.</p>'
         + '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
-        + '<p style="color:#bbb;font-size:11px;text-align:center">Questions? WhatsApp us on 08035257262 or find us on Instagram @fundova_cooperative</p>'
+        + '<p style="color:#bbb;font-size:11px;text-align:center">Questions? WhatsApp us on 08035257262 or Instagram @fundova_cooperative</p>'
         + '</div>';
     } else {
+      console.log('Unknown type:', type);
       return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type' }) };
     }
 
+    console.log('Calling Resend API...');
     const result = await sendResendEmail(to, subject, html);
+    console.log('Resend response status:', result.status, 'body:', result.body);
 
     if (result.status >= 400) {
       return { statusCode: 500, body: JSON.stringify({ error: result.body }) };
@@ -132,6 +145,7 @@ exports.handler = async function(event) {
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
 
   } catch (err) {
+    console.log('Caught error:', err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
