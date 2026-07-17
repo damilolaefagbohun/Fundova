@@ -1729,7 +1729,7 @@ async function renderContributorInvestments(){
           +'<div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">'
           +'<div style="height:100%;background:#1D9E75;width:'+pct+'%"></div></div>'
           +'<div style="font-size:11px;color:#888;margin-bottom:12px">'+pct+'% funded · '+confirmedRes.length+' investor'+(confirmedRes.length!==1?'s':'')+' so far</div>'
-          +'<button class="btn btn-primary" onclick="openReserveUnits(''+inv.id+'',''+inv.title.replace(/'/g,"\'")+'','+inv.unit_price+','+unitsAvailable+')" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>'
+          +'<button class="btnbtn-primary" data-inv-id="'+inv.id+'" data-inv-title="'+inv.title.replace(/"/g,'&quot;')+'" data-unit-price="'+inv.unit_price+'" data-units="'+unitsAvailable+'" onclick="openReserveUnitsFromBtn(this)" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>'
           +'</div>';
       });
     }
@@ -1782,6 +1782,14 @@ async function saveInvestmentRefundRequest(invId){
     toast('<i class="ti ti-check"></i> Refund request submitted. Admin will review shortly.');
     await renderContributor();
   }catch(e){err.textContent='Error submitting request.';btn.innerHTML='<i class="ti ti-send"></i> Submit request';btn.disabled=false;}
+}
+
+function openReserveUnitsFromBtn(btn){
+  const invId=btn.getAttribute('data-inv-id');
+  const invTitle=btn.getAttribute('data-inv-title');
+  const unitPrice=parseFloat(btn.getAttribute('data-unit-price'));
+  const units=parseInt(btn.getAttribute('data-units'));
+  openReserveUnits(invId,invTitle,unitPrice,units);
 }
 
 function openReserveUnits(invId,invTitle,unitPrice,totalUnits){
