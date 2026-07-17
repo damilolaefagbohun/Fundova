@@ -425,12 +425,13 @@ function renderPendingScreen(){
 async function renderAdmin(){
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [contributors,payments,allPayments,requests,signups]=await Promise.all([
+    const [contributors,payments,allPayments,requests,signups,investments]=await Promise.all([
       sb('users?role=eq.contributor&select=*&order=created_at.asc'),
       sb('payments?withdrawn=eq.false&select=*'),
       sb('payments?select=*&order=date.asc'),
       sb('withdrawal_requests?select=*&order=created_at.desc'),
-      sb('signup_requests?select=*&order=created_at.desc')
+      sb('signup_requests?select=*&order=created_at.desc'),
+      sb('investments?select=*&order=created_at.desc')
     ]);
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
@@ -465,11 +466,13 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='requests'?'active':''}" onclick="setAdminTab('requests')">Withdrawals${pendingWithdrawals>0?`<span class="notif-badge">${pendingWithdrawals}</span>`:''}</button>
       <button class="tab ${adminTab==='signups'?'active':''}" onclick="setAdminTab('signups')">New applications${pendingSignups>0?`<span class="notif-badge">${pendingSignups}</span>`:''}</button>
       <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
+      <button class="tab ${adminTab==='investments'?'active':''}" onclick="setAdminTab('investments')">Investments</button>
     </div>
     ${adminTab==='contributors'?buildContributorsTab(contributors,payments):
       adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
       adminTab==='requests'?buildRequestsTab(requests,contributors):
       adminTab==='signups'?buildSignupsTab(signups):
+      adminTab==='investments'?buildInvestmentsAdminTab(investments,contributors):
       buildCredentialsTab(contributors)}
     `);
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
@@ -873,6 +876,11 @@ async function renderContributor(){
         }).join('')}
       </table></div>
     </div>`:''}
+    <div class="card" id="inv-section">
+      <h3>Investment opportunities</h3>
+      <div id="inv-content"><div style="text-align:center;padding:1rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-right:8px"></div>Loading…</div></div>
+    </div>
+
     <div class="card">
       <h3>Your payout bank details</h3>
       ${bank?`
@@ -885,6 +893,11 @@ async function renderContributor(){
       :`<div class="empty" style="padding:1.5rem"><i class="ti ti-building-bank" style="font-size:28px;display:block;margin-bottom:8px;color:#ccc"></i>No bank details on file yet.<br>Contact your admin.</div>`}
     </div>`:`<div class="card"><div class="empty"><i class="ti ti-clock" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No payments recorded yet.<br>Contact your admin.</div></div>`}
     `);
+  // Load investments asynchronously
+  renderContributorInvestments().then(html=>{
+    const el=document.getElementById('inv-content');
+    if(el)el.innerHTML=html;
+  });
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
 }
 
@@ -1170,6 +1183,445 @@ async function saveChangePin(){
     closeModal();
     toast('<i class="ti ti-check"></i> PIN updated successfully');
   }catch(e){err.textContent='Error updating PIN.';btn.innerHTML='<i class="ti ti-lock-check"></i> Update PIN';btn.disabled=false;}
+}
+
+
+// ─── INVESTMENTS ──────────────────────────────────────────
+
+async function buildInvestmentsAdminTab(investments,contributors){
+  const reservations=await sb('investment_reservations?select=*');
+  if(!investments||!investments.length){
+    return`<div class="card"><div class="empty"><i class="ti ti-building-store" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No investments yet.<br><br><button class="btn btn-primary" onclick="openAddInvestment()"><i class="ti ti-plus"></i> Create investment</button></div></div>`;
+  }
+  const cards=investments.map(inv=>{
+    const invRes=reservations.filter(r=>r.investment_id===inv.id);
+    const confirmedRes=invRes.filter(r=>r.status==='confirmed');
+    const pendingRes=invRes.filter(r=>r.status==='pending');
+    const unitsSold=confirmedRes.reduce((a,r)=>a+r.units,0);
+    const unitsPending=pendingRes.reduce((a,r)=>a+r.units,0);
+    const pct=Math.min(100,Math.round((unitsSold/inv.total_units)*100));
+    const statusColors={coming_soon:'#856404|#FFF3CD',open:'#065F46|#D1FAE5',funded:'#185FA5|#E6F1FB',closed:'#666|#f5f5f3'};
+    const [sc,bg]=( statusColors[inv.status]||'#666|#f5f5f3').split('|');
+    return`<div class="card" style="margin-bottom:1rem">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <h3 style="margin:0;font-size:15px">${inv.title}</h3>
+            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${bg};color:${sc}">${inv.status.replace('_',' ').toUpperCase()}</span>
+          </div>
+          <p style="font-size:13px;color:#888;margin-bottom:0">${inv.description||''}</p>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-edit" onclick="openEditInvestment('${inv.id}')"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm" onclick="openInvestmentDetail('${inv.id}')"><i class="ti ti-eye"></i> Details</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Unit price</div><div style="font-size:15px;font-weight:600">${fmt(inv.unit_price)}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Total units</div><div style="font-size:15px;font-weight:600">${inv.total_units}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Units sold</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${unitsSold}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Pending</div><div style="font-size:15px;font-weight:600;color:#856404">${unitsPending}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Available</div><div style="font-size:15px;font-weight:600">${inv.total_units-unitsSold-unitsPending}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Amount raised</div><div style="font-size:15px;font-weight:600">${fmt(unitsSold*inv.unit_price)}</div></div>
+      </div>
+      <div style="background:#f5f5f3;border-radius:8px;height:8px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;background:#1D9E75;width:${pct}%;transition:width .3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:12px">
+        <span>${pct}% funded</span>
+        <span>Target: ${fmt(inv.total_cost)}${inv.deadline?' · Deadline: '+fmtDate(inv.deadline):''}</span>
+      </div>
+      ${pendingRes.length?`<div style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E6;border:1px solid #FDEFC3;border-radius:8px;padding:10px 14px">
+        <span style="font-size:13px;color:#856404"><i class="ti ti-clock"></i> ${pendingRes.length} pending reservation${pendingRes.length>1?'s':''}</span>
+        <button class="btn btn-sm btn-primary" onclick="openInvestmentDetail('${inv.id}')">Review</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+
+  return`<div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h3 style="margin:0">Investment opportunities</h3>
+      <button class="btn btn-primary btn-sm" onclick="openAddInvestment()"><i class="ti ti-plus"></i> Create investment</button>
+    </div>
+    ${cards}
+  </div>`;
+}
+
+function openAddInvestment(){
+  openModal(`
+  <h3>Create investment opportunity</h3>
+  <div class="field"><label>Title</label><input id="ni-title" placeholder="e.g. Toyota Prado Jeep"></div>
+  <div class="field"><label>Description</label><textarea id="ni-desc" placeholder="Brief description of this investment opportunity"></textarea></div>
+  <div class="field"><label>Total cost (₦)</label><input id="ni-cost" type="number" placeholder="e.g. 100000000" oninput="previewUnitPrice()"></div>
+  <div class="field"><label>Number of units</label><input id="ni-units" type="number" placeholder="e.g. 5000" oninput="previewUnitPrice()"></div>
+  <div id="ni-preview" style="background:#F0FDF8;border-radius:8px;padding:10px 14px;font-size:13px;display:none">
+    Unit price: <strong id="ni-uprice"></strong>
+  </div>
+  <div class="field"><label>Deadline (optional)</label><input id="ni-deadline" type="date"></div>
+  <div class="field"><label>Status</label>
+    <select id="ni-status">
+      <option value="coming_soon">Coming Soon</option>
+      <option value="open">Open for investment</option>
+    </select>
+  </div>
+  <div class="error" id="ni-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ni-btn" onclick="saveInvestment(null)"><i class="ti ti-device-floppy"></i> Create</button>
+  </div>`);
+}
+
+function previewUnitPrice(){
+  const cost=parseFloat(document.getElementById('ni-cost')?.value||document.getElementById('ei-cost')?.value);
+  const units=parseFloat(document.getElementById('ni-units')?.value||document.getElementById('ei-units')?.value);
+  const preview=document.getElementById('ni-preview');
+  const upriceEl=document.getElementById('ni-uprice');
+  if(cost&&units&&units>0&&preview&&upriceEl){
+    upriceEl.textContent=fmt(cost/units);
+    preview.style.display='block';
+  }
+}
+
+async function saveInvestment(id){
+  const isEdit=!!id;
+  const title=(document.getElementById(isEdit?'ei-title':'ni-title')||{}).value?.trim();
+  const description=(document.getElementById(isEdit?'ei-desc':'ni-desc')||{}).value?.trim();
+  const total_cost=parseFloat((document.getElementById(isEdit?'ei-cost':'ni-cost')||{}).value);
+  const total_units=parseInt((document.getElementById(isEdit?'ei-units':'ni-units')||{}).value);
+  const deadline=(document.getElementById(isEdit?'ei-deadline':'ni-deadline')||{}).value||null;
+  const status=(document.getElementById(isEdit?'ei-status':'ni-status')||{}).value;
+  const err=document.getElementById(isEdit?'ei-err':'ni-err');
+  const btn=document.getElementById(isEdit?'ei-btn':'ni-btn');
+  if(!title||!total_cost||!total_units){err.textContent='Title, cost and units are required.';return;}
+  const unit_price=+(total_cost/total_units).toFixed(2);
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    if(isEdit){
+      await sb(`investments?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({title,description,total_cost,total_units,unit_price,deadline,status})});
+    } else {
+      await sb('investments',{method:'POST',body:JSON.stringify({title,description,total_cost,total_units,unit_price,deadline,status})});
+    }
+    closeModal();await renderAdmin();
+  }catch(e){err.textContent='Error saving.';btn.innerHTML='<i class="ti ti-device-floppy"></i> '+( isEdit?'Save changes':'Create');btn.disabled=false;}
+}
+
+async function openEditInvestment(id){
+  const invArr=await sb(`investments?id=eq.${id}&select=*`);
+  if(!invArr||!invArr.length)return;
+  const inv=invArr[0];
+  openModal(`
+  <h3>Edit investment</h3>
+  <div class="field"><label>Title</label><input id="ei-title" value="${inv.title}"></div>
+  <div class="field"><label>Description</label><textarea id="ei-desc">${inv.description||''}</textarea></div>
+  <div class="field"><label>Total cost (₦)</label><input id="ei-cost" type="number" value="${inv.total_cost}" oninput="previewUnitPrice()"></div>
+  <div class="field"><label>Number of units</label><input id="ei-units" type="number" value="${inv.total_units}" oninput="previewUnitPrice()"></div>
+  <div style="background:#F0FDF8;border-radius:8px;padding:10px 14px;font-size:13px">
+    Current unit price: <strong>${fmt(inv.unit_price)}</strong>
+  </div>
+  <div class="field"><label>Deadline</label><input id="ei-deadline" type="date" value="${inv.deadline||''}" ></div>
+  <div class="field"><label>Status</label>
+    <select id="ei-status">
+      <option value="coming_soon" ${inv.status==='coming_soon'?'selected':''}>Coming Soon</option>
+      <option value="open" ${inv.status==='open'?'selected':''}>Open for investment</option>
+      <option value="funded" ${inv.status==='funded'?'selected':''}>Fully funded</option>
+      <option value="closed" ${inv.status==='closed'?'selected':''}>Closed</option>
+    </select>
+  </div>
+  <div class="error" id="ei-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ei-btn" onclick="saveInvestment('${id}')"><i class="ti ti-device-floppy"></i> Save changes</button>
+  </div>`);
+}
+
+async function openInvestmentDetail(id){
+  openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;margin:0 auto 10px"></div>Loading…</div>`);
+  try{
+    const [invArr,reservations,incomeArr]=await Promise.all([
+      sb(`investments?id=eq.${id}&select=*`),
+      sb(`investment_reservations?investment_id=eq.${id}&select=*&order=created_at.desc`),
+      sb(`investment_income?investment_id=eq.${id}&select=*&order=created_at.desc`)
+    ]);
+    const inv=invArr[0];
+    const userIds=[...new Set(reservations.map(r=>r.user_id))];
+    let usersMap={};
+    if(userIds.length){
+      const users=await sb(`users?id=in.(${userIds.join(',')})&select=id,name,email`);
+      users.forEach(u=>{usersMap[u.id]=u;});
+    }
+
+    const resRows=reservations.map(r=>{
+      const u=usersMap[r.user_id]||{name:'Unknown',email:''};
+      const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':r.status==='confirmed'?'<span class="status-pill pill-approved">Confirmed</span>":'<span class="status-pill pill-rejected">Cancelled</span>';
+      const actions=r.status==='pending'?`
+        <button class="btn btn-sm btn-primary" onclick="updateReservation('${r.id}','confirmed','${id}')"><i class="ti ti-check"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
+        :'<span style="color:#aaa;font-size:12px">—</span>';
+      return`<tr>
+        <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
+        <td>${r.units}</td>
+        <td>${fmt(r.units*inv.unit_price)}</td>
+        <td>${r.payment_method==='savings'?'From savings':'Bank transfer'}</td>
+        <td>${pill}</td>
+        <td><div style="display:flex;gap:4px">${actions}</div></td>
+      </tr>`;
+    }).join('');
+
+    const incomeRows=incomeArr.map(inc=>`<tr>
+      <td>${inc.month}</td>
+      <td>${fmt(inc.gross_income)}</td>
+      <td>${fmt(inc.expenses)}</td>
+      <td><strong style="color:#0F6E56">${fmt(inc.net_income)}</strong></td>
+    </tr>`).join('');
+
+    const confirmedUnits=reservations.filter(r=>r.status==='confirmed').reduce((a,r)=>a+r.units,0);
+
+    openModal(`
+    <h3>${inv.title}</h3>
+    <p style="font-size:13px;color:#666;margin-top:-6px">${inv.description||''}</p>
+    <hr class="divider">
+
+    <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Unit reservations</div>
+    ${reservations.length?`<div class="table-wrap"><table>
+      <tr><th>Contributor</th><th>Units</th><th>Value</th><th>Payment</th><th>Status</th><th></th></tr>
+      ${resRows}
+    </table></div>`:`<div class="empty" style="padding:1rem">No reservations yet.</div>`}
+
+    <hr class="divider">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">Monthly income</div>
+      <button class="btn btn-sm btn-primary" onclick="openRecordIncome('${id}',${confirmedUnits})"><i class="ti ti-plus"></i> Record income</button>
+    </div>
+    ${incomeArr.length?`<div class="table-wrap"><table>
+      <tr><th>Month</th><th>Gross income</th><th>Expenses</th><th>Net income</th></tr>
+      ${incomeRows}
+    </table></div>`:`<div class="empty" style="padding:1rem">No income recorded yet.</div>`}
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Close</button>
+    </div>`);
+  }catch(e){openModal(`<div style="color:#A32D2D;padding:1rem">Error loading: ${e.message}</div>`);}
+}
+
+async function updateReservation(resId,status,invId){
+  try{
+    if(status==='confirmed'){
+      const resArr=await sb(`investment_reservations?id=eq.${resId}&select=*`);
+      const res=resArr[0];
+      if(res.payment_method==='savings'){
+        // Deduct from savings
+        const invArr=await sb(`investments?id=eq.${res.investment_id}&select=*`);
+        const inv=invArr[0];
+        const totalCost=res.units*inv.unit_price;
+        const pays=await sb(`payments?user_id=eq.${res.user_id}&withdrawn=eq.false&select=*&order=date.asc`);
+        let remaining=totalCost;
+        const today=new Date().toISOString().split('T')[0];
+        for(const p of pays){
+          if(remaining<=0)break;
+          const principal=Number(p.amount);
+          const interest=calcAccruedInterest(principal,p.date,null);
+          const totalValue=+(principal+interest).toFixed(2);
+          if(totalValue<=remaining){
+            await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
+            remaining=+(remaining-totalValue).toFixed(2);
+          } else {
+            await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
+            const leftover=+(totalValue-remaining).toFixed(2);
+            remaining=0;
+            if(leftover>0){await sb('payments',{method:'POST',body:JSON.stringify({user_id:res.user_id,amount:leftover,date:today,withdrawn:false})});}
+          }
+        }
+      }
+    }
+    await sb(`investment_reservations?id=eq.${resId}`,{method:'PATCH',body:JSON.stringify({status})});
+    await openInvestmentDetail(invId);
+  }catch(e){alert('Error updating reservation: '+e.message);}
+}
+
+function openRecordIncome(invId,confirmedUnits){
+  const now=new Date();
+  const monthStr=now.toLocaleString('default',{month:'long',year:'numeric'});
+  openModal(`
+  <h3>Record monthly income</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">${confirmedUnits} confirmed unit holders will receive their share automatically.</p>
+  <div class="field"><label>Month</label><input id="ri-month" value="${monthStr}"></div>
+  <div class="field"><label>Gross income (₦)</label><input id="ri-gross" type="number" placeholder="e.g. 500000" oninput="previewNetIncome()"></div>
+  <div class="field"><label>Expenses (₦)</label><input id="ri-exp" type="number" placeholder="e.g. 50000" oninput="previewNetIncome()" value="0"></div>
+  <div id="ri-preview" style="background:#F0FDF8;border-radius:8px;padding:12px;font-size:13px;display:none">
+    <div style="display:flex;justify-content:space-between"><span style="color:#888">Net income</span><strong id="ri-net" class="green"></strong></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px"><span style="color:#888">Per unit</span><strong id="ri-per"></strong></div>
+  </div>
+  <div class="error" id="ri-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="openInvestmentDetail('${invId}')">Cancel</button>
+    <button class="btn btn-primary" id="ri-btn" onclick="saveIncome('${invId}',${confirmedUnits})"><i class="ti ti-device-floppy"></i> Record & distribute</button>
+  </div>`);
+}
+
+function previewNetIncome(){
+  const gross=parseFloat(document.getElementById('ri-gross')?.value||0);
+  const exp=parseFloat(document.getElementById('ri-exp')?.value||0);
+  const preview=document.getElementById('ri-preview');
+  if(gross>0&&preview){
+    const net=gross-exp;
+    document.getElementById('ri-net').textContent=fmt(net);
+    document.getElementById('ri-per').textContent=fmt(net);
+    preview.style.display='block';
+  }
+}
+
+async function saveIncome(invId,confirmedUnits){
+  const month=document.getElementById('ri-month').value.trim();
+  const gross_income=parseFloat(document.getElementById('ri-gross').value);
+  const expenses=parseFloat(document.getElementById('ri-exp').value||0);
+  const err=document.getElementById('ri-err');
+  const btn=document.getElementById('ri-btn');
+  if(!month||!gross_income){err.textContent='Month and gross income are required.';return;}
+  const net_income=+(gross_income-expenses).toFixed(2);
+  btn.innerHTML='<span class="spinner"></span> Distributing…';btn.disabled=true;
+  try{
+    // Save income record
+    await sb('investment_income',{method:'POST',body:JSON.stringify({investment_id:invId,month,gross_income,expenses,net_income})});
+    // Get confirmed reservations
+    const reservations=await sb(`investment_reservations?investment_id=eq.${invId}&status=eq.confirmed&select=*`);
+    const totalUnits=reservations.reduce((a,r)=>a+r.units,0);
+    const today=new Date().toISOString().split('T')[0];
+    // Distribute to each investor by crediting savings
+    for(const r of reservations){
+      const share=+((r.units/totalUnits)*net_income).toFixed(2);
+      if(share>0){
+        await sb('payments',{method:'POST',body:JSON.stringify({
+          user_id:r.user_id,
+          amount:share,
+          date:today,
+          withdrawn:false
+        })});
+      }
+    }
+    closeModal();
+    toast('<i class="ti ti-check"></i> Income recorded and distributed to '+reservations.length+' investors!');
+    await renderAdmin();
+  }catch(e){err.textContent='Error saving income.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Record & distribute';btn.disabled=false;}
+}
+
+// ─── CONTRIBUTOR INVESTMENT VIEW ──────────────────────────
+
+async function renderContributorInvestments(){
+  try{
+    const [investments,myReservations]=await Promise.all([
+      sb('investments?select=*&order=created_at.desc'),
+      sb(`investment_reservations?user_id=eq.${currentUser.id}&select=*`)
+    ]);
+    const open=investments.filter(i=>i.status==='open');
+    const comingSoon=investments.filter(i=>i.status==='coming_soon');
+    const others=investments.filter(i=>i.status!=='open'&&i.status!=='coming_soon');
+
+    let html='<div style="margin-bottom:1.25rem">';
+
+    if(comingSoon.length){
+      html+=comingSoon.map(inv=>`
+      <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:14px;padding:1.5rem;margin-bottom:1rem;color:#fff;position:relative;overflow:hidden">
+        <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
+        <div style="display:inline-block;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.4);color:#C9A84C;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">Coming Soon</div>
+        <h3 style="color:#fff;font-size:17px;margin-bottom:6px">${inv.title}</h3>
+        <p style="color:#aaa;font-size:13px;line-height:1.6;margin-bottom:14px">${inv.description||''}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:rgba(255,255,255,.07);border-radius:8px;padding:10px 12px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:3px">Total cost</div>
+            <div style="font-weight:600;color:#C9A84C">${fmt(inv.total_cost)}</div>
+          </div>
+          <div style="background:rgba(255,255,255,.07);border-radius:8px;padding:10px 12px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:3px">Unit price</div>
+            <div style="font-weight:600;color:#C9A84C">${fmt(inv.unit_price)}</div>
+          </div>
+        </div>
+        <p style="color:#666;font-size:12px;margin-top:12px">Full details will be available once this investment is opened. Stay tuned!</p>
+      </div>`).join('');
+    }
+
+    if(open.length){
+      html+=open.map(inv=>{
+        const myRes=myReservations.find(r=>r.investment_id===inv.id&&r.status!=='cancelled');
+        const reservations_total=0; // simplified
+        const pct=0;
+        return`<div class="card" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">
+            <div>
+              <div style="display:inline-block;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;margin-bottom:6px">Open for investment</div>
+              <h3 style="font-size:15px;margin-bottom:4px">${inv.title}</h3>
+              <p style="font-size:13px;color:#888">${inv.description||''}</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Unit price</div><div style="font-size:14px;font-weight:600">${fmt(inv.unit_price)}</div></div>
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Total units</div><div style="font-size:14px;font-weight:600">${inv.total_units}</div></div>
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Target</div><div style="font-size:14px;font-weight:600">${fmt(inv.total_cost)}</div></div>
+            ${inv.deadline?`<div class="stat" style="padding:10px 12px"><div class="stat-label">Deadline</div><div style="font-size:14px;font-weight:600">${fmtDate(inv.deadline)}</div></div>`:''}
+          </div>
+          ${myRes?`<div style="background:#E1F5EE;border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:10px">
+            <i class="ti ti-check" style="color:#0F6E56"></i> You have reserved <strong>${myRes.units} unit${myRes.units>1?'s':''}</strong> (${myRes.status}) — value: <strong>${fmt(myRes.units*inv.unit_price)}</strong>
+          </div>`:''}
+          ${!myRes?`<button class="btn btn-primary" onclick="openReserveUnits('${inv.id}','${inv.title.replace(/'/g,"\\'")}',${inv.unit_price},${inv.total_units})" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>`:''}
+        </div>`;
+      }).join('');
+    }
+
+    if(!open.length&&!comingSoon.length){
+      html+='<div class="card"><div class="empty"><i class="ti ti-building-store" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No investment opportunities available yet.<br>Check back soon!</div></div>';
+    }
+
+    html+='</div>';
+    return html;
+  }catch(e){return'<div class="card"><div class="empty">Error loading investments.</div></div>';}
+}
+
+function openReserveUnits(invId,invTitle,unitPrice,totalUnits){
+  openModal(`
+  <h3>Reserve units</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">${invTitle}</p>
+  <div class="field"><label>Number of units</label><input id="ru-units" type="number" min="1" max="${totalUnits}" placeholder="e.g. 5" oninput="previewReservation(${unitPrice})"></div>
+  <div id="ru-preview" style="background:#F0FDF8;border-radius:8px;padding:10px 14px;font-size:13px;display:none">
+    Total value: <strong id="ru-total" class="green"></strong>
+  </div>
+  <div class="field"><label>Payment method</label>
+    <select id="ru-method">
+      <option value="bank_transfer">Bank transfer (within 48 hours)</option>
+      <option value="savings">Deduct from my savings balance</option>
+    </select>
+  </div>
+  <div class="info-box" style="font-size:12px"><i class="ti ti-info-circle"></i> Your reservation will be reviewed and confirmed by the admin. If paying by bank transfer, payment must be made within 48 hours or your reservation will be cancelled.</div>
+  <div class="error" id="ru-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ru-btn" onclick="saveReservation('${invId}')"><i class="ti ti-send"></i> Submit reservation</button>
+  </div>`);
+}
+
+function previewReservation(unitPrice){
+  const units=parseFloat(document.getElementById('ru-units')?.value||0);
+  const preview=document.getElementById('ru-preview');
+  const total=document.getElementById('ru-total');
+  if(units>0&&preview&&total){
+    total.textContent=fmt(units*unitPrice);
+    preview.style.display='block';
+  }
+}
+
+async function saveReservation(invId){
+  const units=parseInt(document.getElementById('ru-units').value);
+  const payment_method=document.getElementById('ru-method').value;
+  const err=document.getElementById('ru-err');
+  const btn=document.getElementById('ru-btn');
+  if(!units||units<1){err.textContent='Please enter a valid number of units.';return;}
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('investment_reservations',{method:'POST',body:JSON.stringify({
+      investment_id:invId,user_id:currentUser.id,units,payment_method,status:'pending'
+    })});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Reservation submitted! Admin will review shortly.');
+    await renderContributor();
+  }catch(e){err.textContent='Error submitting reservation.';btn.innerHTML='<i class="ti ti-send"></i> Submit reservation';btn.disabled=false;}
 }
 
 render();
