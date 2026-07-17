@@ -434,6 +434,12 @@ async function renderAdmin(){
       sb('investments?select=*&order=created_at.desc')
     ]);
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
+    const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments):
+      adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
+      adminTab==='requests'?buildRequestsTab(requests,contributors):
+      adminTab==='signups'?buildSignupsTab(signups):
+      adminTab==='credentials'?buildCredentialsTab(contributors):
+      await buildInvestmentsAdminTab(investments,contributors);
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
@@ -468,22 +474,8 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
       <button class="tab ${adminTab==='investments'?'active':''}" onclick="setAdminTab('investments')">Investments</button>
     </div>
-    ${adminTab==='contributors'?buildContributorsTab(contributors,payments):
-      adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
-      adminTab==='requests'?buildRequestsTab(requests,contributors):
-      adminTab==='signups'?buildSignupsTab(signups):
-      adminTab==='investments'?buildInvestmentsAdminTab(investments,contributors):
-      buildCredentialsTab(contributors)}
+    ${tabContent}
     `);
-  if(adminTab==='investments'){
-    buildInvestmentsAdminTab(investments,contributors).then(html=>{
-      const el=document.getElementById('inv-admin-content');
-      if(el)el.innerHTML=html;
-    }).catch(e=>{
-      const el=document.getElementById('inv-admin-content');
-      if(el)el.innerHTML='<div class="empty">Error: '+e.message+'</div>';
-    });
-  }
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);
 }}
 
