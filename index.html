@@ -1561,7 +1561,7 @@ async function renderContributorInvestments(){
           // Get all confirmed units for this investment to calculate share
           const totalConfirmedUnits=myReservations.filter(x=>x.investment_id===r.investment_id&&x.status==='confirmed').reduce((a,x)=>a+x.units,0);
           // Use stored net income and prorate by units
-          totalIncomeReceived+=+(r.units/Math.max(totalConfirmedUnits,1)*inc.net_income).toFixed(2);
+          totalIncomeReceived+=+(r.units/Math.max(totalConfirmedUnits,1)*inc.net_income);
         });
       });
 
@@ -1596,7 +1596,7 @@ async function renderContributorInvestments(){
         const totalConfirmedUnits=myReservations.filter(x=>x.investment_id===r.investment_id&&x.status==='confirmed').reduce((a,x)=>a+x.units,0);
         const ownershipPct=((r.units/inv.total_units)*100).toFixed(2);
         const invIncome=allIncome.filter(inc=>inc.investment_id===r.investment_id);
-        const myIncome=invIncome.reduce((a,inc)=>a++(r.units/Math.max(totalConfirmedUnits,1)*inc.net_income).toFixed(2),0);
+        const myIncome=+invIncome.reduce((a,inc)=>a+(r.units/Math.max(totalConfirmedUnits,1)*inc.net_income),0).toFixed(2);
         const roi=amountInvested>0?((myIncome/amountInvested)*100).toFixed(2):0;
         const pct=Math.min(100,Math.round((totalConfirmedUnits/inv.total_units)*100));
         const myRefundReq=refundReqs.find(req=>req.investment_id===r.investment_id&&req.status==='pending');
