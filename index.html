@@ -1352,7 +1352,7 @@ async function openInvestmentDetail(id){
 
     const resRows=reservations.map(r=>{
       const u=usersMap[r.user_id]||{name:'Unknown',email:''};
-      const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':r.status==='confirmed'?'<span class="status-pill pill-approved">Confirmed</span>":'<span class="status-pill pill-rejected">Cancelled</span>';
+      const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':r.status==='confirmed'?'<span class="status-pill pill-approved">Confirmed</span>':'<span class="status-pill pill-rejected">Cancelled</span>';
       const actions=r.status==='pending'?`
         <button class="btn btn-sm btn-primary" onclick="updateReservation('${r.id}','confirmed','${id}')"><i class="ti ti-check"></i></button>
         <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
