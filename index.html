@@ -110,7 +110,7 @@ tr:hover td{background:#fafafa}
 <script>
 const SB_URL='https://btcpkjlyifwvsybscpxz.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Y3Bramx5aWZ3dnN5YnNjcHh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxNTA1NTUsImV4cCI6MjA5OTcyNjU1NX0.tDcHjN69-rvp0LTItWRbmfW8OO6Y8-abQYYyqOzcAdg';
-const RESEND_KEY='re_EQaE3axY_KYu7QKzQvWvEK7GeeAJkbChv';
+const RESEND_KEY='re_6PaHpCMk_F9WEsuSJKdg4FZhZWouLNTDj';
 const SITE_URL='https://www.fundova.africa';
 const RATE=0.10;
 const WEEKDAYS_PER_YEAR=261;
@@ -1247,7 +1247,7 @@ async function buildInvestmentsAdminTab(investments,contributors){
   const cards=investments.map(inv=>{
     const invRes=reservations.filter(r=>r.investment_id===inv.id);
     const confirmedRes=invRes.filter(r=>r.status==='payment_confirmed');
-    const pendingRes=invRes.filter(r=>r.status==='pending'||r.status==='approved');
+    const pendingRes=invRes.filter(r=>r.status==='pending'||r.status==='approved'||r.status==='payment_made');
     const unitsSold=confirmedRes.reduce((a,r)=>a+r.units,0);
     const unitsPending=pendingRes.reduce((a,r)=>a+r.units,0);
     const pct=Math.min(100,Math.round((unitsSold/inv.total_units)*100));
@@ -1405,15 +1405,18 @@ async function openInvestmentDetail(id){
     const resRows=reservations.map(r=>{
       const u=usersMap[r.user_id]||{name:'Unknown',email:''};
       const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
-        r.status==='approved'?'<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — awaiting payment</span>':
+        r.status==='approved'?'<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — make payment</span>':
+        r.status==='payment_made'?'<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made — awaiting confirmation</span>':
         r.status==='payment_confirmed'?'<span class="status-pill pill-approved">Payment confirmed</span>':
         '<span class="status-pill pill-rejected">Cancelled</span>';
       const actions=r.status==='pending'?`
         <button class="btn btn-sm btn-primary" onclick="updateReservation('${r.id}','approved','${id}')"><i class="ti ti-check"></i> Approve</button>
         <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i> Cancel</button>`
         :r.status==='approved'?`
-        <button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="updateReservation('${r.id}','payment_confirmed','${id}')"><i class="ti ti-cash"></i> Confirm payment</button>
-        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i> Cancel</button>`
+        <span style="font-size:12px;color:#856404"><i class="ti ti-clock"></i> Awaiting investor payment</span>`
+        :r.status==='payment_made'?`
+        <button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="updateReservation('${r.id}','payment_confirmed','${id}')"><i class="ti ti-cash"></i> Confirm payment received</button>
+        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
         :'<span style="color:#aaa;font-size:12px">—</span>';
       return`<tr>
         <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
@@ -1581,7 +1584,7 @@ async function renderContributorInvestments(){
   try{
     const [investments,myReservations,allIncome,refundReqs]=await Promise.all([
       sb('investments?select=*&order=created_at.desc'),
-      sb(`investment_reservations?user_id=eq.${currentUser.id}&select=*`),
+      sb(`investment_reservations?user_id=eq.${currentUser.id}&select=*&order=created_at.desc`),
       sb('investment_income?select=*&order=created_at.desc'),
       sb(`investment_refund_requests?user_id=eq.${currentUser.id}&select=*`)
     ]);
@@ -1606,6 +1609,44 @@ async function renderContributorInvestments(){
     }
 
     let html='<div>';
+
+    // ── PENDING / APPROVED RESERVATIONS ──
+    const pendingMyRes=myReservations.filter(r=>r.status==='pending'||r.status==='approved'||r.status==='payment_made');
+    if(pendingMyRes.length){
+      html+='<div class="card" style="margin-bottom:1rem">'
+        +'<h3 style="margin-bottom:1rem">My reservation requests</h3>';
+      pendingMyRes.forEach(r=>{
+        const inv=investments.find(i=>i.id===r.investment_id);
+        if(!inv)return;
+        const totalCost=r.units*inv.unit_price;
+        let statusHtml='';
+        let actionHtml='';
+        if(r.status==='pending'){
+          statusHtml='<span class="status-pill pill-pending">Pending admin approval</span>';
+          actionHtml='<p style="font-size:12px;color:#888;margin-top:8px">Your reservation is being reviewed by the admin.</p>';
+        } else if(r.status==='approved'){
+          statusHtml='<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — please make payment</span>';
+          actionHtml='<div style="background:#E6F1FB;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px">'
+            +'<div style="font-weight:600;color:#185FA5;margin-bottom:6px"><i class="ti ti-info-circle"></i> Payment instructions</div>'
+            +'<div style="color:#1E40AF;line-height:1.6">Please transfer <strong>N'+totalCost.toLocaleString('en-NG',{minimumFractionDigits:2})+'</strong> to:<br>'
+            +'<strong>First Bank · 3070379829 · Ajonibode Damilola</strong><br>'
+            +'Use your name as the payment reference.</div>'
+            +'</div>'
+            +'<button class="btn btn-primary" data-res-id="'+r.id+'" onclick="markPaymentMade(this)" style="width:100%;margin-top:10px"><i class="ti ti-check"></i> I have made payment</button>';
+        } else if(r.status==='payment_made'){
+          statusHtml='<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made — awaiting admin confirmation</span>';
+          actionHtml='<p style="font-size:12px;color:#888;margin-top:8px">Your payment is being verified by the admin. Units will be added to your portfolio once confirmed.</p>';
+        }
+        html+='<div style="border:1px solid #e5e5e2;border-radius:10px;padding:14px;margin-bottom:10px">'
+          +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">'
+          +'<div><div style="font-weight:600;font-size:14px">'+inv.title+'</div>'
+          +'<div style="font-size:12px;color:#888;margin-top:2px">'+r.units+' unit'+(r.units!==1?'s':'')+' · '+fmt(totalCost)+'</div></div>'
+          +statusHtml+'</div>'
+          +actionHtml
+          +'</div>';
+      });
+      html+='</div>';
+    }
 
     // ── PORTFOLIO (confirmed investors only) ──
     if(myConfirmed.length){
@@ -2309,6 +2350,24 @@ async function saveTopUp(invId){
     toast('<i class="ti ti-check"></i> Top-up submitted! Admin will review shortly.');
     await renderContributor();
   }catch(e){err.textContent='Error submitting top-up.';btn.innerHTML='<i class="ti ti-plus"></i> Submit top-up';btn.disabled=false;}
+}
+
+async function markPaymentMade(btn){
+  const resId=btn.getAttribute('data-res-id');
+  btn.innerHTML='<span class="spinner"></span> Updating…';btn.disabled=true;
+  try{
+    await sb(`investment_reservations?id=eq.${resId}`,{method:'PATCH',body:JSON.stringify({status:'payment_made'})});
+    toast('<i class="ti ti-check"></i> Payment noted! Admin will confirm receipt shortly.');
+    // Reload investment section
+    renderContributorInvestments().then(html=>{
+      const el=document.getElementById('inv-content');
+      if(el)el.innerHTML=html;
+    });
+  }catch(e){
+    btn.innerHTML='<i class="ti ti-check"></i> I have made payment';
+    btn.disabled=false;
+    alert('Error updating status. Please try again.');
+  }
 }
 
 // Load saved session on startup
