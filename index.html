@@ -118,6 +118,24 @@ let currentUser=null;
 let adminTab='contributors';
 let signupStep=1;
 
+// Session persistence - 24 hours
+function saveSession(user){
+  const session={user,expiry:Date.now()+(24*60*60*1000)};
+  try{localStorage.setItem('fundova_session',JSON.stringify(session));}catch(e){}
+}
+function loadSession(){
+  try{
+    const raw=localStorage.getItem('fundova_session');
+    if(!raw)return null;
+    const session=JSON.parse(raw);
+    if(Date.now()>session.expiry){localStorage.removeItem('fundova_session');return null;}
+    return session.user;
+  }catch(e){return null;}
+}
+function clearSession(){
+  try{localStorage.removeItem('fundova_session');}catch(e){}
+}
+
 async function sb(path,opts={}){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),10000);
@@ -207,7 +225,7 @@ function renderLogin(){
         <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
           <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-chart-line"></i></div>
           <div style="font-weight:700;font-size:13px;margin-bottom:4px">Daily interest accrual</div>
-          <div style="font-size:12px;color:#888;line-height:1.5">Earn 10% p.a. calculated every weekday from the day your money lands</div>
+          <div style="font-size:12px;color:#888;line-height:1.5">Earn about 10% p.a. calculated every weekday from the day your money lands</div>
         </div>
         <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
           <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-eye"></i></div>
@@ -224,6 +242,7 @@ function renderLogin(){
         <p style="font-size:14px;color:#555;margin-bottom:1rem">Join Fundova today and start earning on your savings from day one.</p>
         <button onclick="renderSignup()" class="btn btn-primary" style="padding:12px 28px;font-size:15px;border-radius:10px"><i class="ti ti-user-plus"></i> Apply to join</button>
       </div>
+      <div id="homepage-deals"></div>
       <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:2rem">
         <h2 style="font-size:16px;font-weight:700;margin-bottom:1.25rem">Already a member? Sign in</h2>
         <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
@@ -267,6 +286,11 @@ function renderLogin(){
     </div>
   </div>`);
   document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  // Load featured deals on homepage
+  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
+    const el=document.getElementById('homepage-deals');
+    if(el)el.innerHTML=buildDealsSection(deals,true);
+  }).catch(()=>{});
 }
 
 async function doLogin(){
@@ -279,10 +303,10 @@ async function doLogin(){
   try{
     const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
     if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    currentUser=users[0];await render();
+    currentUser=users[0];saveSession(currentUser);await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
-function doLogout(){currentUser=null;signupStep=1;render();}
+function doLogout(){currentUser=null;clearSession();signupStep=1;render();}
 function setAdminTab(tab){adminTab=tab;renderAdmin();}
 
 // ─── SIGNUP ───────────────────────────────────────────────
@@ -312,6 +336,8 @@ function renderSignupStep1(){
     <p style="font-size:13px;color:#666;margin-top:-6px">Step 1 of 2 — Personal details</p>
     <div class="field"><label>Full name</label><input id="s-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
     <div class="field"><label>Email address</label><input id="s-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+    <div class="field"><label>Phone number</label><input id="s-phone" type="tel" placeholder="e.g. 08012345678"></div>
+    <div class="field"><label>WhatsApp number <span style="color:#aaa;font-weight:400">(if different from phone)</span></label><input id="s-whatsapp" type="tel" placeholder="e.g. 08012345678"></div>
     <div class="error" id="s-err1"></div>
     <button class="btn btn-primary" id="s-btn1" onclick="goSignupStep2()">Next <i class="ti ti-arrow-right"></i></button>`;
 }
@@ -322,7 +348,9 @@ function goSignupStep2(){
   const err=document.getElementById('s-err1');
   if(!name){err.textContent='Please enter your full name.';return;}
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err.textContent='Please enter a valid email address.';return;}
-  window._sName=name;window._sEmail=email;
+  const phone=document.getElementById('s-phone').value.trim();
+  const whatsapp=document.getElementById('s-whatsapp').value.trim();
+  window._sName=name;window._sEmail=email;window._sPhone=phone;window._sWhatsapp=whatsapp||phone;
   signupStep=2;
   document.getElementById('sd1').classList.add('active');
   document.getElementById('sd2').classList.add('active');
@@ -388,6 +416,7 @@ async function submitSignup(){
     if(existingReq&&existingReq.length){err.textContent='An application with this email already exists.';btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;return;}
     await sb('signup_requests',{method:'POST',body:JSON.stringify({
       name:window._sName,email:window._sEmail,
+      phone:window._sPhone||null,whatsapp:window._sWhatsapp||null,
       bank_name,account_number,account_name,
       name_mismatch:mismatchVisible,referred_by:referred_by||null,status:'pending'
     })});
@@ -425,13 +454,14 @@ function renderPendingScreen(){
 async function renderAdmin(){
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [contributors,payments,allPayments,requests,signups,investments]=await Promise.all([
+    const [contributors,payments,allPayments,requests,signups,investments,deals]=await Promise.all([
       sb('users?role=eq.contributor&select=*&order=created_at.asc'),
       sb('payments?withdrawn=eq.false&select=*'),
       sb('payments?select=*&order=date.asc'),
       sb('withdrawal_requests?select=*&order=created_at.desc'),
       sb('signup_requests?select=*&order=created_at.desc'),
-      sb('investments?select=*&order=created_at.desc')
+      sb('investments?select=*&order=created_at.desc'),
+      sb('deals?select=*&order=created_at.desc')
     ]);
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
     const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments):
@@ -439,6 +469,8 @@ async function renderAdmin(){
       adminTab==='requests'?buildRequestsTab(requests,contributors):
       adminTab==='signups'?buildSignupsTab(signups):
       adminTab==='credentials'?buildCredentialsTab(contributors):
+      adminTab==='deals'?await buildDealsAdminTab(deals):
+      adminTab==='profile_requests'?await buildProfileRequestsAdminTab():
       await buildInvestmentsAdminTab(investments,contributors);
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
@@ -473,6 +505,8 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='signups'?'active':''}" onclick="setAdminTab('signups')">New applications${pendingSignups>0?`<span class="notif-badge">${pendingSignups}</span>`:''}</button>
       <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
       <button class="tab ${adminTab==='investments'?'active':''}" onclick="setAdminTab('investments')">Investments</button>
+      <button class="tab ${adminTab==='deals'?'active':''}" onclick="setAdminTab('deals')">Deals</button>
+      <button class="tab ${adminTab==='profile_requests'?'active':''}" onclick="setAdminTab('profile_requests')">Profile requests</button>
     </div>
     ${tabContent}
     `);
@@ -574,7 +608,7 @@ function buildSignupsTab(signups){
   const rows=signups.map(s=>{
     const pill=s.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:s.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
     const mismatchFlag=s.name_mismatch?`<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:4px;margin-left:6px"><i class="ti ti-alert-triangle"></i> Name mismatch</span>`:'';
-    const actions=s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}')"><i class="ti ti-check"></i> Approve</button>
+    const actions=s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
     return`<tr>
       <td><div style="font-weight:500">${s.name}${mismatchFlag}</div><div style="font-size:11px;color:#888">${s.email}</div></td>
@@ -594,7 +628,7 @@ function buildSignupsTab(signups){
   </div>`;
 }
 
-function openApproveSignup(id,name,email,bankName,accountName,accountNumber){
+function openApproveSignup(id,name,email,bankName,accountName,accountNumber,phone,whatsapp){
   openModal(`
   <h3>Approve application</h3>
   <p style="font-size:13px;color:#666;margin-top:-6px">Set a PIN for <strong>${name}</strong>. They'll receive an email with their login details.</p>
@@ -608,11 +642,11 @@ function openApproveSignup(id,name,email,bankName,accountName,accountNumber){
   <div class="error" id="as-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="as-btn" onclick="approveSignup('${id}','${name.replace(/'/g,"\\'")}','${email}','${bankName.replace(/'/g,"\\'")}','${accountName.replace(/'/g,"\\'")}','${accountNumber}')"><i class="ti ti-check"></i> Approve & send email</button>
+    <button class="btn btn-primary" id="as-btn" onclick="approveSignup('${id}','${name.replace(/'/g,"\\'")}','${email}','${bankName.replace(/'/g,"\\'")}','${accountName.replace(/'/g,"\\'")}','${accountNumber}','${phone||''}','${whatsapp||''}')"><i class="ti ti-check"></i> Approve & send email</button>
   </div>`);
 }
 
-async function approveSignup(id,name,email,bankName,accountName,accountNumber){
+async function approveSignup(id,name,email,bankName,accountName,accountNumber,phone,whatsapp){
   const pin=document.getElementById('as-pin').value.trim();
   const err=document.getElementById('as-err');
   const btn=document.getElementById('as-btn');
@@ -620,7 +654,7 @@ async function approveSignup(id,name,email,bankName,accountName,accountNumber){
   btn.innerHTML='<span class="spinner"></span> Approving…';btn.disabled=true;
   try{
     // Create user account
-    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor'})});
+    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor',phone:phone||null,whatsapp:whatsapp||null})});
     const newUser=newUsers&&newUsers[0];
     // Save bank details
     if(newUser){
@@ -652,6 +686,8 @@ function buildCredentialsTab(contributors){
   const rows=contributors.map(c=>`<tr>
     <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div style="font-weight:500">${c.name}</div></div></td>
     <td>${c.email}</td>
+    <td style="font-size:12px">${c.phone||'<span style="color:#ccc">—</span>'}</td>
+    <td style="font-size:12px">${c.whatsapp?`<a href="https://wa.me/234${c.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46">${c.whatsapp}</a>`:'<span style="color:#ccc">—</span>'}</td>
     <td><div style="display:flex;align-items:center;gap:8px">
       <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
       <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
@@ -664,7 +700,7 @@ function buildCredentialsTab(contributors){
       <span style="font-size:12px;color:#888"><i class="ti ti-lock"></i> Keep this confidential</span>
     </div>
     <div class="table-wrap"><table>
-      <tr><th>Name</th><th>Email</th><th>PIN</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>PIN</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
@@ -805,6 +841,7 @@ async function renderContributor(){
       <div class="avatar" style="width:48px;height:48px;font-size:17px">${initials(currentUser.name)}</div>
       <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} · Thrift savings 2025</div></div>
       <button class="btn btn-sm" onclick="openChangePin()" style="white-space:nowrap"><i class="ti ti-lock"></i> Change PIN</button>
+      <button class="btn btn-sm" onclick="openEditProfile()" style="white-space:nowrap"><i class="ti ti-user-edit"></i> Edit profile</button>
     </div>
 
     <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:14px;padding:1.5rem;margin-bottom:1rem;color:#fff;position:relative;overflow:hidden">
@@ -877,6 +914,14 @@ async function renderContributor(){
         }).join('')}
       </table></div>
     </div>`:''}    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="margin:0">🏷️ Deals of the week</h3>
+        <button class="btn btn-sm btn-primary" onclick="openSubmitDeal()"><i class="ti ti-plus"></i> Submit a deal</button>
+      </div>
+      <div id="contrib-deals-content"><div style="text-align:center;padding:1rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-right:8px"></div>Loading…</div></div>
+    </div>
+
+    <div class="card">
       <h3>Your payout bank details</h3>
       ${bank?`
       <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
@@ -897,6 +942,11 @@ async function renderContributor(){
     const el=document.getElementById('inv-content');
     if(el)el.innerHTML=html;
   });
+  // Load deals asynchronously
+  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
+    const el=document.getElementById('contrib-deals-content');
+    if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,false):'<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
+  }).catch(()=>{});
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
 }
 
@@ -1639,7 +1689,23 @@ async function renderContributorInvestments(){
     }
 
     // ── AVAILABLE INVESTMENTS ──
-    if(comingSoon.length||open.length){
+    // Filter out investments the contributor already has confirmed reservations in
+    const myConfirmedInvIds=new Set(myConfirmed.map(r=>r.investment_id));
+    const openNotInvested=open.filter(inv=>!myConfirmedInvIds.has(inv.id));
+    // Fetch confirmed reservations for all open investments to show funding progress
+    let allReservationsMap={};
+    if(openNotInvested.length){
+      try{
+        const allOpenIds=openNotInvested.map(i=>i.id);
+        const allRes=await sb(`investment_reservations?investment_id=in.(${allOpenIds.join(',')})&status=eq.confirmed&select=*`);
+        (allRes||[]).forEach(r=>{
+          if(!allReservationsMap[r.investment_id])allReservationsMap[r.investment_id]=[];
+          allReservationsMap[r.investment_id].push(r);
+        });
+      }catch(e){}
+    }
+
+    if(comingSoon.length||openNotInvested.length){
       if(myConfirmed.length){
         html+='<hr class="divider" style="margin:1rem 0"><div style="font-size:13px;font-weight:600;color:#888;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.04em">Other investment opportunities</div>';
       }
@@ -1663,8 +1729,13 @@ async function renderContributorInvestments(){
         </div>`;
       });
 
-      open.forEach(inv=>{
+      openNotInvested.forEach(inv=>{
         const myRes=myReservations.find(r=>r.investment_id===inv.id&&r.status!=='cancelled');
+        const confirmedRes=allReservationsMap[inv.id]||[];
+        const unitsSold=confirmedRes.reduce((a,r)=>a+r.units,0);
+        const unitsAvailable=inv.total_units-unitsSold;
+        const amountRaised=unitsSold*inv.unit_price;
+        const pct=Math.min(100,Math.round((unitsSold/inv.total_units)*100));
         const deadline=inv.deadline?Math.max(0,Math.ceil((new Date(inv.deadline)-new Date())/(1000*60*60*24))):null;
         html+=`<div class="card" style="margin-bottom:1rem">
           <div style="display:inline-block;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;margin-bottom:8px">Open for investment</div>
@@ -1672,19 +1743,24 @@ async function renderContributorInvestments(){
           <p style="font-size:13px;color:#888;margin-bottom:12px">${inv.description||''}</p>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">
             <div class="stat" style="padding:10px 12px"><div class="stat-label">Unit price</div><div style="font-size:14px;font-weight:600">${fmt(inv.unit_price)}</div></div>
-            <div class="stat" style="padding:10px 12px"><div class="stat-label">Total units</div><div style="font-size:14px;font-weight:600">${inv.total_units}</div></div>
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Units available</div><div style="font-size:14px;font-weight:600;color:${unitsAvailable<100?'#A32D2D':'#1a1a1a'}">${unitsAvailable}</div></div>
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Units sold</div><div style="font-size:14px;font-weight:600;color:#0F6E56">${unitsSold}</div></div>
+            <div class="stat" style="padding:10px 12px"><div class="stat-label">Amount raised</div><div style="font-size:14px;font-weight:600;color:#0F6E56">${fmt(amountRaised)}</div></div>
             <div class="stat" style="padding:10px 12px"><div class="stat-label">Target</div><div style="font-size:14px;font-weight:600">${fmt(inv.total_cost)}</div></div>
-            ${deadline!==null?`<div class="stat" style="padding:10px 12px"><div class="stat-label">Days left</div><div style="font-size:14px;font-weight:600;color:${deadline<7?'#A32D2D':'#1a1a1a'}">${deadline}</div></div>`:''}
+            ${inv.deadline?`<div class="stat" style="padding:10px 12px"><div class="stat-label">Days left</div><div style="font-size:14px;font-weight:600;color:${deadline<7?'#A32D2D':'#1a1a1a'}">${deadline}</div></div>`:''}
           </div>
+          <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
+            <div style="height:100%;background:#1D9E75;width:${pct}%"></div>
+          </div>
+          <div style="font-size:11px;color:#888;margin-bottom:12px">${pct}% funded · ${confirmedRes.length} investor${confirmedRes.length!==1?'s':''} so far</div>
           ${myRes?`<div style="background:#E1F5EE;border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:10px">
             <i class="ti ti-check" style="color:#0F6E56"></i> You have reserved <strong>${myRes.units} unit${myRes.units>1?'s':''}</strong> — status: <strong>${myRes.status}</strong> — value: <strong>${fmt(myRes.units*inv.unit_price)}</strong>
           </div>`:''}
-          ${!myRes?`<button class="btn btn-primary" onclick="openReserveUnits('${inv.id}','${inv.title.replace(/'/g,"\'")}',${inv.unit_price},${inv.total_units})" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>`:''}
+          ${!myRes?`<button class="btn btn-primary" onclick="openReserveUnits('${inv.id}','${inv.title.replace(/'/g,"\'")}',${inv.unit_price},${unitsAvailable})" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>`:''}
         </div>`;
       });
-    }
 
-    if(!myConfirmed.length&&!open.length&&!comingSoon.length){
+    if(!myConfirmed.length&&!openNotInvested.length&&!comingSoon.length){
       html+='<div class="card"><div class="empty"><i class="ti ti-building-store" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No investment opportunities available yet.<br>Check back soon!</div></div>';
     }
 
@@ -1807,6 +1883,315 @@ async function updateInvestmentRefund(refundId,status,invId){
   }catch(e){alert('Error updating refund request.');}
 }
 
+
+// ─── DEALS OF THE WEEK ────────────────────────────────────
+
+async function buildDealsAdminTab(deals){
+  const pending=(deals||[]).filter(d=>d.status==='pending');
+  const featured=(deals||[]).filter(d=>d.status==='featured');
+  const approved=(deals||[]).filter(d=>d.status==='approved');
+  const rejected=(deals||[]).filter(d=>d.status==='rejected');
+
+  const buildRow=(d,showActions)=>{
+    const statusColors={pending:'#856404|#FFF3CD',featured:'#065F46|#D1FAE5',approved:'#185FA5|#E6F1FB',rejected:'#991B1B|#FEE2E2'};
+    const [sc,bg]=(statusColors[d.status]||'#666|#f5f5f3').split('|');
+    const pill=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${bg};color:${sc}">${d.status.toUpperCase()}</span>`;
+    const actions=showActions?`<div style="display:flex;gap:5px">
+      ${d.status!=='featured'&&featured.length<3?`<button class="btn btn-sm btn-primary" onclick="updateDeal('${d.id}','featured')"><i class="ti ti-star"></i> Feature</button>`:''}
+      ${d.status==='pending'?`<button class="btn btn-sm" onclick="updateDeal('${d.id}','approved')"><i class="ti ti-check"></i> Approve</button>`:''}
+      ${d.status!=='rejected'?`<button class="btn btn-sm btn-danger" onclick="updateDeal('${d.id}','rejected')"><i class="ti ti-x"></i></button>`:''}
+    </div>`:'';
+    return`<tr>
+      <td><div style="font-weight:500">${d.title}</div><div style="font-size:11px;color:#888">${d.category}</div></td>
+      <td>${fmt(d.price)}${d.discount?` <span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:4px">-${d.discount}%</span>`:''}</td>
+      <td style="font-size:12px;color:#666;max-width:180px">${(d.description||'').substring(0,80)}${d.description&&d.description.length>80?'…':''}</td>
+      <td><a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46;font-size:12px"><i class="ti ti-brand-whatsapp"></i> ${d.whatsapp}</a></td>
+      <td>${fmtDate(d.expires_at)||'—'}</td>
+      <td>${pill}</td>
+      <td>${actions}</td>
+    </tr>`;
+  };
+
+  return`<div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h3 style="margin:0">Deals of the week</h3>
+      <div style="font-size:12px;color:#888">${featured.length}/3 featured slots used</div>
+    </div>
+    ${pending.length?`<div class="card" style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
+        <h3 style="margin:0">Pending review</h3>
+        <span class="notif-badge">${pending.length}</span>
+      </div>
+      <div class="table-wrap"><table>
+        <tr><th>Product</th><th>Price</th><th>Description</th><th>WhatsApp</th><th>Expires</th><th>Status</th><th></th></tr>
+        ${pending.map(d=>buildRow(d,true)).join('')}
+      </table></div>
+    </div>`:''}
+    ${featured.length?`<div class="card" style="margin-bottom:1rem">
+      <h3 style="margin-bottom:1rem">Featured deals <span style="font-size:12px;color:#888;font-weight:400">— visible to everyone</span></h3>
+      <div class="table-wrap"><table>
+        <tr><th>Product</th><th>Price</th><th>Description</th><th>WhatsApp</th><th>Expires</th><th>Status</th><th></th></tr>
+        ${featured.map(d=>buildRow(d,true)).join('')}
+      </table></div>
+    </div>`:''}
+    ${approved.length?`<div class="card" style="margin-bottom:1rem">
+      <h3 style="margin-bottom:1rem">Approved deals <span style="font-size:12px;color:#888;font-weight:400">— not yet featured</span></h3>
+      <div class="table-wrap"><table>
+        <tr><th>Product</th><th>Price</th><th>Description</th><th>WhatsApp</th><th>Expires</th><th>Status</th><th></th></tr>
+        ${approved.map(d=>buildRow(d,true)).join('')}
+      </table></div>
+    </div>`:''}
+    ${!pending.length&&!featured.length&&!approved.length?`<div class="card"><div class="empty"><i class="ti ti-tag" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No deals submitted yet.</div></div>`:''}
+  </div>`;
+}
+
+async function updateDeal(id,status){
+  try{
+    await sb(`deals?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    await renderAdmin();
+  }catch(e){alert('Error updating deal.');}
+}
+
+function buildDealsSection(deals,isHomepage){
+  const featured=(deals||[]).filter(d=>d.status==='featured');
+  if(!featured.length)return'';
+
+  const cards=featured.map(d=>{
+    const discountedPrice=d.discount?+(d.price*(1-d.discount/100)).toFixed(2):null;
+    return`<div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden">
+      ${d.discount?`<div style="position:absolute;top:12px;right:12px;background:#1D9E75;color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">-${d.discount}% OFF</div>`:''}
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">${d.category}</div>
+      <div style="font-size:15px;font-weight:700;color:#1a1a1a;padding-right:${d.discount?'50px':'0'}">${d.title}</div>
+      <div style="font-size:12px;color:#666;line-height:1.5">${d.description||''}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+        ${discountedPrice?`<span style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(discountedPrice)}</span><span style="font-size:13px;color:#aaa;text-decoration:line-through">${fmt(d.price)}</span>`:
+        `<span style="font-size:18px;font-weight:700;color:#1a1a1a">${fmt(d.price)}</span>`}
+      </div>
+      <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
+      ${d.expires_at?`<div style="font-size:11px;color:#aaa">Offer expires ${fmtDate(d.expires_at)}</div>`:''}
+    </div>`;
+  }).join('');
+
+  return`<div style="${isHomepage?'max-width:700px;margin:0 auto 1.5rem;padding:0 1rem':'margin-bottom:1rem'}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div>
+        <h2 style="font-size:17px;font-weight:700;margin-bottom:2px">🏷️ Deals of the week</h2>
+        <p style="font-size:12px;color:#888">Exclusive offers from Fundova members</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${cards}</div>
+    <p style="font-size:11px;color:#aaa;margin-top:10px;text-align:center">Fundova facilitates visibility only. All transactions are between buyer and seller directly.</p>
+  </div>`;
+}
+
+function openSubmitDeal(){
+  const today=new Date();
+  const nextWeek=new Date(today.getTime()+7*24*60*60*1000).toISOString().split('T')[0];
+  openModal(`
+  <h3>Submit a deal</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Submit a product you'd like to feature. Admin will review before it goes live.</p>
+  <div class="field"><label>Product name</label><input id="sd-title" placeholder="e.g. iPhone 14 Pro Max"></div>
+  <div class="field"><label>Category</label>
+    <select id="sd-cat">
+      <option>Electronics</option>
+      <option>Fashion & Clothing</option>
+      <option>Food & Groceries</option>
+      <option>Home & Furniture</option>
+      <option>Health & Beauty</option>
+      <option>Vehicles</option>
+      <option>Books & Stationery</option>
+      <option>Other</option>
+    </select>
+  </div>
+  <div class="field"><label>Description</label><textarea id="sd-desc" placeholder="Brief description of the product"></textarea></div>
+  <div class="field"><label>Price (₦)</label><input id="sd-price" type="number" min="1" placeholder="e.g. 50000"></div>
+  <div class="field"><label>Discount % <span style="color:#aaa;font-weight:400">(optional — leave blank if no discount)</span></label><input id="sd-discount" type="number" min="1" max="99" placeholder="e.g. 20"></div>
+  <div class="field"><label>Your WhatsApp number</label><input id="sd-wa" type="tel" placeholder="e.g. 08012345678"></div>
+  <div class="field"><label>Offer expiry date</label><input id="sd-exp" type="date" value="${nextWeek}"></div>
+  <div class="info-box" style="font-size:12px"><i class="ti ti-info-circle"></i> Fundova facilitates visibility only. All transactions are your responsibility.</div>
+  <div class="error" id="sd-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="sd-btn" onclick="saveDealsSubmission()"><i class="ti ti-send"></i> Submit deal</button>
+  </div>`);
+}
+
+async function saveDealsSubmission(){
+  const title=document.getElementById('sd-title').value.trim();
+  const category=document.getElementById('sd-cat').value;
+  const description=document.getElementById('sd-desc').value.trim();
+  const price=parseFloat(document.getElementById('sd-price').value);
+  const discount=parseFloat(document.getElementById('sd-discount').value)||null;
+  const whatsapp=document.getElementById('sd-wa').value.trim();
+  const expires_at=document.getElementById('sd-exp').value||null;
+  const err=document.getElementById('sd-err');
+  const btn=document.getElementById('sd-btn');
+  if(!title||!description||!price||!whatsapp){err.textContent='Please fill in all required fields.';return;}
+  if(!/^0[7-9][0-1]\d{8}$/.test(whatsapp)){err.textContent='Please enter a valid Nigerian WhatsApp number.';return;}
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('deals',{method:'POST',body:JSON.stringify({
+      user_id:currentUser.id,title,category,description,price,discount,whatsapp,expires_at,status:'pending'
+    })});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Deal submitted! Admin will review it shortly.');
+  }catch(e){err.textContent='Error submitting deal.';btn.innerHTML='<i class="ti ti-send"></i> Submit deal';btn.disabled=false;}
+}
+
+
+// ─── PROFILE UPDATE REQUESTS ──────────────────────────────
+
+function openEditProfile(){
+  openModal(`
+  <h3>Request profile update</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Your request will be reviewed by admin before any changes go live.</p>
+  <div class="field"><label>Full name</label><input id="pu-name" value="${currentUser.name}" placeholder="Your full name"></div>
+  <div class="field"><label>Email address</label><input id="pu-email" type="email" value="${currentUser.email}" placeholder="your@email.com"></div>
+  <div class="field"><label>Phone number</label><input id="pu-phone" type="tel" value="${currentUser.phone||''}" placeholder="e.g. 08012345678"></div>
+  <div class="field"><label>WhatsApp number</label><input id="pu-whatsapp" type="tel" value="${currentUser.whatsapp||''}" placeholder="e.g. 08012345678"></div>
+  <hr class="divider">
+  <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Bank details</div>
+  <div class="field"><label>Bank name</label><input id="pu-bank" placeholder="e.g. First Bank"></div>
+  <div class="field"><label>Account number</label><input id="pu-anum" type="text" maxlength="10" placeholder="10-digit account number"></div>
+  <div class="field"><label>Account name</label><input id="pu-aname" placeholder="As shown on your bank account"></div>
+  <p style="font-size:12px;color:#888">Leave bank fields blank if you are not requesting a bank details change.</p>
+  <div class="field"><label>Reason for update</label><textarea id="pu-reason" placeholder="e.g. I changed my bank account"></textarea></div>
+  <div class="error" id="pu-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="pu-btn" onclick="saveProfileUpdateRequest()"><i class="ti ti-send"></i> Submit request</button>
+  </div>`);
+  // Pre-fill bank details if available
+  sb(`bank_details?user_id=eq.${currentUser.id}&select=*`).then(arr=>{
+    if(arr&&arr.length){
+      document.getElementById('pu-bank').value=arr[0].bank_name||'';
+      document.getElementById('pu-anum').value=arr[0].account_number||'';
+      document.getElementById('pu-aname').value=arr[0].account_name||'';
+    }
+  }).catch(()=>{});
+}
+
+async function saveProfileUpdateRequest(){
+  const name=document.getElementById('pu-name').value.trim();
+  const email=document.getElementById('pu-email').value.trim().toLowerCase();
+  const phone=document.getElementById('pu-phone').value.trim()||null;
+  const whatsapp=document.getElementById('pu-whatsapp').value.trim()||null;
+  const bank_name=document.getElementById('pu-bank').value.trim();
+  const account_number=document.getElementById('pu-anum').value.trim();
+  const account_name=document.getElementById('pu-aname').value.trim();
+  const reason=document.getElementById('pu-reason').value.trim();
+  const err=document.getElementById('pu-err');
+  const btn=document.getElementById('pu-btn');
+  if(!name||!email){err.textContent='Name and email are required.';return;}
+  if(account_number&&!/^\d{10}$/.test(account_number)){err.textContent='Account number must be exactly 10 digits.';return;}
+  if(!reason){err.textContent='Please provide a reason for the update.';return;}
+  // Check if bank details are being changed
+  const bankChanging=bank_name||account_number||account_name;
+  if(bankChanging&&(!bank_name||!account_number||!account_name)){
+    err.textContent='If updating bank details, all three bank fields are required.';return;
+  }
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('profile_update_requests',{method:'POST',body:JSON.stringify({
+      user_id:currentUser.id,
+      requested_name:name,
+      requested_email:email,
+      requested_phone:phone,
+      requested_whatsapp:whatsapp,
+      requested_bank_name:bank_name||null,
+      requested_account_number:account_number||null,
+      requested_account_name:account_name||null,
+      reason,
+      status:'pending'
+    })});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Profile update request submitted. Admin will review shortly.');
+  }catch(e){err.textContent='Error submitting request.';btn.innerHTML='<i class="ti ti-send"></i> Submit request';btn.disabled=false;}
+}
+
+async function buildProfileRequestsAdminTab(){
+  const requests=await sb('profile_update_requests?select=*&order=created_at.desc');
+  const userIds=[...new Set((requests||[]).map(r=>r.user_id))];
+  let usersMap={};
+  if(userIds.length){
+    const users=await sb(`users?id=in.(${userIds.join(',')})&select=id,name,email`);
+    users.forEach(u=>{usersMap[u.id]=u;});
+  }
+
+  if(!requests||!requests.length){
+    return`<div class="card"><div class="empty"><i class="ti ti-user-edit" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No profile update requests yet.</div></div>`;
+  }
+
+  const rows=requests.map(r=>{
+    const u=usersMap[r.user_id]||{name:'Unknown',email:''};
+    const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
+      r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':
+      '<span class="status-pill pill-rejected">Rejected</span>';
+    const changes=[];
+    if(r.requested_name!==u.name)changes.push(`Name: <strong>${r.requested_name}</strong>`);
+    if(r.requested_email!==u.email)changes.push(`Email: <strong>${r.requested_email}</strong>`);
+    if(r.requested_phone)changes.push(`Phone: <strong>${r.requested_phone}</strong>`);
+    if(r.requested_whatsapp)changes.push(`WhatsApp: <strong>${r.requested_whatsapp}</strong>`);
+    if(r.requested_bank_name)changes.push(`Bank: <strong>${r.requested_bank_name}</strong>`);
+    if(r.requested_account_number)changes.push(`Acc No: <strong style="font-family:monospace">${r.requested_account_number}</strong>`);
+    if(r.requested_account_name)changes.push(`Acc Name: <strong>${r.requested_account_name}</strong>`);
+    const actions=r.status==='pending'?`
+      <button class="btn btn-sm btn-primary" onclick="approveProfileRequest('${r.id}','${r.user_id}')"><i class="ti ti-check"></i> Approve</button>
+      <button class="btn btn-sm btn-danger" onclick="updateProfileRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`
+      :'<span style="color:#aaa;font-size:12px">—</span>';
+    return`<tr>
+      <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
+      <td><div style="font-size:12px;line-height:1.8">${changes.join('<br>')}</div></td>
+      <td style="font-size:12px;color:#666;max-width:150px">${r.reason||'—'}</td>
+      <td>${fmtDate(r.created_at)}</td>
+      <td>${pill}</td>
+      <td><div style="display:flex;gap:5px">${actions}</div></td>
+    </tr>`;
+  }).join('');
+
+  return`<div class="card">
+    <h3>Profile update requests</h3>
+    <div class="table-wrap"><table>
+      <tr><th>Contributor</th><th>Requested changes</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr>
+      ${rows}
+    </table></div>
+  </div>`;
+}
+
+async function approveProfileRequest(reqId,userId){
+  try{
+    const reqArr=await sb(`profile_update_requests?id=eq.${reqId}&select=*`);
+    const req=reqArr[0];
+    // Update user record
+    const userUpdate={name:req.requested_name,email:req.requested_email};
+    if(req.requested_phone)userUpdate.phone=req.requested_phone;
+    if(req.requested_whatsapp)userUpdate.whatsapp=req.requested_whatsapp;
+    await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify(userUpdate)});
+    // Update bank details if provided
+    if(req.requested_bank_name){
+      const existing=await sb(`bank_details?user_id=eq.${userId}&select=id`);
+      const bankData={bank_name:req.requested_bank_name,account_number:req.requested_account_number,account_name:req.requested_account_name};
+      if(existing&&existing.length){
+        await sb(`bank_details?id=eq.${existing[0].id}`,{method:'PATCH',body:JSON.stringify(bankData)});
+      } else {
+        await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:userId,...bankData})});
+      }
+    }
+    await updateProfileRequest(reqId,'approved');
+    toast('<i class="ti ti-check"></i> Profile updated successfully.');
+  }catch(e){alert('Error approving request: '+e.message);}
+}
+
+async function updateProfileRequest(reqId,status){
+  try{
+    await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify({status})});
+    await renderAdmin();
+  }catch(e){alert('Error updating request.');}
+}
+
+// Load saved session on startup
+const savedUser=loadSession();
+if(savedUser)currentUser=savedUser;
 render();
 </script>
 <div class="contact-footer">
