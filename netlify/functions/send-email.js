@@ -1,6 +1,6 @@
 const https = require('https');
 
-const RESEND_KEY = 're_EQaE3axY_KYu7QKzQvWvEK7GeeAJkbChv';
+const RESEND_KEY = 're_6PaHpCMk_F9WEsuSJKdg4FZhZWouLNTDj';
 const SITE_URL = 'https://www.fundova.africa';
 
 function sendResendEmail(to, subject, html) {
