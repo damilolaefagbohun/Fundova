@@ -876,13 +876,7 @@ async function renderContributor(){
             +'</tr>';
         }).join('')}
       </table></div>
-    </div>`:''}
-    <div class="card" id="inv-section">
-      <h3>Investment opportunities</h3>
-      <div id="inv-content"><div style="text-align:center;padding:1rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-right:8px"></div>Loading…</div></div>
-    </div>
-
-    <div class="card">
+    </div>`:''}    <div class="card">
       <h3>Your payout bank details</h3>
       ${bank?`
       <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
@@ -893,7 +887,12 @@ async function renderContributor(){
       <p style="font-size:12px;color:#888;margin-top:10px"><i class="ti ti-info-circle"></i> If any of these details are incorrect, contact your admin immediately.</p>`
       :`<div class="empty" style="padding:1.5rem"><i class="ti ti-building-bank" style="font-size:28px;display:block;margin-bottom:8px;color:#ccc"></i>No bank details on file yet.<br>Contact your admin.</div>`}
     </div>`:`<div class="card"><div class="empty"><i class="ti ti-clock" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No payments recorded yet.<br>Contact your admin.</div></div>`}
-    `);
+    `)
+<div class="card" id="inv-section">
+      <h3>Investment opportunities</h3>
+      <div id="inv-content"><div style="text-align:center;padding:1rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-right:8px"></div>Loading…</div></div>
+    </div>
+    ;
   // Load investments asynchronously
   renderContributorInvestments().then(html=>{
     const el=document.getElementById('inv-content');
@@ -1002,9 +1001,8 @@ async function savePayment(userId){
   if(amount<=0){err.textContent='Amount must be greater than 0.';return;}
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
-    await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount,date})});
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount,date,withdrawn:false})});
     // Send payment notification email
-    const contributor=db_contributors?db_contributors.find(u=>u.id===userId):null;
     try{
       const contribs=await sb('users?id=eq.'+userId+'&select=name,email');
       if(contribs&&contribs.length){
