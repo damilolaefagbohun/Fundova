@@ -1684,7 +1684,7 @@ async function renderContributorInvestments(){
           +incomeRows+'</table></div></div>':'')
           +(myRefundReq
             ?'<div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404"><i class="ti ti-clock"></i> Refund/withdrawal request pending admin review.</div>'
-            :'<button class="btn btn-sm btn-warn" onclick="openInvestmentRefundRequest(''+r.investment_id+'',''+inv.title.replace(/'/g,"\'")+'','+amountInvested+','+myIncome+')" style="width:100%"><i class="ti ti-cash"></i> Request refund / withdrawal from this investment</button>')
+            :'<button class="btn btn-smbtn-warn" data-inv-id="'+r.investment_id+'" data-inv-title="'+inv.title.replace(/"/g,'&quot;')+'" data-amount="'+amountInvested+'" data-income="'+myIncome+'" onclick="openInvestmentRefundRequestFromBtn(this)" style="width:100%"><i class="ti ti-cash"></i> Request refund / withdrawal from this investment</button>')
           +'</div>';
       });
     }
@@ -1741,6 +1741,14 @@ async function renderContributorInvestments(){
     html+='</div>';
     return html;
   }catch(e){return'<div class="card"><div class="empty">Error loading investments: '+e.message+'</div></div>';}
+}
+
+function openInvestmentRefundRequestFromBtn(btn){
+  const invId=btn.getAttribute('data-inv-id');
+  const invTitle=btn.getAttribute('data-inv-title');
+  const amountInvested=parseFloat(btn.getAttribute('data-amount'));
+  const incomeReceived=parseFloat(btn.getAttribute('data-income'));
+  openInvestmentRefundRequest(invId,invTitle,amountInvested,incomeReceived);
 }
 
 function openInvestmentRefundRequest(invId,invTitle,amountInvested,incomeReceived){
