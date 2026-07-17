@@ -195,9 +195,11 @@ function toast(msg,color='#1D9E75'){
   b.innerHTML=msg;document.body.appendChild(b);setTimeout(()=>b.remove(),3500);
 }
 
+const isViewOnly=()=>currentUser&&currentUser.role==='admin_view';
+
 async function render(){
   if(!currentUser){renderLogin();return;}
-  if(currentUser.role==='admin')await renderAdmin();
+  if(currentUser.role==='admin'||currentUser.role==='admin_view')await renderAdmin();
   else if(currentUser.role==='pending')renderPendingScreen();
   else await renderContributor();
 }
@@ -482,11 +484,12 @@ async function renderAdmin(){
       <div class="header-left">
         <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
         <span style="font-weight:600;font-size:16px">Fundova</span>
-        <span class="admin-tag">Admin</span>
+        ${isViewOnly()?'<span style="display:inline-block;background:#FEE2E2;color:#991B1B;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:6px">View only</span>':`<span class="admin-tag">Admin</span>`}
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <div class="avatar">${initials(currentUser.name)}</div>
         <span style="font-size:13px;font-weight:500">${currentUser.name}</span>
+        ${!isViewOnly()?`<button class="btn btn-sm" onclick="openCreateAdminAccount()"><i class="ti ti-user-shield"></i></button>`:''}
         <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
       </div>
     </div>
@@ -503,7 +506,7 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='payments'?'active':''}" onclick="setAdminTab('payments')">All payments</button>
       <button class="tab ${adminTab==='requests'?'active':''}" onclick="setAdminTab('requests')">Withdrawals${pendingWithdrawals>0?`<span class="notif-badge">${pendingWithdrawals}</span>`:''}</button>
       <button class="tab ${adminTab==='signups'?'active':''}" onclick="setAdminTab('signups')">New applications${pendingSignups>0?`<span class="notif-badge">${pendingSignups}</span>`:''}</button>
-      <button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>
+      ${!isViewOnly()?`<button class="tab ${adminTab==='credentials'?'active':''}" onclick="setAdminTab('credentials')">Credentials</button>`:''}
       <button class="tab ${adminTab==='investments'?'active':''}" onclick="setAdminTab('investments')">Investments</button>
       <button class="tab ${adminTab==='deals'?'active':''}" onclick="setAdminTab('deals')">Deals</button>
       <button class="tab ${adminTab==='profile_requests'?'active':''}" onclick="setAdminTab('profile_requests')">Profile requests</button>
@@ -526,16 +529,16 @@ function buildContributorsTab(contributors,payments){
       <td class="green">${fmt(interest)}</td>
       <td><strong>${fmt(principal+interest)}</strong></td>
       <td><div style="display:flex;gap:5px;justify-content:flex-end">
-        <button class="btn btn-sm" onclick="openAddPayment('${c.id}','${c.name.replace(/'/g,"\\'")}')"><i class="ti ti-plus"></i> Payment</button>
+        ${!isViewOnly()?`<button class="btn btn-sm" onclick="openAddPayment('${c.id}','${c.name.replace(/'/g,"\\'")}')"><i class="ti ti-plus"></i> Payment</button>`:''}
         <button class="btn btn-sm" onclick="openViewContributor('${c.id}','${c.name.replace(/'/g,"\\'")}')"><i class="ti ti-eye"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteContributor('${c.id}')"><i class="ti ti-trash"></i></button>
+        ${!isViewOnly()?`<button class="btn btn-sm btn-danger" onclick="deleteContributor('${c.id}')"><i class="ti ti-trash"></i></button>`:''}
       </div></td>
     </tr>`;
   }).join('');
   return`<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
       <h3 style="margin:0">All contributors</h3>
-      <button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>
+      ${!isViewOnly()?`<button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>`:''}
     </div>
     <div class="table-wrap"><table>
       <tr><th>Name</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
@@ -563,8 +566,8 @@ function buildPaymentsTab(payments,contributors){
       <td class="green">${fmt(interest)}</td>
       <td><strong>${fmt(Number(p.amount)+interest)}</strong></td>
       <td><div style="display:flex;gap:5px;justify-content:flex-end">
-        ${!p.withdrawn?`<button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>`:''}
-        ${!p.withdrawn?`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+        ${!p.withdrawn&&!isViewOnly()?`<button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>`:''}
+        ${!p.withdrawn&&!isViewOnly()?`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
       </div></td>
     </tr>`;
   }).join('');
@@ -582,7 +585,7 @@ function buildRequestsTab(requests,contributors){
   const rows=requests.map(r=>{
     const user=contributors.find(u=>u.id===r.user_id);
     const pill=r.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:r.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
-    const actions=r.status==='pending'?`
+    const actions=!isViewOnly()&&r.status==='pending'?`
       <button class="btn btn-sm btn-primary" onclick="updateRequest('${r.id}','approved')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="updateRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
     return`<tr>
@@ -608,7 +611,7 @@ function buildSignupsTab(signups){
   const rows=signups.map(s=>{
     const pill=s.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:s.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
     const mismatchFlag=s.name_mismatch?`<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:4px;margin-left:6px"><i class="ti ti-alert-triangle"></i> Name mismatch</span>`:'';
-    const actions=s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
+    const actions=!isViewOnly()&&s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
     return`<tr>
       <td><div style="font-weight:500">${s.name}${mismatchFlag}</div><div style="font-size:11px;color:#888">${s.email}</div></td>
@@ -1243,8 +1246,8 @@ async function buildInvestmentsAdminTab(investments,contributors){
   }
   const cards=investments.map(inv=>{
     const invRes=reservations.filter(r=>r.investment_id===inv.id);
-    const confirmedRes=invRes.filter(r=>r.status==='confirmed');
-    const pendingRes=invRes.filter(r=>r.status==='pending');
+    const confirmedRes=invRes.filter(r=>r.status==='payment_confirmed');
+    const pendingRes=invRes.filter(r=>r.status==='pending'||r.status==='approved');
     const unitsSold=confirmedRes.reduce((a,r)=>a+r.units,0);
     const unitsPending=pendingRes.reduce((a,r)=>a+r.units,0);
     const pct=Math.min(100,Math.round((unitsSold/inv.total_units)*100));
@@ -1401,10 +1404,16 @@ async function openInvestmentDetail(id){
 
     const resRows=reservations.map(r=>{
       const u=usersMap[r.user_id]||{name:'Unknown',email:''};
-      const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':r.status==='confirmed'?'<span class="status-pill pill-approved">Confirmed</span>':'<span class="status-pill pill-rejected">Cancelled</span>';
+      const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
+        r.status==='approved'?'<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — awaiting payment</span>':
+        r.status==='payment_confirmed'?'<span class="status-pill pill-approved">Payment confirmed</span>':
+        '<span class="status-pill pill-rejected">Cancelled</span>';
       const actions=r.status==='pending'?`
-        <button class="btn btn-sm btn-primary" onclick="updateReservation('${r.id}','confirmed','${id}')"><i class="ti ti-check"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
+        <button class="btn btn-sm btn-primary" onclick="updateReservation('${r.id}','approved','${id}')"><i class="ti ti-check"></i> Approve</button>
+        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i> Cancel</button>`
+        :r.status==='approved'?`
+        <button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="updateReservation('${r.id}','payment_confirmed','${id}')"><i class="ti ti-cash"></i> Confirm payment</button>
+        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i> Cancel</button>`
         :'<span style="color:#aaa;font-size:12px">—</span>';
       return`<tr>
         <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
@@ -1423,7 +1432,7 @@ async function openInvestmentDetail(id){
       <td><strong style="color:#0F6E56">${fmt(inc.net_income)}</strong></td>
     </tr>`).join('');
 
-    const confirmedUnits=reservations.filter(r=>r.status==='confirmed').reduce((a,r)=>a+r.units,0);
+    const confirmedUnits=reservations.filter(r=>r.status==='payment_confirmed').reduce((a,r)=>a+r.units,0);
 
     openModal(`
     <h3>${inv.title}</h3>
@@ -1467,11 +1476,11 @@ async function openInvestmentDetail(id){
 
 async function updateReservation(resId,status,invId){
   try{
-    if(status==='confirmed'){
+    if(status==='payment_confirmed'){
+      // Payment confirmed - now deduct from savings if payment method is savings
       const resArr=await sb(`investment_reservations?id=eq.${resId}&select=*`);
       const res=resArr[0];
       if(res.payment_method==='savings'){
-        // Deduct from savings
         const invArr=await sb(`investments?id=eq.${res.investment_id}&select=*`);
         const inv=invArr[0];
         const totalCost=res.units*inv.unit_price;
@@ -1545,7 +1554,7 @@ async function saveIncome(invId,confirmedUnits){
     // Save income record
     await sb('investment_income',{method:'POST',body:JSON.stringify({investment_id:invId,month,gross_income,expenses,net_income})});
     // Get confirmed reservations
-    const reservations=await sb(`investment_reservations?investment_id=eq.${invId}&status=eq.confirmed&select=*`);
+    const reservations=await sb(`investment_reservations?investment_id=eq.${invId}&status=eq.payment_confirmed&select=*`);
     const totalUnits=reservations.reduce((a,r)=>a+r.units,0);
     const today=new Date().toISOString().split('T')[0];
     // Distribute to each investor by crediting savings
@@ -1577,7 +1586,7 @@ async function renderContributorInvestments(){
       sb(`investment_refund_requests?user_id=eq.${currentUser.id}&select=*`)
     ]);
 
-    const myConfirmed=myReservations.filter(r=>r.status==='confirmed');
+    const myConfirmed=myReservations.filter(r=>r.status==='payment_confirmed');
     const open=investments.filter(i=>i.status==='open');
     const comingSoon=investments.filter(i=>i.status==='coming_soon');
     const myConfirmedInvIds=new Set(myConfirmed.map(r=>r.investment_id));
@@ -1588,7 +1597,7 @@ async function renderContributorInvestments(){
     if(openNotInvested.length){
       try{
         const allOpenIds=openNotInvested.map(i=>i.id);
-        const allRes=await sb(`investment_reservations?investment_id=in.(${allOpenIds.join(',')})&status=eq.confirmed&select=*`);
+        const allRes=await sb(`investment_reservations?investment_id=in.(${allOpenIds.join(',')})&status=eq.payment_confirmed&select=*`);
         (allRes||[]).forEach(r=>{
           if(!allReservationsMap[r.investment_id])allReservationsMap[r.investment_id]=[];
           allReservationsMap[r.investment_id].push(r);
@@ -1684,7 +1693,23 @@ async function renderContributorInvestments(){
           +incomeRows+'</table></div></div>':'')
           +(myRefundReq
             ?'<div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404"><i class="ti ti-clock"></i> Refund/withdrawal request pending admin review.</div>'
-            :'<button class="btn btn-smbtn-warn" data-inv-id="'+r.investment_id+'" data-inv-title="'+inv.title.replace(/"/g,'&quot;')+'" data-amount="'+amountInvested+'" data-income="'+myIncome+'" onclick="openInvestmentRefundRequestFromBtn(this)" style="width:100%"><i class="ti ti-cash"></i> Request refund / withdrawal from this investment</button>')
+            :'<div style="display:flex;gap:8px">'
+            +'<button class="btn btn-sm btn-primary" '
+            +'data-inv-id="'+r.investment_id+'" '
+            +'data-inv-title="'+encodeURIComponent(inv.title)+'" '
+            +'data-unit-price="'+inv.unit_price+'" '
+            +'data-available="'+(inv.total_units-totalConfirmedUnits)+'" '
+            +'data-current="'+r.units+'" '
+            +'onclick="openTopUpFromBtn(this)" style="flex:1">'
+            +'<i class="ti ti-plus"></i> Add more units</button>'
+            +'<button class="btn btn-sm btn-warn" '
+            +'data-inv-id="'+r.investment_id+'" '
+            +'data-inv-title="'+encodeURIComponent(inv.title)+'" '
+            +'data-amount="'+amountInvested+'" '
+            +'data-income="'+myIncome+'" '
+            +'onclick="openInvestmentRefundRequestFromBtn(this)" style="flex:1">'
+            +'<i class="ti ti-cash"></i> Request refund</button>'
+            +'</div>')
           +'</div>';
       });
     }
@@ -1745,7 +1770,7 @@ async function renderContributorInvestments(){
 
 function openInvestmentRefundRequestFromBtn(btn){
   const invId=btn.getAttribute('data-inv-id');
-  const invTitle=btn.getAttribute('data-inv-title');
+  const invTitle=decodeURIComponent(btn.getAttribute('data-inv-title'));
   const amountInvested=parseFloat(btn.getAttribute('data-amount'));
   const incomeReceived=parseFloat(btn.getAttribute('data-income'));
   openInvestmentRefundRequest(invId,invTitle,amountInvested,incomeReceived);
@@ -1848,7 +1873,7 @@ async function approveInvestmentRefund(refundId,invId){
     const reqArr=await sb(`investment_refund_requests?id=eq.${refundId}&select=*`);
     const req=reqArr[0];
     // Get the reservation
-    const resArr=await sb(`investment_reservations?investment_id=eq.${invId}&user_id=eq.${req.user_id}&status=eq.confirmed&select=*`);
+    const resArr=await sb(`investment_reservations?investment_id=eq.${invId}&user_id=eq.${req.user_id}&status=eq.payment_confirmed&select=*`);
     if(resArr&&resArr.length){
       const res=resArr[0];
       const invArr=await sb(`investments?id=eq.${invId}&select=*`);
@@ -1886,7 +1911,7 @@ async function buildDealsAdminTab(deals){
     const statusColors={pending:'#856404|#FFF3CD',featured:'#065F46|#D1FAE5',approved:'#185FA5|#E6F1FB',rejected:'#991B1B|#FEE2E2'};
     const [sc,bg]=(statusColors[d.status]||'#666|#f5f5f3').split('|');
     const pill=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${bg};color:${sc}">${d.status.toUpperCase()}</span>`;
-    const actions=showActions?`<div style="display:flex;gap:5px">
+    const actions=showActions&&!isViewOnly()?`<div style="display:flex;gap:5px">
       ${d.status!=='featured'&&featured.length<3?`<button class="btn btn-sm btn-primary" onclick="updateDeal('${d.id}','featured')"><i class="ti ti-star"></i> Feature</button>`:''}
       ${d.status==='pending'?`<button class="btn btn-sm" onclick="updateDeal('${d.id}','approved')"><i class="ti ti-check"></i> Approve</button>`:''}
       ${d.status!=='rejected'?`<button class="btn btn-sm btn-danger" onclick="updateDeal('${d.id}','rejected')"><i class="ti ti-x"></i></button>`:''}
@@ -2177,6 +2202,113 @@ async function updateProfileRequest(reqId,status){
     await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify({status})});
     await renderAdmin();
   }catch(e){alert('Error updating request.');}
+}
+
+
+// ─── CREATE ADMIN ACCOUNT ─────────────────────────────────
+
+function openCreateAdminAccount(){
+  openModal(`
+  <h3>Create admin account</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Create a view-only or full admin account.</p>
+  <div class="field"><label>Full name</label><input id="ca-name" placeholder="e.g. Tunde Adeyemi" autocomplete="off"></div>
+  <div class="field"><label>Email address</label><input id="ca-email" type="email" placeholder="tunde@email.com" autocomplete="off"></div>
+  <div class="field"><label>PIN</label><input id="ca-pin" type="text" maxlength="6" placeholder="e.g. 9876" autocomplete="off"></div>
+  <div class="field"><label>Role</label>
+    <select id="ca-role">
+      <option value="admin_view">View only — can see everything but cannot take any action</option>
+      <option value="admin">Full admin — can do everything</option>
+    </select>
+  </div>
+  <div class="error" id="ca-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ca-btn" onclick="saveAdminAccount()"><i class="ti ti-user-shield"></i> Create account</button>
+  </div>`);
+}
+
+async function saveAdminAccount(){
+  const name=document.getElementById('ca-name').value.trim();
+  const email=document.getElementById('ca-email').value.trim().toLowerCase();
+  const pin=document.getElementById('ca-pin').value.trim();
+  const role=document.getElementById('ca-role').value;
+  const err=document.getElementById('ca-err');
+  const btn=document.getElementById('ca-btn');
+  if(!name||!email||!pin){err.textContent='All fields are required.';return;}
+  if(pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}
+  btn.innerHTML='<span class="spinner"></span> Creating…';btn.disabled=true;
+  try{
+    await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role})});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Admin account created successfully.');
+  }catch(e){
+    err.textContent=e.message.includes('unique')||e.message.includes('duplicate')?'That email already exists.':'Error creating account.';
+    btn.innerHTML='<i class="ti ti-user-shield"></i> Create account';btn.disabled=false;
+  }
+}
+
+// ─── TOP UP INVESTMENT ────────────────────────────────────
+
+function openTopUpFromBtn(btn){
+  const invId=btn.getAttribute('data-inv-id');
+  const invTitle=decodeURIComponent(btn.getAttribute('data-inv-title'));
+  const unitPrice=parseFloat(btn.getAttribute('data-unit-price'));
+  const availableUnits=parseInt(btn.getAttribute('data-available'));
+  const currentUnits=parseInt(btn.getAttribute('data-current'));
+  openTopUpInvestment(invId,invTitle,unitPrice,availableUnits,currentUnits);
+}
+
+function openTopUpInvestment(invId,invTitle,unitPrice,availableUnits,currentUnits){
+  openModal(`
+  <h3>Add more units</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">${invTitle}</p>
+  <div style="background:#f5f5f3;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:4px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">Current units owned</span><strong>${currentUnits}</strong></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:#888">Unit price</span><strong>${fmt(unitPrice)}</strong></div>
+  </div>
+  <div class="field"><label>Additional units to reserve</label><input id="tu-units" type="number" min="1" max="${availableUnits}" placeholder="e.g. 5" oninput="previewTopUp(${unitPrice})"></div>
+  <div id="tu-preview" style="background:#F0FDF8;border-radius:8px;padding:10px 14px;font-size:13px;display:none">
+    Additional cost: <strong id="tu-total" class="green"></strong>
+  </div>
+  <div class="field"><label>Payment method</label>
+    <select id="tu-method">
+      <option value="bank_transfer">Bank transfer (within 48 hours)</option>
+      <option value="savings">Deduct from my savings balance</option>
+    </select>
+  </div>
+  <div class="info-box" style="font-size:12px"><i class="ti ti-info-circle"></i> Your top-up reservation will be reviewed and confirmed by the admin.</div>
+  <div class="error" id="tu-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="tu-btn" onclick="saveTopUp('${invId}')"><i class="ti ti-plus"></i> Submit top-up</button>
+  </div>`);
+}
+
+function previewTopUp(unitPrice){
+  const units=parseFloat(document.getElementById('tu-units')?.value||0);
+  const preview=document.getElementById('tu-preview');
+  const total=document.getElementById('tu-total');
+  if(units>0&&preview&&total){
+    total.textContent=fmt(units*unitPrice);
+    preview.style.display='block';
+  }
+}
+
+async function saveTopUp(invId){
+  const units=parseInt(document.getElementById('tu-units').value);
+  const payment_method=document.getElementById('tu-method').value;
+  const err=document.getElementById('tu-err');
+  const btn=document.getElementById('tu-btn');
+  if(!units||units<1){err.textContent='Please enter a valid number of units.';return;}
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('investment_reservations',{method:'POST',body:JSON.stringify({
+      investment_id:invId,user_id:currentUser.id,units,payment_method,status:'pending'
+    })});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Top-up submitted! Admin will review shortly.');
+    await renderContributor();
+  }catch(e){err.textContent='Error submitting top-up.';btn.innerHTML='<i class="ti ti-plus"></i> Submit top-up';btn.disabled=false;}
 }
 
 // Load saved session on startup
