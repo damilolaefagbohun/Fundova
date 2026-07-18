@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fundova — Thrift Savings</title>
+<title>Fundova &mdash; Thrift Savings</title>
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <style>
@@ -183,7 +183,7 @@ function calcAccruedInterest(amount,payDate,withdrawnAt){
   return+(Number(amount)*RATE*(countWeekdays(start,end)/WEEKDAYS_PER_YEAR)).toFixed(2);
 }
 function fmt(n){return'₦'+Number(n).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
+function fmtDate(d){if(!d)return'&mdash;';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
 function initials(name){return(name||'?').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();}
 function setHTML(html){document.getElementById('app').innerHTML=html;}
 function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-bg').classList.add('open');}
@@ -198,6 +198,8 @@ function toast(msg,color='#1D9E75'){
 const isViewOnly=()=>currentUser&&currentUser.role==='admin_view';
 
 async function render(){
+  // Check for /webinar route
+  if(window.location.pathname==='/webinar'){renderWebinar();return;}
   if(!currentUser){renderLogin();return;}
   if(currentUser.role==='admin'||currentUser.role==='admin_view')await renderAdmin();
   else if(currentUser.role==='pending')renderPendingScreen();
@@ -216,7 +218,7 @@ function renderLogin(){
           <img src="/logo.png" alt="Fundova" style="width:120px;height:120px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.25)">
         </div>
         <h1 style="color:#fff;font-size:clamp(28px,5vw,44px);font-weight:800;line-height:1.2;margin-bottom:1rem;letter-spacing:-.02em">Save together.<br>Grow together.</h1>
-        <p style="color:#9FE1CB;font-size:clamp(14px,2.5vw,17px);line-height:1.7;margin-bottom:1.75rem;max-width:480px;margin-left:auto;margin-right:auto">Fundova is a cooperative thrift savings platform where members save at their own pace and earn daily interest on every naira contributed. No fixed amounts, no pressure — just consistent saving that builds up over time.</p>
+        <p style="color:#9FE1CB;font-size:clamp(14px,2.5vw,17px);line-height:1.7;margin-bottom:1.75rem;max-width:480px;margin-left:auto;margin-right:auto">Fundova is a cooperative thrift savings platform where members save at their own pace and earn daily interest on every naira contributed. No fixed amounts, no pressure &mdash; just consistent saving that builds up over time.</p>
         <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:30px;padding:8px 18px;color:#fff;font-size:13px;font-weight:500">
           <span style="font-size:16px">😄</span> Save small small before your salary go disappear small small
         </div>
@@ -335,7 +337,7 @@ function renderSignupStep1(){
   document.getElementById('sd1').classList.add('active');
   document.getElementById('sd2').classList.remove('active');
   document.getElementById('signup-body').innerHTML=`
-    <p style="font-size:13px;color:#666;margin-top:-6px">Step 1 of 2 — Personal details</p>
+    <p style="font-size:13px;color:#666;margin-top:-6px">Step 1 of 2 &mdash; Personal details</p>
     <div class="field"><label>Full name</label><input id="s-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
     <div class="field"><label>Email address</label><input id="s-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
     <div class="field"><label>Phone number</label><input id="s-phone" type="tel" placeholder="e.g. 08012345678"></div>
@@ -357,7 +359,7 @@ function goSignupStep2(){
   document.getElementById('sd1').classList.add('active');
   document.getElementById('sd2').classList.add('active');
   document.getElementById('signup-body').innerHTML=`
-    <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 — Bank details for payout</p>
+    <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 &mdash; Bank details for payout</p>
     <div class="field"><label>Bank name</label><input id="s-bank" placeholder="e.g. First Bank, GTBank, Zenith"></div>
     <div class="field"><label>Account number</label><input id="s-anum" type="text" maxlength="10" placeholder="10-digit account number" oninput="checkNameMatch()"></div>
     <div class="field"><label>Account name <span style="color:#888;font-weight:400">(as shown on your bank account)</span></label><input id="s-aname" placeholder="e.g. Adaeze Okonkwo" oninput="checkNameMatch()"></div>
@@ -572,7 +574,7 @@ function buildPaymentsTab(payments,contributors){
     </tr>`;
   }).join('');
   return`<div class="card">
-    <h3>All payments <span style="font-size:12px;color:#888;font-weight:400">— interest accrued to today</span></h3>
+    <h3>All payments <span style="font-size:12px;color:#888;font-weight:400">&mdash; interest accrued to today</span></h3>
     <div class="table-wrap"><table>
       <tr><th>Contributor</th><th>Payment date</th><th>Amount</th><th>Weekdays elapsed</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
       ${rows}
@@ -587,11 +589,11 @@ function buildRequestsTab(requests,contributors){
     const pill=r.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:r.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
     const actions=!isViewOnly()&&r.status==='pending'?`
       <button class="btn btn-sm btn-primary" onclick="updateRequest('${r.id}','approved')"><i class="ti ti-check"></i> Approve</button>
-      <button class="btn btn-sm btn-danger" onclick="updateRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
+      <button class="btn btn-sm btn-danger" onclick="updateRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">&mdash;</span>`;
     return`<tr>
       <td><div style="font-weight:500">${user?user.name:'Unknown'}</div><div style="font-size:11px;color:#888">${user?user.email:''}</div></td>
       <td>${fmt(r.amount)}</td>
-      <td style="font-size:12px;color:#666;max-width:180px">${r.note||'—'}</td>
+      <td style="font-size:12px;color:#666;max-width:180px">${r.note||'&mdash;'}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td>${pill}</td>
       <td><div style="display:flex;gap:5px">${actions}</div></td>
@@ -612,11 +614,11 @@ function buildSignupsTab(signups){
     const pill=s.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:s.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
     const mismatchFlag=s.name_mismatch?`<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:4px;margin-left:6px"><i class="ti ti-alert-triangle"></i> Name mismatch</span>`:'';
     const actions=!isViewOnly()&&s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
-      <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">—</span>`;
+      <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">&mdash;</span>`;
     return`<tr>
       <td><div style="font-weight:500">${s.name}${mismatchFlag}</div><div style="font-size:11px;color:#888">${s.email}</div></td>
       <td><div style="font-size:12px">${s.bank_name}</div><div style="font-family:monospace;font-size:12px">${s.account_number}</div><div style="font-size:11px;color:#888">${s.account_name}</div></td>
-      <td>${s.referred_by?`<span style="font-size:12px"><i class="ti ti-users" style="color:#1D9E75"></i> ${s.referred_by}</span>`:`<span style="color:#aaa;font-size:12px">—</span>`}</td>
+      <td>${s.referred_by?`<span style="font-size:12px"><i class="ti ti-users" style="color:#1D9E75"></i> ${s.referred_by}</span>`:`<span style="color:#aaa;font-size:12px">&mdash;</span>`}</td>
       <td>${fmtDate(s.created_at)}</td>
       <td>${pill}</td>
       <td><div style="display:flex;gap:5px">${actions}</div></td>
@@ -689,8 +691,8 @@ function buildCredentialsTab(contributors){
   const rows=contributors.map(c=>`<tr>
     <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div style="font-weight:500">${c.name}</div></div></td>
     <td>${c.email}</td>
-    <td style="font-size:12px">${c.phone||'<span style="color:#ccc">—</span>'}</td>
-    <td style="font-size:12px">${c.whatsapp?`<a href="https://wa.me/234${c.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46">${c.whatsapp}</a>`:'<span style="color:#ccc">—</span>'}</td>
+    <td style="font-size:12px">${c.phone||'<span style="color:#ccc">&mdash;</span>'}</td>
+    <td style="font-size:12px">${c.whatsapp?`<a href="https://wa.me/234${c.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46">${c.whatsapp}</a>`:'<span style="color:#ccc">&mdash;</span>'}</td>
     <td><div style="display:flex;align-items:center;gap:8px">
       <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
       <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
@@ -825,7 +827,7 @@ async function renderContributor(){
 
     const reqRows=(requests||[]).map(r=>{
       const pill=r.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:r.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
-      return`<tr><td>${fmtDate(r.created_at)}</td><td>${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'—'}</td><td>${pill}</td></tr>`;
+      return`<tr><td>${fmtDate(r.created_at)}</td><td>${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'&mdash;'}</td><td>${pill}</td></tr>`;
     }).join('');
 
     setHTML(`
@@ -842,7 +844,7 @@ async function renderContributor(){
     </div>
     <div class="contrib-header">
       <div class="avatar" style="width:48px;height:48px;font-size:17px">${initials(currentUser.name)}</div>
-      <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} · Thrift savings 2025</div></div>
+      <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} &middot; Thrift savings 2025</div></div>
       <button class="btn btn-sm" onclick="openChangePin()" style="white-space:nowrap"><i class="ti ti-lock"></i> Change PIN</button>
       <button class="btn btn-sm" onclick="openEditProfile()" style="white-space:nowrap"><i class="ti ti-user-edit"></i> Edit profile</button>
     </div>
@@ -869,7 +871,7 @@ async function renderContributor(){
           </div>
         </div>
         <div style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#C9A84C;line-height:1.5">
-          <i class="ti ti-rocket"></i> <strong>Start your savings journey right here!</strong> Make your contribution into this account and notify your admin once done. Remember — your interest starts counting from the day your payment is recorded. 😉
+          <i class="ti ti-rocket"></i> <strong>Start your savings journey right here!</strong> Make your contribution into this account and notify your admin once done. Remember &mdash; your interest starts counting from the day your payment is recorded. 😉
         </div>
       </div>
     </div>
@@ -883,6 +885,32 @@ async function renderContributor(){
         <div class="accrued-sub"><div class="accrued-sub-label">Interest accrued</div><div class="accrued-sub-val">${fmt(interest)}</div></div>
       </div>
     </div>
+
+    ${currentUser.savings_goal?`
+    <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-size:12px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Savings goal</div>
+          <div style="font-size:15px;font-weight:700">${fmt(currentUser.savings_goal)}</div>
+        </div>
+        <button class="btn btn-sm" onclick="openSetSavingsGoal()"><i class="ti ti-pencil"></i> Edit</button>
+      </div>
+      <div style="background:#f5f5f3;border-radius:8px;height:10px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;border-radius:8px;background:${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))>=100?'#1D9E75':'#1D9E75'};width:${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}%;transition:width .5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:#0F6E56;font-weight:600">${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}% reached</span>
+        <span style="color:#888">${fmt(Math.max(0,currentUser.savings_goal-currentTotal))} remaining</span>
+      </div>
+      ${Math.round((currentTotal/currentUser.savings_goal)*100)>=100?'<div style="background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:13px;color:#0F6E56;font-weight:500;text-align:center"><i class="ti ti-trophy"></i> Congratulations! You have reached your savings goal!</div>':''}
+    </div>`:`
+    <div style="background:#f5f5f3;border-radius:14px;padding:1.25rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:2px">Set a savings goal</div>
+        <div style="font-size:12px;color:#888">Track your progress toward a target amount</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="openSetSavingsGoal()"><i class="ti ti-target"></i> Set goal</button>
+    </div>`}
     ${hasPending?`<div class="withdraw-banner"><i class="ti ti-clock" style="color:#856404;font-size:20px"></i><div><strong>Withdrawal request pending</strong><br><span style="color:#856404">Your request is being reviewed by the admin.</span></div></div>`:`
     <div style="margin-bottom:1rem;display:flex;justify-content:flex-end">
       <button class="btn btn-warn" onclick="openWithdrawRequest(${currentTotal})"><i class="ti ti-cash"></i> Request withdrawal</button>
@@ -903,7 +931,7 @@ async function renderContributor(){
     </div>`:''}
 
     ${withdrawnPayments&&withdrawnPayments.length?`<div class="card">
-      <h3>Contribution history <span style="font-size:12px;color:#888;font-weight:400">— withdrawn payments</span></h3>
+      <h3>Contribution history <span style="font-size:12px;color:#888;font-weight:400">&mdash; withdrawn payments</span></h3>
       <div class="table-wrap"><table>
         <tr><th>Payment date</th><th>Amount</th><th>Withdrawn on</th><th>Interest earned</th></tr>
         ${withdrawnPayments.map(p=>{
@@ -1280,7 +1308,7 @@ async function buildInvestmentsAdminTab(investments,contributors){
       </div>
       <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:12px">
         <span>${pct}% funded</span>
-        <span>Target: ${fmt(inv.total_cost)}${inv.deadline?' · Deadline: '+fmtDate(inv.deadline):''}</span>
+        <span>Target: ${fmt(inv.total_cost)}${inv.deadline?' &middot; Deadline: '+fmtDate(inv.deadline):''}</span>
       </div>
       ${pendingRes.length?`<div style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E6;border:1px solid #FDEFC3;border-radius:8px;padding:10px 14px">
         <span style="font-size:13px;color:#856404"><i class="ti ti-clock"></i> ${pendingRes.length} pending reservation${pendingRes.length>1?'s':''}</span>
@@ -1405,8 +1433,8 @@ async function openInvestmentDetail(id){
     const resRows=reservations.map(r=>{
       const u=usersMap[r.user_id]||{name:'Unknown',email:''};
       const pill=r.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
-        r.status==='approved'?'<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — make payment</span>':
-        r.status==='payment_made'?'<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made — awaiting confirmation</span>':
+        r.status==='approved'?'<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved &mdash; make payment</span>':
+        r.status==='payment_made'?'<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made &mdash; awaiting confirmation</span>':
         r.status==='payment_confirmed'?'<span class="status-pill pill-approved">Payment confirmed</span>':
         '<span class="status-pill pill-rejected">Cancelled</span>';
       const actions=r.status==='pending'?`
@@ -1417,7 +1445,10 @@ async function openInvestmentDetail(id){
         :r.status==='payment_made'?`
         <button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="updateReservation('${r.id}','payment_confirmed','${id}')"><i class="ti ti-cash"></i> Confirm payment received</button>
         <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
-        :'<span style="color:#aaa;font-size:12px">—</span>';
+        :r.status==='approved'&&r.payment_method==='savings'?`
+        <button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="updateReservation('${r.id}','payment_confirmed','${id}')"><i class="ti ti-wallet"></i> Confirm & deduct from savings</button>
+        <button class="btn btn-sm btn-danger" onclick="updateReservation('${r.id}','cancelled','${id}')"><i class="ti ti-x"></i></button>`
+        :'<span style="color:#aaa;font-size:12px">&mdash;</span>';
       return`<tr>
         <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
         <td>${r.units}</td>
@@ -1467,8 +1498,8 @@ async function openInvestmentDetail(id){
         const u=usersMap[rr.user_id]||{name:'Unknown'};
         const pill=rr.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':rr.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':'<span class="status-pill pill-rejected">Rejected</span>';
         const actions=rr.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="approveInvestmentRefund('${rr.id}','${id}')"><i class="ti ti-check"></i> Approve</button>
-          <button class="btn btn-sm btn-danger" onclick="updateInvestmentRefund('${rr.id}','rejected','${id}')"><i class="ti ti-x"></i></button>`:'<span style="color:#aaa">—</span>';
-        return`<tr><td style="font-weight:500">${u.name}</td><td style="font-size:12px;color:#666;max-width:160px">${rr.note||'—'}</td><td>${fmtDate(rr.created_at)}</td><td>${pill}</td><td><div style="display:flex;gap:4px">${actions}</div></td></tr>`;
+          <button class="btn btn-sm btn-danger" onclick="updateInvestmentRefund('${rr.id}','rejected','${id}')"><i class="ti ti-x"></i></button>`:'<span style="color:#aaa">&mdash;</span>';
+        return`<tr><td style="font-weight:500">${u.name}</td><td style="font-size:12px;color:#666;max-width:160px">${rr.note||'&mdash;'}</td><td>${fmtDate(rr.created_at)}</td><td>${pill}</td><td><div style="display:flex;gap:4px">${actions}</div></td></tr>`;
       }).join('')}
     </table></div>`:''}
     <div class="modal-footer">
@@ -1625,22 +1656,29 @@ async function renderContributorInvestments(){
           statusHtml='<span class="status-pill pill-pending">Pending admin approval</span>';
           actionHtml='<p style="font-size:12px;color:#888;margin-top:8px">Your reservation is being reviewed by the admin.</p>';
         } else if(r.status==='approved'){
-          statusHtml='<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved — please make payment</span>';
-          actionHtml='<div style="background:#E6F1FB;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px">'
-            +'<div style="font-weight:600;color:#185FA5;margin-bottom:6px"><i class="ti ti-info-circle"></i> Payment instructions</div>'
-            +'<div style="color:#1E40AF;line-height:1.6">Please transfer <strong>N'+totalCost.toLocaleString('en-NG',{minimumFractionDigits:2})+'</strong> to:<br>'
-            +'<strong>First Bank · 3070379829 · Ajonibode Damilola</strong><br>'
-            +'Use your name as the payment reference.</div>'
-            +'</div>'
-            +'<button class="btn btn-primary" data-res-id="'+r.id+'" onclick="markPaymentMade(this)" style="width:100%;margin-top:10px"><i class="ti ti-check"></i> I have made payment</button>';
+          if(r.payment_method==='savings'){
+            statusHtml='<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved &mdash; deduction pending</span>';
+            actionHtml='<div style="background:#E6F1FB;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px;color:#1E40AF">'
+              +'<i class="ti ti-info-circle"></i> Your payment will be deducted automatically from your savings balance once admin confirms. No action needed from you.'
+              +'</div>';
+          } else {
+            statusHtml='<span class="status-pill" style="background:#E6F1FB;color:#185FA5">Approved &mdash; please make payment</span>';
+            actionHtml='<div style="background:#E6F1FB;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px">'
+              +'<div style="font-weight:600;color:#185FA5;margin-bottom:6px"><i class="ti ti-info-circle"></i> Payment instructions</div>'
+              +'<div style="color:#1E40AF;line-height:1.6">Please transfer <strong>N'+totalCost.toLocaleString('en-NG',{minimumFractionDigits:2})+'</strong> to:<br>'
+              +'<strong>First Bank &middot; 3070379829 &middot; Ajonibode Damilola</strong><br>'
+              +'Use your name as the payment reference.</div>'
+              +'</div>'
+              +'<button class="btn btn-primary" data-res-id="'+r.id+'" onclick="markPaymentMade(this)" style="width:100%;margin-top:10px"><i class="ti ti-check"></i> I have made payment</button>';
+          }
         } else if(r.status==='payment_made'){
-          statusHtml='<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made — awaiting admin confirmation</span>';
+          statusHtml='<span class="status-pill" style="background:#FEF3C7;color:#92400E">Payment made &mdash; awaiting admin confirmation</span>';
           actionHtml='<p style="font-size:12px;color:#888;margin-top:8px">Your payment is being verified by the admin. Units will be added to your portfolio once confirmed.</p>';
         }
         html+='<div style="border:1px solid #e5e5e2;border-radius:10px;padding:14px;margin-bottom:10px">'
           +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">'
           +'<div><div style="font-weight:600;font-size:14px">'+inv.title+'</div>'
-          +'<div style="font-size:12px;color:#888;margin-top:2px">'+r.units+' unit'+(r.units!==1?'s':'')+' · '+fmt(totalCost)+'</div></div>'
+          +'<div style="font-size:12px;color:#888;margin-top:2px">'+r.units+' unit'+(r.units!==1?'s':'')+' &middot; '+fmt(totalCost)+'</div></div>'
           +statusHtml+'</div>'
           +actionHtml
           +'</div>';
@@ -1681,7 +1719,7 @@ async function renderContributorInvestments(){
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:12px 14px">
             <div style="font-size:11px;color:#aaa;margin-bottom:4px">Total ROI</div>
-            <div style="font-size:18px;font-weight:700;color:${totalIncomeReceived>0?'#1D9E75':'#aaa'}">${totalInvested>0?((totalIncomeReceived/totalInvested)*100).toFixed(2)+'%':'—'}</div>
+            <div style="font-size:18px;font-weight:700;color:${totalIncomeReceived>0?'#1D9E75':'#aaa'}">${totalInvested>0?((totalIncomeReceived/totalInvested)*100).toFixed(2)+'%':'&mdash;'}</div>
           </div>
         </div>
       </div>`;
@@ -1727,7 +1765,7 @@ async function renderContributorInvestments(){
           +'</div>'
           +'<div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">'
           +'<div style="height:100%;background:#1D9E75;width:'+pct+'%"></div></div>'
-          +'<div style="font-size:11px;color:#888;margin-bottom:14px">'+pct+'% of total units confirmed · Target: '+fmt(inv.total_cost)+'</div>'
+          +'<div style="font-size:11px;color:#888;margin-bottom:14px">'+pct+'% of total units confirmed &middot; Target: '+fmt(inv.total_cost)+'</div>'
           +(invIncome.length?'<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Income history</div>'
           +'<div class="table-wrap"><table>'
           +'<tr><th>Month</th><th>Gross</th><th>Expenses</th><th>Net</th><th>My share</th></tr>'
@@ -1794,7 +1832,7 @@ async function renderContributorInvestments(){
           +'</div>'
           +'<div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">'
           +'<div style="height:100%;background:#1D9E75;width:'+pct+'%"></div></div>'
-          +'<div style="font-size:11px;color:#888;margin-bottom:12px">'+pct+'% funded · '+confirmedRes.length+' investor'+(confirmedRes.length!==1?'s':'')+' so far</div>'
+          +'<div style="font-size:11px;color:#888;margin-bottom:12px">'+pct+'% funded &middot; '+confirmedRes.length+' investor'+(confirmedRes.length!==1?'s':'')+' so far</div>'
           +'<button class="btnbtn-primary" data-inv-id="'+inv.id+'" data-inv-title="'+inv.title.replace(/"/g,'&quot;')+'" data-unit-price="'+inv.unit_price+'" data-units="'+unitsAvailable+'" onclick="openReserveUnitsFromBtn(this)" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>'
           +'</div>';
       });
@@ -1962,7 +2000,7 @@ async function buildDealsAdminTab(deals){
       <td>${fmt(d.price)}${d.discount?` <span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:4px">-${d.discount}%</span>`:''}</td>
       <td style="font-size:12px;color:#666;max-width:180px">${(d.description||'').substring(0,80)}${d.description&&d.description.length>80?'…':''}</td>
       <td><a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46;font-size:12px"><i class="ti ti-brand-whatsapp"></i> ${d.whatsapp}</a></td>
-      <td>${fmtDate(d.expires_at)||'—'}</td>
+      <td>${fmtDate(d.expires_at)||'&mdash;'}</td>
       <td>${pill}</td>
       <td>${actions}</td>
     </tr>`;
@@ -1984,14 +2022,14 @@ async function buildDealsAdminTab(deals){
       </table></div>
     </div>`:''}
     ${featured.length?`<div class="card" style="margin-bottom:1rem">
-      <h3 style="margin-bottom:1rem">Featured deals <span style="font-size:12px;color:#888;font-weight:400">— visible to everyone</span></h3>
+      <h3 style="margin-bottom:1rem">Featured deals <span style="font-size:12px;color:#888;font-weight:400">&mdash; visible to everyone</span></h3>
       <div class="table-wrap"><table>
         <tr><th>Product</th><th>Price</th><th>Description</th><th>WhatsApp</th><th>Expires</th><th>Status</th><th></th></tr>
         ${featured.map(d=>buildRow(d,true)).join('')}
       </table></div>
     </div>`:''}
     ${approved.length?`<div class="card" style="margin-bottom:1rem">
-      <h3 style="margin-bottom:1rem">Approved deals <span style="font-size:12px;color:#888;font-weight:400">— not yet featured</span></h3>
+      <h3 style="margin-bottom:1rem">Approved deals <span style="font-size:12px;color:#888;font-weight:400">&mdash; not yet featured</span></h3>
       <div class="table-wrap"><table>
         <tr><th>Product</th><th>Price</th><th>Description</th><th>WhatsApp</th><th>Expires</th><th>Status</th><th></th></tr>
         ${approved.map(d=>buildRow(d,true)).join('')}
@@ -2061,7 +2099,7 @@ function openSubmitDeal(){
   </div>
   <div class="field"><label>Description</label><textarea id="sd-desc" placeholder="Brief description of the product"></textarea></div>
   <div class="field"><label>Price (₦)</label><input id="sd-price" type="number" min="1" placeholder="e.g. 50000"></div>
-  <div class="field"><label>Discount % <span style="color:#aaa;font-weight:400">(optional — leave blank if no discount)</span></label><input id="sd-discount" type="number" min="1" max="99" placeholder="e.g. 20"></div>
+  <div class="field"><label>Discount % <span style="color:#aaa;font-weight:400">(optional &mdash; leave blank if no discount)</span></label><input id="sd-discount" type="number" min="1" max="99" placeholder="e.g. 20"></div>
   <div class="field"><label>Your WhatsApp number</label><input id="sd-wa" type="tel" placeholder="e.g. 08012345678"></div>
   <div class="field"><label>Offer expiry date</label><input id="sd-exp" type="date" value="${nextWeek}"></div>
   <div class="info-box" style="font-size:12px"><i class="ti ti-info-circle"></i> Fundova facilitates visibility only. All transactions are your responsibility.</div>
@@ -2194,11 +2232,11 @@ async function buildProfileRequestsAdminTab(){
     const actions=r.status==='pending'?`
       <button class="btn btn-sm btn-primary" onclick="approveProfileRequest('${r.id}','${r.user_id}')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="updateProfileRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`
-      :'<span style="color:#aaa;font-size:12px">—</span>';
+      :'<span style="color:#aaa;font-size:12px">&mdash;</span>';
     return`<tr>
       <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
       <td><div style="font-size:12px;line-height:1.8">${changes.join('<br>')}</div></td>
-      <td style="font-size:12px;color:#666;max-width:150px">${r.reason||'—'}</td>
+      <td style="font-size:12px;color:#666;max-width:150px">${r.reason||'&mdash;'}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td>${pill}</td>
       <td><div style="display:flex;gap:5px">${actions}</div></td>
@@ -2257,8 +2295,8 @@ function openCreateAdminAccount(){
   <div class="field"><label>PIN</label><input id="ca-pin" type="text" maxlength="6" placeholder="e.g. 9876" autocomplete="off"></div>
   <div class="field"><label>Role</label>
     <select id="ca-role">
-      <option value="admin_view">View only — can see everything but cannot take any action</option>
-      <option value="admin">Full admin — can do everything</option>
+      <option value="admin_view">View only &mdash; can see everything but cannot take any action</option>
+      <option value="admin">Full admin &mdash; can do everything</option>
     </select>
   </div>
   <div class="error" id="ca-err"></div>
@@ -2368,6 +2406,156 @@ async function markPaymentMade(btn){
     btn.disabled=false;
     alert('Error updating status. Please try again.');
   }
+}
+
+
+
+// ─── WEBINAR PAGE ─────────────────────────────────────────
+
+function renderWebinar(){
+  setHTML(`
+  <div style="min-height:100vh;background:#f5f5f3;padding-bottom:80px">
+
+    <!-- Header -->
+    <div style="background:#fff;border-bottom:1px solid #e5e5e2;padding:14px 1rem;display:flex;align-items:center;justify-content:space-between;max-width:700px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px">
+        <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+        <span style="font-weight:700;font-size:15px">Fundova</span>
+      </div>
+      <a href="/" style="font-size:13px;color:#1D9E75;font-weight:500;text-decoration:none">&larr; Back to home</a>
+    </div>
+
+    <div style="max-width:620px;margin:0 auto;padding:2rem 1rem">
+
+      <!-- Fundova Learn badge -->
+      <div style="display:inline-flex;align-items:center;gap:6px;background:#E1F5EE;color:#065F46;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;margin-bottom:1.5rem">
+        <i class="ti ti-book"></i> Fundova Learn &mdash; Webinar Series
+      </div>
+
+      <!-- Title -->
+      <h1 style="font-size:clamp(22px,4vw,32px);font-weight:800;color:#1a1a1a;line-height:1.25;margin-bottom:12px">The Retirement Trap</h1>
+      <p style="font-size:16px;font-weight:500;color:#0F6E56;margin-bottom:16px">Why High Earners Go Broke &mdash; and How to Avoid It</p>
+      <p style="font-size:14px;color:#666;line-height:1.7;margin-bottom:24px">A free 1-hour virtual conversation with three experts on how to build financial security that actually lasts &mdash; before, during and after your earning years.</p>
+
+      <!-- Event details -->
+      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1.5rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Date</div><div style="font-weight:600;font-size:14px">July 2026</div></div>
+          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Time</div><div style="font-weight:600;font-size:14px">6:00 PM WAT</div></div>
+          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Format</div><div style="font-weight:600;font-size:14px">Virtual (Zoom)</div></div>
+          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Cost</div><div style="font-weight:600;font-size:14px;color:#0F6E56">Free</div></div>
+        </div>
+      </div>
+
+      <!-- Speakers -->
+      <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">Your speakers</h2>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem">
+        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">M</div>
+          <div><div style="font-weight:600;font-size:14px">Mercy</div><div style="font-size:12px;color:#888;margin-top:2px">Economist & Chartered Accountant</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">R</div>
+          <div><div style="font-weight:600;font-size:14px">Ronke</div><div style="font-size:12px;color:#888;margin-top:2px">Pension Fund Manager</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">D</div>
+          <div><div style="font-weight:600;font-size:14px">Damilola</div><div style="font-size:12px;color:#888;margin-top:2px">Financial Strategist & Co-founder, Fundova Cooperative</div></div>
+        </div>
+      </div>
+
+      <!-- What you'll learn -->
+      <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">What you'll learn</h2>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.5rem">
+        ${['Why high income does not equal wealth','What your pension actually covers (and what it does not)','How to build a financial safety net that holds','Practical savings and investment tools available to you today'].map(item=>`
+        <div style="display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e5e5e2;border-radius:10px;padding:12px 14px">
+          <i class="ti ti-check" style="color:#1D9E75;margin-top:1px;flex-shrink:0"></i>
+          <span style="font-size:13px;color:#444">${item}</span>
+        </div>`).join('')}
+      </div>
+
+      <!-- Registration form -->
+      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">Reserve your free spot</h2>
+        <p style="font-size:13px;color:#888;margin-bottom:1.25rem">The Zoom link will be sent to your email after registration.</p>
+        <div class="field" style="margin-bottom:12px"><label>Full name</label><input id="wr-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
+        <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="wr-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+        <div class="field" style="margin-bottom:12px"><label>WhatsApp number <span style="color:#aaa;font-weight:400">(for reminder)</span></label><input id="wr-phone" type="tel" placeholder="e.g. 08012345678"></div>
+        <div class="error" id="wr-err" style="margin-bottom:8px"></div>
+        <button class="btn btn-primary" id="wr-btn" onclick="registerWebinar()" style="width:100%;padding:13px"><i class="ti ti-send"></i> Register &mdash; it's free</button>
+      </div>
+
+      <p style="text-align:center;font-size:12px;color:#aaa;margin-top:1.5rem">Organised by Fundova Cooperative &middot; <a href="/" style="color:#1D9E75;text-decoration:none">www.fundova.africa</a></p>
+    </div>
+  </div>`);
+}
+
+async function registerWebinar(){
+  const name=document.getElementById('wr-name').value.trim();
+  const email=document.getElementById('wr-email').value.trim().toLowerCase();
+  const phone=document.getElementById('wr-phone').value.trim();
+  const err=document.getElementById('wr-err');
+  const btn=document.getElementById('wr-btn');
+  if(!name||!email){err.textContent='Please enter your name and email.';return;}
+  if(!email.includes('@')||!email.includes('.')){err.textContent='Please enter a valid email address.';return;}
+  btn.innerHTML='<span class="spinner"></span> Registering…';btn.disabled=true;
+  try{
+    await sb('webinar_registrations',{method:'POST',body:JSON.stringify({name,email,phone:phone||null,webinar:'retirement-trap-jul-2026'})});
+    setHTML(`
+    <div style="min-height:100vh;background:#f5f5f3;display:flex;align-items:center;justify-content:center;padding:2rem">
+      <div style="text-align:center;max-width:420px">
+        <div style="width:72px;height:72px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;font-size:32px;color:#0F6E56"><i class="ti ti-check"></i></div>
+        <h2 style="font-size:22px;font-weight:700;margin-bottom:8px">You're registered!</h2>
+        <p style="color:#666;line-height:1.7;margin-bottom:20px">Thank you <strong>${name}</strong>! The Zoom link will be sent to <strong>${email}</strong> before the event. We'll also send a reminder the day before.</p>
+        <p style="font-size:13px;color:#888;margin-bottom:20px">While you're here &mdash; join Fundova and start your savings journey today.</p>
+        <a href="/" class="btn btn-primary" style="display:inline-flex;padding:12px 24px;text-decoration:none"><i class="ti ti-currency-naira"></i> Learn about Fundova savings</a>
+      </div>
+    </div>`);
+  }catch(e){
+    err.textContent='Error registering. Please try again.';
+    btn.innerHTML='<i class="ti ti-send"></i> Register &mdash; it\'s free';
+    btn.disabled=false;
+  }
+}
+
+// ─── SAVINGS GOAL ─────────────────────────────────────────
+
+function openSetSavingsGoal(){
+  openModal(`
+  <h3>${currentUser.savings_goal?'Edit':'Set'} savings goal</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Your dashboard will show how close you are to reaching this target.</p>
+  <div class="field"><label>Target amount (₦)</label><input id="sg-amount" type="number" min="1" placeholder="e.g. 500000" value="${currentUser.savings_goal||''}"></div>
+  <div class="error" id="sg-err"></div>
+  <div class="modal-footer">
+    ${currentUser.savings_goal?`<button class="btn btn-danger" onclick="clearSavingsGoal()">Remove goal</button>`:''}
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="sg-btn" onclick="saveSavingsGoal()"><i class="ti ti-target"></i> Save goal</button>
+  </div>`);
+}
+
+async function saveSavingsGoal(){
+  const amount=parseFloat(document.getElementById('sg-amount').value);
+  const err=document.getElementById('sg-err');
+  const btn=document.getElementById('sg-btn');
+  if(!amount||amount<=0){err.textContent='Please enter a valid target amount.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({savings_goal:amount})});
+    currentUser.savings_goal=amount;
+    saveSession(currentUser);
+    closeModal();
+    await renderContributor();
+  }catch(e){err.textContent='Error saving goal.';btn.innerHTML='<i class="ti ti-target"></i> Save goal';btn.disabled=false;}
+}
+
+async function clearSavingsGoal(){
+  try{
+    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({savings_goal:null})});
+    currentUser.savings_goal=null;
+    saveSession(currentUser);
+    closeModal();
+    await renderContributor();
+  }catch(e){alert('Error removing goal.');}
 }
 
 // Load saved session on startup
