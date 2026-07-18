@@ -475,6 +475,7 @@ async function renderAdmin(){
       adminTab==='credentials'?buildCredentialsTab(contributors):
       adminTab==='deals'?await buildDealsAdminTab(deals):
       adminTab==='profile_requests'?await buildProfileRequestsAdminTab():
+      adminTab==='webinars'?await buildWebinarsAdminTab():
       await buildInvestmentsAdminTab(investments,contributors);
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
@@ -512,6 +513,7 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='investments'?'active':''}" onclick="setAdminTab('investments')">Investments</button>
       <button class="tab ${adminTab==='deals'?'active':''}" onclick="setAdminTab('deals')">Deals</button>
       <button class="tab ${adminTab==='profile_requests'?'active':''}" onclick="setAdminTab('profile_requests')">Profile requests</button>
+      <button class="tab ${adminTab==='webinars'?'active':''}" onclick="setAdminTab('webinars')">Webinars</button>
     </div>
     ${tabContent}
     `);
@@ -2412,85 +2414,98 @@ async function markPaymentMade(btn){
 
 // ─── WEBINAR PAGE ─────────────────────────────────────────
 
-function renderWebinar(){
-  setHTML(`
-  <div style="min-height:100vh;background:#f5f5f3;padding-bottom:80px">
-
-    <!-- Header -->
-    <div style="background:#fff;border-bottom:1px solid #e5e5e2;padding:14px 1rem;display:flex;align-items:center;justify-content:space-between;max-width:700px;margin:0 auto">
-      <div style="display:flex;align-items:center;gap:10px">
-        <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
-        <span style="font-weight:700;font-size:15px">Fundova</span>
-      </div>
-      <a href="/" style="font-size:13px;color:#1D9E75;font-weight:500;text-decoration:none">&larr; Back to home</a>
-    </div>
-
-    <div style="max-width:620px;margin:0 auto;padding:2rem 1rem">
-
-      <!-- Fundova Learn badge -->
-      <div style="display:inline-flex;align-items:center;gap:6px;background:#E1F5EE;color:#065F46;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;margin-bottom:1.5rem">
-        <i class="ti ti-book"></i> Fundova Learn &mdash; Webinar Series
-      </div>
-
-      <!-- Title -->
-      <h1 style="font-size:clamp(22px,4vw,32px);font-weight:800;color:#1a1a1a;line-height:1.25;margin-bottom:12px">The Retirement Trap</h1>
-      <p style="font-size:16px;font-weight:500;color:#0F6E56;margin-bottom:16px">Why High Earners Go Broke &mdash; and How to Avoid It</p>
-      <p style="font-size:14px;color:#666;line-height:1.7;margin-bottom:24px">A free 1-hour virtual conversation with three experts on how to build financial security that actually lasts &mdash; before, during and after your earning years.</p>
-
-      <!-- Event details -->
-      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1.5rem">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Date</div><div style="font-weight:600;font-size:14px">July 2026</div></div>
-          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Time</div><div style="font-weight:600;font-size:14px">6:00 PM WAT</div></div>
-          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Format</div><div style="font-weight:600;font-size:14px">Virtual (Zoom)</div></div>
-          <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Cost</div><div style="font-weight:600;font-size:14px;color:#0F6E56">Free</div></div>
-        </div>
-      </div>
-
-      <!-- Speakers -->
-      <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">Your speakers</h2>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem">
-        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
-          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">M</div>
-          <div><div style="font-weight:600;font-size:14px">Mercy</div><div style="font-size:12px;color:#888;margin-top:2px">Economist & Chartered Accountant</div></div>
-        </div>
-        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
-          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">R</div>
-          <div><div style="font-weight:600;font-size:14px">Ronke</div><div style="font-size:12px;color:#888;margin-top:2px">Pension Fund Manager</div></div>
-        </div>
-        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
-          <div style="width:44px;height:44px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:16px;flex-shrink:0">D</div>
-          <div><div style="font-weight:600;font-size:14px">Damilola</div><div style="font-size:12px;color:#888;margin-top:2px">Financial Strategist & Co-founder, Fundova Cooperative</div></div>
-        </div>
-      </div>
-
-      <!-- What you'll learn -->
-      <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">What you'll learn</h2>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.5rem">
-        ${['Why high income does not equal wealth','What your pension actually covers (and what it does not)','How to build a financial safety net that holds','Practical savings and investment tools available to you today'].map(item=>`
-        <div style="display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e5e5e2;border-radius:10px;padding:12px 14px">
-          <i class="ti ti-check" style="color:#1D9E75;margin-top:1px;flex-shrink:0"></i>
-          <span style="font-size:13px;color:#444">${item}</span>
-        </div>`).join('')}
-      </div>
-
-      <!-- Registration form -->
-      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">Reserve your free spot</h2>
-        <p style="font-size:13px;color:#888;margin-bottom:1.25rem">The Zoom link will be sent to your email after registration.</p>
-        <div class="field" style="margin-bottom:12px"><label>Full name</label><input id="wr-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
-        <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="wr-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
-        <div class="field" style="margin-bottom:12px"><label>WhatsApp number <span style="color:#aaa;font-weight:400">(for reminder)</span></label><input id="wr-phone" type="tel" placeholder="e.g. 08012345678"></div>
-        <div class="error" id="wr-err" style="margin-bottom:8px"></div>
-        <button class="btn btn-primary" id="wr-btn" onclick="registerWebinar()" style="width:100%;padding:13px"><i class="ti ti-send"></i> Register &mdash; it's free</button>
-      </div>
-
-      <p style="text-align:center;font-size:12px;color:#aaa;margin-top:1.5rem">Organised by Fundova Cooperative &middot; <a href="/" style="color:#1D9E75;text-decoration:none">www.fundova.africa</a></p>
-    </div>
+async function renderWebinar(){
+  setHTML(`<div style="min-height:100vh;background:#f5f5f3;display:flex;align-items:center;justify-content:center">
+    <div class="spinner spinner-dark" style="width:24px;height:24px"></div>
   </div>`);
+  try{
+    const webinars=await sb('webinars?status=eq.active&select=*&limit=1');
+    if(!webinars||!webinars.length){
+      setHTML(`<div style="min-height:100vh;background:#f5f5f3;display:flex;align-items:center;justify-content:center;padding:2rem">
+        <div style="text-align:center;max-width:420px">
+          <div style="font-size:48px;margin-bottom:16px">📅</div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">No upcoming webinar</h2>
+          <p style="color:#666;margin-bottom:20px">Check back soon or follow us on Instagram @fundova_cooperative for announcements.</p>
+          <a href="/" class="btn btn-primary" style="display:inline-flex;padding:12px 24px;text-decoration:none">← Back to Fundova</a>
+        </div>
+      </div>`);
+      return;
+    }
+    const w=webinars[0];
+    const speakers=JSON.parse(w.speakers||'[]');
+    const eventDate=w.event_date?new Date(w.event_date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'TBC';
+
+    setHTML(`
+    <div style="min-height:100vh;background:#f5f5f3;padding-bottom:80px">
+      <div style="background:#fff;border-bottom:1px solid #e5e5e2;padding:14px 1rem;display:flex;align-items:center;justify-content:space-between;max-width:700px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+          <span style="font-weight:700;font-size:15px">Fundova</span>
+        </div>
+        <a href="/" style="font-size:13px;color:#1D9E75;font-weight:500;text-decoration:none">Back to home</a>
+      </div>
+
+      <div style="max-width:620px;margin:0 auto;padding:2rem 1rem">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#E1F5EE;color:#065F46;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;margin-bottom:1.5rem">
+          <i class="ti ti-book"></i> Fundova Learn &mdash; Webinar Series
+        </div>
+
+        ${w.flyer_url?`<img src="${w.flyer_url}" alt="Webinar flyer" style="width:100%;border-radius:14px;margin-bottom:1.5rem;object-fit:cover">`:''}
+
+        <h1 style="font-size:clamp(22px,4vw,32px);font-weight:800;color:#1a1a1a;line-height:1.25;margin-bottom:12px">${w.title}</h1>
+        ${w.subtitle?`<p style="font-size:16px;font-weight:500;color:#0F6E56;margin-bottom:16px">${w.subtitle}</p>`:''}
+        ${w.description?`<p style="font-size:14px;color:#666;line-height:1.7;margin-bottom:24px">${w.description}</p>`:''}
+
+        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1.5rem">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Date</div><div style="font-weight:600;font-size:14px">${eventDate}</div></div>
+            <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Time</div><div style="font-weight:600;font-size:14px">${w.event_time||'TBC'}</div></div>
+            <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Format</div><div style="font-weight:600;font-size:14px">Virtual (Zoom)</div></div>
+            <div><div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Cost</div><div style="font-weight:600;font-size:14px;color:#0F6E56">Free</div></div>
+          </div>
+        </div>
+
+        ${speakers.length?`
+        <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">Your speakers</h2>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem">
+          ${speakers.map(sp=>`
+          <div style="background:#fff;border:1px solid #e5e5e2;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px">
+            ${sp.photo_url
+              ?`<img src="${sp.photo_url}" alt="${sp.name}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+              :`<div style="width:48px;height:48px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F6E56;font-size:18px;flex-shrink:0">${sp.name?sp.name[0]:''}</div>`}
+            <div><div style="font-weight:600;font-size:14px">${sp.name}</div><div style="font-size:12px;color:#888;margin-top:2px">${sp.title||''}</div></div>
+          </div>`).join('')}
+        </div>`:''}
+
+        ${w.topics?`
+        <h2 style="font-size:15px;font-weight:700;margin-bottom:12px">What you will learn</h2>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.5rem">
+          ${JSON.parse(w.topics||'[]').map(topic=>`
+          <div style="display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e5e5e2;border-radius:10px;padding:12px 14px">
+            <i class="ti ti-check" style="color:#1D9E75;margin-top:1px;flex-shrink:0"></i>
+            <span style="font-size:13px;color:#444">${topic}</span>
+          </div>`).join('')}
+        </div>`:''}
+
+        <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">Reserve your free spot</h2>
+          <p style="font-size:13px;color:#888;margin-bottom:1.25rem">The Zoom link will be sent to your email after registration.</p>
+          <div class="field" style="margin-bottom:12px"><label>Full name</label><input id="wr-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="name"></div>
+          <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="wr-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+          <div class="field" style="margin-bottom:12px"><label>WhatsApp number <span style="color:#aaa;font-weight:400">(for reminder)</span></label><input id="wr-phone" type="tel" placeholder="e.g. 08012345678"></div>
+          <div class="error" id="wr-err" style="margin-bottom:8px"></div>
+          <button class="btn btn-primary" id="wr-btn" onclick="registerWebinar('${w.id}')" style="width:100%;padding:13px"><i class="ti ti-send"></i> Register &mdash; it is free</button>
+        </div>
+
+        <p style="text-align:center;font-size:12px;color:#aaa;margin-top:1.5rem">Organised by Fundova Cooperative &middot; <a href="/" style="color:#1D9E75;text-decoration:none">www.fundova.africa</a></p>
+      </div>
+    </div>`);
+  }catch(e){
+    setHTML(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#A32D2D">Error loading webinar: ${e.message}</div>`);
+  }
 }
 
-async function registerWebinar(){
+async function registerWebinar(webinarId){
   const name=document.getElementById('wr-name').value.trim();
   const email=document.getElementById('wr-email').value.trim().toLowerCase();
   const phone=document.getElementById('wr-phone').value.trim();
@@ -2500,23 +2515,259 @@ async function registerWebinar(){
   if(!email.includes('@')||!email.includes('.')){err.textContent='Please enter a valid email address.';return;}
   btn.innerHTML='<span class="spinner"></span> Registering…';btn.disabled=true;
   try{
-    await sb('webinar_registrations',{method:'POST',body:JSON.stringify({name,email,phone:phone||null,webinar:'retirement-trap-jul-2026'})});
+    await sb('webinar_registrations',{method:'POST',body:JSON.stringify({name,email,phone:phone||null,webinar_id:webinarId})});
     setHTML(`
     <div style="min-height:100vh;background:#f5f5f3;display:flex;align-items:center;justify-content:center;padding:2rem">
       <div style="text-align:center;max-width:420px">
         <div style="width:72px;height:72px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;font-size:32px;color:#0F6E56"><i class="ti ti-check"></i></div>
-        <h2 style="font-size:22px;font-weight:700;margin-bottom:8px">You're registered!</h2>
-        <p style="color:#666;line-height:1.7;margin-bottom:20px">Thank you <strong>${name}</strong>! The Zoom link will be sent to <strong>${email}</strong> before the event. We'll also send a reminder the day before.</p>
-        <p style="font-size:13px;color:#888;margin-bottom:20px">While you're here &mdash; join Fundova and start your savings journey today.</p>
+        <h2 style="font-size:22px;font-weight:700;margin-bottom:8px">You are registered!</h2>
+        <p style="color:#666;line-height:1.7;margin-bottom:20px">Thank you <strong>${name}</strong>! The Zoom link will be sent to <strong>${email}</strong> before the event.</p>
+        <p style="font-size:13px;color:#888;margin-bottom:20px">While you are here &mdash; join Fundova and start your savings journey today.</p>
         <a href="/" class="btn btn-primary" style="display:inline-flex;padding:12px 24px;text-decoration:none"><i class="ti ti-currency-naira"></i> Learn about Fundova savings</a>
       </div>
     </div>`);
   }catch(e){
     err.textContent='Error registering. Please try again.';
-    btn.innerHTML='<i class="ti ti-send"></i> Register &mdash; it\'s free';
+    btn.innerHTML='<i class="ti ti-send"></i> Register &mdash; it is free';
     btn.disabled=false;
   }
 }
+
+// ─── WEBINAR ADMIN TAB ────────────────────────────────────
+
+async function buildWebinarsAdminTab(){
+  const webinars=await sb('webinars?select=*&order=created_at.desc');
+  const regs=await sb('webinar_registrations?select=*');
+
+  const rows=(webinars||[]).map(w=>{
+    const wRegs=(regs||[]).filter(r=>r.webinar_id===w.id);
+    const statusColors={active:'#065F46|#D1FAE5',draft:'#856404|#FFF3CD',past:'#666|#f5f5f3'};
+    const [sc,bg]=(statusColors[w.status]||'#666|#f5f5f3').split('|');
+    return`<tr>
+      <td><div style="font-weight:500">${w.title}</div><div style="font-size:11px;color:#888">${w.event_date?fmtDate(w.event_date):''} ${w.event_time||''}</div></td>
+      <td><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${bg};color:${sc}">${w.status.toUpperCase()}</span></td>
+      <td style="font-weight:600">${wRegs.length}</td>
+      <td><div style="display:flex;gap:5px">
+        <button class="btn btn-sm btn-edit" onclick="openEditWebinar('${w.id}')"><i class="ti ti-pencil"></i></button>
+        ${w.status!=='active'?`<button class="btn btn-sm btn-primary" onclick="setWebinarStatus('${w.id}','active')"><i class="ti ti-star"></i> Set active</button>`:''}
+        ${w.status==='active'?`<button class="btn btn-sm" onclick="setWebinarStatus('${w.id}','past')">Archive</button>`:''}
+        <button class="btn btn-sm" onclick="viewWebinarRegistrations('${w.id}','${w.title.replace(/'/g,"\'")}',${wRegs.length})"><i class="ti ti-users"></i> ${wRegs.length}</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  return`<div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h3 style="margin:0">Webinars</h3>
+      <button class="btn btn-primary btn-sm" onclick="openCreateWebinar()"><i class="ti ti-plus"></i> Create webinar</button>
+    </div>
+    ${webinars&&webinars.length?`<div class="card"><div class="table-wrap"><table>
+      <tr><th>Title</th><th>Status</th><th>Registrations</th><th></th></tr>
+      ${rows}
+    </table></div></div>`:`<div class="card"><div class="empty">No webinars yet. Create your first one!</div></div>`}
+  </div>`;
+}
+
+function openCreateWebinar(){
+  openModal(`
+  <h3>Create webinar</h3>
+  <div class="field"><label>Title</label><input id="wn-title" placeholder="e.g. The Retirement Trap"></div>
+  <div class="field"><label>Subtitle</label><input id="wn-subtitle" placeholder="e.g. Why High Earners Go Broke"></div>
+  <div class="field"><label>Description</label><textarea id="wn-desc" placeholder="Brief description of the webinar"></textarea></div>
+  <div class="field"><label>Date</label><input id="wn-date" type="date"></div>
+  <div class="field"><label>Time</label><input id="wn-time" placeholder="e.g. 6:00 PM WAT"></div>
+  <div class="field"><label>Zoom link</label><input id="wn-zoom" placeholder="https://zoom.us/j/..."></div>
+  <div class="field"><label>Topics (one per line)</label><textarea id="wn-topics" placeholder="Why high income does not equal wealth&#10;What your pension actually covers&#10;How to build a financial safety net"></textarea></div>
+  <hr class="divider">
+  <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:10px">Speakers (up to 3)</div>
+  ${[1,2,3].map(i=>`
+  <div style="background:#f5f5f3;border-radius:10px;padding:12px;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Speaker ${i}</div>
+    <div class="field" style="margin-bottom:8px"><input id="wn-sp${i}-name" placeholder="Name"></div>
+    <div class="field" style="margin-bottom:8px"><input id="wn-sp${i}-title" placeholder="Title / role"></div>
+    <div class="field" style="margin-bottom:0"><label style="font-size:12px">Photo</label><input id="wn-sp${i}-photo" type="file" accept="image/*" onchange="uploadSpeakerPhoto(this,${i})">
+    <div id="wn-sp${i}-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
+  </div>`).join('')}
+  <hr class="divider">
+  <div class="field"><label>Flyer image</label><input id="wn-flyer" type="file" accept="image/*" onchange="uploadWebinarFlyer(this)">
+  <div id="wn-flyer-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
+  <div class="field"><label>Status</label>
+    <select id="wn-status">
+      <option value="draft">Draft</option>
+      <option value="active">Active (shows on website)</option>
+    </select>
+  </div>
+  <div class="error" id="wn-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="wn-btn" onclick="saveWebinar(null)"><i class="ti ti-device-floppy"></i> Create webinar</button>
+  </div>`);
+}
+
+async function uploadSpeakerPhoto(input,speakerNum){
+  const file=input.files[0];
+  if(!file)return;
+  const urlEl=document.getElementById('wn-sp'+speakerNum+'-url');
+  urlEl.textContent='Uploading…';
+  try{
+    const ext=file.name.split('.').pop();
+    const path='speakers/'+Date.now()+'-'+speakerNum+'.'+ext;
+    const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
+      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
+    });
+    if(!res.ok)throw new Error('Upload failed');
+    const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
+    input.dataset.url=url;
+    urlEl.textContent='Uploaded!';
+    urlEl.style.color='#0F6E56';
+  }catch(e){urlEl.textContent='Upload failed: '+e.message;urlEl.style.color='#A32D2D';}
+}
+
+async function uploadWebinarFlyer(input){
+  const file=input.files[0];
+  if(!file)return;
+  const urlEl=document.getElementById('wn-flyer-url');
+  urlEl.textContent='Uploading…';
+  try{
+    const ext=file.name.split('.').pop();
+    const path='flyers/'+Date.now()+'.'+ext;
+    const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
+      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
+    });
+    if(!res.ok)throw new Error('Upload failed');
+    const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
+    input.dataset.url=url;
+    urlEl.textContent='Uploaded!';
+    urlEl.style.color='#0F6E56';
+  }catch(e){urlEl.textContent='Upload failed: '+e.message;urlEl.style.color='#A32D2D';}
+}
+
+async function saveWebinar(id){
+  const isEdit=!!id;
+  const title=document.getElementById('wn-title').value.trim();
+  const subtitle=document.getElementById('wn-subtitle').value.trim();
+  const description=document.getElementById('wn-desc').value.trim();
+  const event_date=document.getElementById('wn-date').value||null;
+  const event_time=document.getElementById('wn-time').value.trim()||null;
+  const zoom_link=document.getElementById('wn-zoom').value.trim()||null;
+  const topicsRaw=document.getElementById('wn-topics').value.trim();
+  const topics=topicsRaw?JSON.stringify(topicsRaw.split('\n').filter(t=>t.trim())):null;
+  const status=document.getElementById('wn-status').value;
+  const flyer_url=document.getElementById('wn-flyer')?.dataset?.url||null;
+  const err=document.getElementById('wn-err');
+  const btn=document.getElementById('wn-btn');
+
+  if(!title){err.textContent='Title is required.';return;}
+
+  // Build speakers array
+  const speakers=[];
+  for(let i=1;i<=3;i++){
+    const name=document.getElementById('wn-sp'+i+'-name')?.value?.trim();
+    const spTitle=document.getElementById('wn-sp'+i+'-title')?.value?.trim();
+    const photo_url=document.getElementById('wn-sp'+i+'-photo')?.dataset?.url||null;
+    if(name)speakers.push({name,title:spTitle||'',photo_url});
+  }
+
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+
+  // If setting to active, deactivate all others first
+  if(status==='active'){
+    await sb('webinars?status=eq.active',{method:'PATCH',body:JSON.stringify({status:'past'})});
+  }
+
+  try{
+    const payload={title,subtitle,description,event_date,event_time,zoom_link,topics,speakers:JSON.stringify(speakers),flyer_url,status};
+    if(isEdit){
+      await sb(`webinars?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(payload)});
+    } else {
+      await sb('webinars',{method:'POST',body:JSON.stringify(payload)});
+    }
+    closeModal();
+    toast('<i class="ti ti-check"></i> Webinar '+(isEdit?'updated':'created')+'!');
+    await renderAdmin();
+  }catch(e){err.textContent='Error saving.';btn.innerHTML='<i class="ti ti-device-floppy"></i> '+(isEdit?'Save changes':'Create webinar');btn.disabled=false;}
+}
+
+async function openEditWebinar(id){
+  const arr=await sb(`webinars?id=eq.${id}&select=*`);
+  const w=arr[0];
+  const speakers=JSON.parse(w.speakers||'[]');
+  const topics=JSON.parse(w.topics||'[]').join('\n');
+
+  openModal(`
+  <h3>Edit webinar</h3>
+  <div class="field"><label>Title</label><input id="wn-title" value="${w.title}"></div>
+  <div class="field"><label>Subtitle</label><input id="wn-subtitle" value="${w.subtitle||''}"></div>
+  <div class="field"><label>Description</label><textarea id="wn-desc">${w.description||''}</textarea></div>
+  <div class="field"><label>Date</label><input id="wn-date" type="date" value="${w.event_date||''}"></div>
+  <div class="field"><label>Time</label><input id="wn-time" value="${w.event_time||''}"></div>
+  <div class="field"><label>Zoom link</label><input id="wn-zoom" value="${w.zoom_link||''}"></div>
+  <div class="field"><label>Topics (one per line)</label><textarea id="wn-topics">${topics}</textarea></div>
+  <hr class="divider">
+  <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:10px">Speakers</div>
+  ${[0,1,2].map(i=>{
+    const sp=speakers[i]||{};
+    return`<div style="background:#f5f5f3;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">Speaker ${i+1}</div>
+      <div class="field" style="margin-bottom:8px"><input id="wn-sp${i+1}-name" placeholder="Name" value="${sp.name||''}"></div>
+      <div class="field" style="margin-bottom:8px"><input id="wn-sp${i+1}-title" placeholder="Title / role" value="${sp.title||''}"></div>
+      <div class="field" style="margin-bottom:0">
+        ${sp.photo_url?`<img src="${sp.photo_url}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;margin-bottom:8px"><br>`:''}
+        <label style="font-size:12px">Update photo</label>
+        <input id="wn-sp${i+1}-photo" type="file" accept="image/*" onchange="uploadSpeakerPhoto(this,${i+1})" data-url="${sp.photo_url||''}">
+        <div id="wn-sp${i+1}-url" style="font-size:11px;color:#888;margin-top:4px"></div>
+      </div>
+    </div>`;
+  }).join('')}
+  <hr class="divider">
+  <div class="field"><label>Update flyer</label>
+    ${w.flyer_url?`<img src="${w.flyer_url}" style="width:100%;border-radius:8px;margin-bottom:8px">`:''}
+    <input id="wn-flyer" type="file" accept="image/*" onchange="uploadWebinarFlyer(this)" data-url="${w.flyer_url||''}">
+    <div id="wn-flyer-url" style="font-size:11px;color:#888;margin-top:4px"></div>
+  </div>
+  <div class="field"><label>Status</label>
+    <select id="wn-status">
+      <option value="draft" ${w.status==='draft'?'selected':''}>Draft</option>
+      <option value="active" ${w.status==='active'?'selected':''}>Active</option>
+      <option value="past" ${w.status==='past'?'selected':''}>Past</option>
+    </select>
+  </div>
+  <div class="error" id="wn-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="wn-btn" onclick="saveWebinar('${id}')"><i class="ti ti-device-floppy"></i> Save changes</button>
+  </div>`);
+}
+
+async function setWebinarStatus(id,status){
+  try{
+    if(status==='active'){
+      await sb('webinars?status=eq.active',{method:'PATCH',body:JSON.stringify({status:'past'})});
+    }
+    await sb(`webinars?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    await renderAdmin();
+  }catch(e){alert('Error updating webinar.');}
+}
+
+async function viewWebinarRegistrations(id,title,count){
+  openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:18px;height:18px;margin:0 auto 10px"></div>Loading…</div>`);
+  const regs=await sb(`webinar_registrations?webinar_id=eq.${id}&select=*&order=created_at.desc`);
+  const rows=(regs||[]).map(r=>`<tr>
+    <td style="font-weight:500">${r.name}</td>
+    <td>${r.email}</td>
+    <td>${r.phone||'&mdash;'}</td>
+    <td style="font-size:12px;color:#888">${fmtDate(r.created_at)}</td>
+  </tr>`).join('');
+  openModal(`
+  <h3>${title}</h3>
+  <p style="font-size:13px;color:#888;margin-top:-6px">${count} registration${count!==1?'s':''}</p>
+  ${regs&&regs.length?`<div class="table-wrap"><table>
+    <tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Date</th></tr>
+    ${rows}
+  </table></div>`:`<div class="empty">No registrations yet.</div>`}
+  <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>`);
+}
+
 
 // ─── SAVINGS GOAL ─────────────────────────────────────────
 
