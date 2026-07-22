@@ -500,6 +500,7 @@ async function renderAdmin(){
         <div class="avatar">${initials(currentUser.name)}</div>
         <span style="font-size:13px;font-weight:500">${currentUser.name}</span>
         ${!isViewOnly()?`<button class="btn btn-sm" onclick="openCreateAdminAccount()"><i class="ti ti-user-shield"></i></button>`:''}
+        ${!isViewOnly()?`<button class="btn btn-sm btn-primary" onclick="openBroadcastEmail()"><i class="ti ti-mail"></i> Announce</button>`:''}
         <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
       </div>
     </div>
@@ -3203,6 +3204,70 @@ async function uploadDealImage(input){
     urlEl.textContent='Uploaded!';
     urlEl.style.color='#0F6E56';
   }catch(e){urlEl.textContent='Upload failed: '+e.message;urlEl.style.color='#A32D2D';}
+}
+
+
+// ─── BROADCAST EMAIL ──────────────────────────────────────
+
+function openBroadcastEmail(){
+  openModal(`
+  <h3>Send announcement to all contributors</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">This will send an email to every active contributor on Fundova.</p>
+  <div class="field"><label>Subject</label><input id="be-subject" placeholder="e.g. December payout update"></div>
+  <div class="field"><label>Message</label><textarea id="be-body" rows="8" placeholder="Write your announcement here..."></textarea></div>
+  <div class="warn-box" style="margin-bottom:4px"><i class="ti ti-alert-triangle" style="flex-shrink:0;margin-top:1px"></i><div>This will send to ALL contributors. Review carefully before sending.</div></div>
+  <div class="error" id="be-err"></div>
+  <div style="font-size:12px;color:#888;margin-bottom:8px" id="be-count">Loading recipient count...</div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="be-btn" onclick="sendBroadcastEmail()"><i class="ti ti-send"></i> Send to all contributors</button>
+  </div>`);
+
+  // Load contributor count
+  sb('users?role=eq.contributor&select=id,email').then(users=>{
+    const el=document.getElementById('be-count');
+    if(el)el.textContent=`This will send to ${users.length} contributor${users.length!==1?'s':''}.`;
+  }).catch(()=>{});
+}
+
+async function sendBroadcastEmail(){
+  const subject=document.getElementById('be-subject').value.trim();
+  const body=document.getElementById('be-body').value.trim();
+  const err=document.getElementById('be-err');
+  const btn=document.getElementById('be-btn');
+
+  if(!subject){err.textContent='Please enter a subject.';return;}
+  if(!body){err.textContent='Please write a message.';return;}
+
+  if(!confirm('Are you sure you want to send this email to all contributors? This cannot be undone.')){return;}
+
+  btn.innerHTML='<span class="spinner"></span> Sending…';btn.disabled=true;
+
+  try{
+    const users=await sb('users?role=eq.contributor&select=id,name,email');
+    if(!users||!users.length){err.textContent='No contributors found.';btn.innerHTML='<i class="ti ti-send"></i> Send to all contributors';btn.disabled=false;return;}
+
+    let sent=0;let failed=0;
+    for(const u of users){
+      try{
+        await fetch('/.netlify/functions/send-email',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({type:'broadcast',to:u.email,name:u.name,subject,body})
+        });
+        sent++;
+      }catch(e){failed++;}
+      // Update progress
+      btn.innerHTML=`<span class="spinner"></span> Sending… ${sent+failed}/${users.length}`;
+    }
+
+    closeModal();
+    toast(`<i class="ti ti-check"></i> Sent to ${sent} contributor${sent!==1?'s':''}${failed>0?' ('+failed+' failed)':''}.`);
+  }catch(e){
+    err.textContent='Error: '+e.message;
+    btn.innerHTML='<i class="ti ti-send"></i> Send to all contributors';
+    btn.disabled=false;
+  }
 }
 
 // Load saved session on startup
