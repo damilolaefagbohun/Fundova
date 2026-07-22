@@ -129,6 +129,32 @@ exports.handler = async function(event) {
         + '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
         + '<p style="color:#bbb;font-size:11px;text-align:center">Questions? WhatsApp us on 08035257262 or Instagram @fundova_cooperative</p>'
         + '</div>';
+    } else if (type === 'broadcast') {
+      to = body.to;
+      const name = body.name;
+      const subj = body.subject;
+      const msg = body.body;
+
+      if (!to || !subj || !msg) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      }
+
+      subject = subj;
+      html = '<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:32px 24px;background:#fff">'
+        + '<div style="text-align:center;margin-bottom:24px">'
+        + '<img src="' + SITE_URL + '/logo.png" alt="Fundova" style="width:60px;height:60px;border-radius:12px">'
+        + '</div>'
+        + '<h2 style="color:#1a1a1a;margin-bottom:8px">' + subj + '</h2>'
+        + '<p style="color:#555;font-size:14px;margin-bottom:8px">Dear ' + name + ',</p>'
+        + '<div style="color:#444;font-size:14px;line-height:1.8;white-space:pre-wrap;margin-bottom:24px">' + msg + '</div>'
+        + '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        + '<p style="color:#888;font-size:12px">Questions? WhatsApp us on <strong>08035257262</strong> or Instagram <strong>@fundova_cooperative</strong>.</p>'
+        + '<div style="text-align:center;margin-top:16px">'
+        + '<a href="' + SITE_URL + '" style="display:inline-block;background:#1D9E75;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Visit Fundova</a>'
+        + '</div>'
+        + '<p style="color:#bbb;font-size:11px;text-align:center;margin-top:16px">2025 Fundova Cooperative. All rights reserved.</p>'
+        + '</div>';
+
     } else {
       console.log('Unknown type:', type);
       return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type' }) };
