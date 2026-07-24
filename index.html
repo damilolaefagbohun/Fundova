@@ -460,7 +460,17 @@ function renderPendingScreen(){
 }
 
 // ─── ADMIN ───────────────────────────────────────────────
+let adminRefreshTimer=null;
+
 async function renderAdmin(){
+  // Clear any existing refresh timer
+  if(adminRefreshTimer)clearInterval(adminRefreshTimer);
+  // Set auto-refresh every 25 minutes
+  adminRefreshTimer=setInterval(()=>{
+    if(currentUser&&(currentUser.role==='admin'||currentUser.role==='admin_view')){
+      renderAdmin();
+    }
+  },25*60*1000);
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
     const [contributors,payments,allPayments,requests,signups,investments,deals]=await Promise.all([
@@ -494,6 +504,7 @@ async function renderAdmin(){
       <div class="header-left">
         <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
         <span style="font-weight:600;font-size:16px">Fundova</span>
+        <span style="font-size:10px;color:#888;margin-left:8px">Last updated: ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
         ${isViewOnly()?'<span style="display:inline-block;background:#FEE2E2;color:#991B1B;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:6px">View only</span>':`<span class="admin-tag">Admin</span>`}
       </div>
       <div style="display:flex;align-items:center;gap:10px">
@@ -803,6 +814,16 @@ async function updateRequest(id,status){
       }
     }
     await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    // Send notification to contributor
+    try{
+      const reqArr=await sb(`withdrawal_requests?id=eq.${id}&select=*`);
+      if(reqArr&&reqArr.length){
+        const userArr=await sb(`users?id=eq.${reqArr[0].user_id}&select=name,email`);
+        if(userArr&&userArr.length){
+          await notify({type:status==='approved'?'withdrawal_approved':'withdrawal_rejected',to:userArr[0].email,name:userArr[0].name,amount:reqArr[0].amount});
+        }
+      }
+    }catch(notifyErr){console.error('Notify error:',notifyErr);}
     await renderAdmin();
   }catch(e){alert('Error updating request: '+e.message);}
 }
@@ -846,6 +867,7 @@ async function renderContributor(){
       <div class="header-left">
         <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
         <span style="font-weight:600;font-size:16px">Fundova</span>
+        <span style="font-size:10px;color:#888;margin-left:8px">Last updated: ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <div class="avatar">${initials(currentUser.name)}</div>
@@ -1576,6 +1598,20 @@ async function updateReservation(resId,status,invId){
       }
     }
     await sb(`investment_reservations?id=eq.${resId}`,{method:'PATCH',body:JSON.stringify({status})});
+    // Notify investor
+    try{
+      const resArr=await sb(`investment_reservations?id=eq.${resId}&select=*`);
+      if(resArr&&resArr.length){
+        const userArr=await sb(`users?id=eq.${resArr[0].user_id}&select=name,email`);
+        const invArr=await sb(`investments?id=eq.${resArr[0].investment_id}&select=title,unit_price`);
+        if(userArr&&userArr.length&&invArr&&invArr.length){
+          const notifType=status==='approved'?'investment_approved':status==='payment_confirmed'?'investment_payment_confirmed':status==='cancelled'?'investment_cancelled':null;
+          if(notifType){
+            await notify({type:notifType,to:userArr[0].email,name:userArr[0].name,investment:invArr[0].title,units:resArr[0].units,amount:resArr[0].units*invArr[0].unit_price,payment_method:resArr[0].payment_method});
+          }
+        }
+      }
+    }catch(e){console.error('Investment notify error:',e);}
     await openInvestmentDetail(invId);
   }catch(e){alert('Error updating reservation: '+e.message);}
 }
@@ -2003,6 +2039,17 @@ async function approveInvestmentRefund(refundId,invId){
     }
     await sb(`investment_refund_requests?id=eq.${refundId}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
     toast('<i class="ti ti-check"></i> Refund approved and credited to savings.');
+    // Notify investor
+    try{
+      const reqArr2=await sb(`investment_refund_requests?id=eq.${refundId}&select=*`);
+      if(reqArr2&&reqArr2.length){
+        const userArr=await sb(`users?id=eq.${reqArr2[0].user_id}&select=name,email`);
+        const invArr=await sb(`investments?id=eq.${reqArr2[0].investment_id}&select=title`);
+        if(userArr&&userArr.length){
+          await notify({type:'investment_refund_approved',to:userArr[0].email,name:userArr[0].name,investment:invArr&&invArr.length?invArr[0].title:'your investment'});
+        }
+      }
+    }catch(e){console.error('Refund notify error:',e);}
     await openInvestmentDetail(invId);
   }catch(e){alert('Error approving refund: '+e.message);}
 }
@@ -2079,6 +2126,17 @@ async function buildDealsAdminTab(deals){
 async function updateDeal(id,status){
   try{
     await sb(`deals?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    // Notify contributor
+    try{
+      const dealArr=await sb(`deals?id=eq.${id}&select=*`);
+      if(dealArr&&dealArr.length){
+        const userArr=await sb(`users?id=eq.${dealArr[0].user_id}&select=name,email`);
+        if(userArr&&userArr.length){
+          const notifType=status==='featured'?'deal_featured':status==='approved'?'deal_approved':status==='rejected'?'deal_rejected':null;
+          if(notifType)await notify({type:notifType,to:userArr[0].email,name:userArr[0].name,deal:dealArr[0].title});
+        }
+      }
+    }catch(e){console.error('Deal notify error:',e);}
     await renderAdmin();
   }catch(e){alert('Error updating deal.');}
 }
@@ -2313,6 +2371,11 @@ async function approveProfileRequest(reqId,userId){
       }
     }
     await updateProfileRequest(reqId,'approved');
+    // Notify contributor
+    try{
+      const userArr=await sb(`users?id=eq.${userId}&select=name,email`);
+      if(userArr&&userArr.length)await notify({type:'profile_approved',to:userArr[0].email,name:userArr[0].name});
+    }catch(e){console.error('Profile notify error:',e);}
     toast('<i class="ti ti-check"></i> Profile updated successfully.');
   }catch(e){alert('Error approving request: '+e.message);}
 }
@@ -2898,6 +2961,11 @@ async function approveCoordinatorApp(appId,userId){
   try{
     await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({is_coordinator:true})});
     await updateCoordinatorApp(appId,'approved');
+    // Notify coordinator
+    try{
+      const userArr=await sb(`users?id=eq.${userId}&select=name,email`);
+      if(userArr&&userArr.length)await notify({type:'coordinator_approved',to:userArr[0].email,name:userArr[0].name});
+    }catch(e){console.error('Coordinator notify error:',e);}
     toast('<i class="ti ti-check"></i> Coordinator approved successfully.');
   }catch(e){alert('Error approving: '+e.message);}
 }
@@ -2949,6 +3017,8 @@ async function submitCoordinatorApp(){
     })});
     closeModal();
     toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
+    // Notify admin of new application
+    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name,applicant_email:email}).catch(()=>{});
   }catch(e){err.textContent='Error submitting.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
 }
 
@@ -3268,6 +3338,19 @@ async function sendBroadcastEmail(){
     btn.innerHTML='<i class="ti ti-send"></i> Send to all contributors';
     btn.disabled=false;
   }
+}
+
+
+// ─── EMAIL NOTIFICATION HELPER ────────────────────────────
+
+async function notify(payload){
+  try{
+    await fetch('/.netlify/functions/send-email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){console.error('Notification error:',e);}
 }
 
 // Load saved session on startup
