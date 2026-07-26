@@ -42,7 +42,7 @@ function wrap(content) {
     ${content}
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
     <p style="color:#888;font-size:12px;margin-bottom:4px">Questions? WhatsApp us on <strong>08035257262</strong> or Instagram <strong>@fundova_cooperative</strong>.</p>
-    <p style="color:#bbb;font-size:11px;text-align:center">2025 Fundova Cooperative. All rights reserved.</p>
+    <p style="color:#bbb;font-size:11px;text-align:center">${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
   </div>`;
 }
 
@@ -266,6 +266,23 @@ exports.handler = async (event) => {
         <p style="color:#555;font-size:14px;margin-bottom:8px">Dear ${name},</p>
         <div style="color:#444;font-size:14px;line-height:1.8;white-space:pre-wrap;margin-bottom:16px">${msg}</div>
         ${btn('Visit Fundova', SITE_URL)}
+      `);
+
+    // ── GROUP INVITATION ──
+    } else if (type === 'group_invitation') {
+      to = body.to; const name = body.name; const coordinator_name = body.coordinator_name; const group_name = body.group_name;
+      subject = `You have been invited to join a savings group on Fundova`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">You have been invited!</h2>
+        <p style="color:#555;line-height:1.7">Hi ${name},</p>
+        <p style="color:#555;line-height:1.7"><strong>${coordinator_name}</strong> has invited you to join their savings group <strong>${group_name}</strong> on Fundova.</p>
+        <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:16px;margin:16px 0;font-size:13px;line-height:1.8;color:#065F46">
+          <strong>What is Fundova?</strong><br>
+          Fundova is a registered cooperative savings platform where your money earns about 10% interest per annum — calculated daily from the moment your payment is recorded. Members also get access to group investments, deals and financial education.
+        </div>
+        <p style="color:#666;font-size:13px;line-height:1.7">Click below to sign up on Fundova and join the group. Your application will be reviewed and once approved you will be added to ${group_name} automatically.</p>
+        ${btn('Accept invitation & sign up', SITE_URL)}
+        <p style="color:#aaa;font-size:12px;text-align:center">This invitation was sent by ${coordinator_name} via Fundova.</p>
       `);
 
     } else {
