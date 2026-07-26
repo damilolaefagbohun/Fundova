@@ -291,7 +291,7 @@ function renderLogin(){
         </div>
       </div>
 
-      <p style="text-align:center;font-size:12px;color:#aaa;padding-bottom:2rem">© 2025 Fundova Cooperative. All rights reserved.</p>
+      <p style="text-align:center;font-size:12px;color:#aaa;padding-bottom:2rem">© ${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
     </div>
   </div>`);
   document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
@@ -312,6 +312,7 @@ async function doLogin(){
   try{
     const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
     if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
+    if(users[0].status==='revoked'){err.textContent='Your account access has been revoked. Please contact the administrator.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     currentUser=users[0];saveSession(currentUser);await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
@@ -510,7 +511,9 @@ async function renderAdmin(){
       <div style="display:flex;align-items:center;gap:10px">
         <div class="avatar">${initials(currentUser.name)}</div>
         <span style="font-size:13px;font-weight:500">${currentUser.name}</span>
+        ${isSuperAdmin()?`<button class="btn btn-sm" onclick="openManageAdmins()" title="Manage admins"><i class="ti ti-shield-lock"></i></button>`:''}
         ${!isViewOnly()?`<button class="btn btn-sm" onclick="openCreateAdminAccount()"><i class="ti ti-user-shield"></i></button>`:''}
+        ${!isViewOnly()?`<button class="btn btn-sm" onclick="openSurplusDistribution()" title="Distribute surplus"><i class="ti ti-gift"></i></button>`:''}
         ${!isViewOnly()?`<button class="btn btn-sm btn-primary" onclick="openBroadcastEmail()"><i class="ti ti-mail"></i> Announce</button>`:''}
         <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
       </div>
@@ -1003,6 +1006,8 @@ async function renderContributor(){
       </div>
     </div>`:''}
 
+    <div id="bonus-section"></div>
+
     <div class="card">
       <h3>Your payout bank details</h3>
       ${bank?`
@@ -1031,6 +1036,8 @@ async function renderContributor(){
       if(el)el.innerHTML=html;
     });
   }
+  // Load cooperative bonuses
+  loadCooperativeBonuses();
   // Load deals asynchronously
   sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
     const el=document.getElementById('contrib-deals-content');
@@ -3092,7 +3099,7 @@ async function renderCoordinatorDashboard(){
           </div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
-            <button class="btn btn-sm btn-primary" onclick="openAddGroupMember('${g.id}')"><i class="ti ti-user-plus"></i> Add member</button>
+            <button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
@@ -3131,7 +3138,10 @@ async function renderCoordinatorDashboard(){
       </div>`;
     }).join('');
 
+    const earningsHtml = await renderCoordinatorEarnings();
+
     return`<div>
+      ${earningsHtml}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
         <h3 style="margin:0">My savings groups</h3>
         <button class="btn btn-primary btn-sm" onclick="openCreateGroup()"><i class="ti ti-plus"></i> Create group</button>
@@ -3351,6 +3361,442 @@ async function notify(payload){
       body:JSON.stringify(payload)
     });
   }catch(e){console.error('Notification error:',e);}
+}
+
+
+// ─── SUPER ADMIN PANEL ────────────────────────────────────
+
+const SUPER_ADMIN_EMAIL = 'damilolaefagbohun@gmail.com';
+const isSuperAdmin = () => currentUser && currentUser.email === SUPER_ADMIN_EMAIL;
+
+function openManageAdmins(){
+  openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:18px;height:18px;margin:0 auto 10px"></div>Loading admins...</div>`);
+  sb('users?role=in.(admin,admin_view)&select=*&order=created_at.asc').then(admins=>{
+    const rows=(admins||[]).map(a=>{
+      const isSelf=a.email===SUPER_ADMIN_EMAIL;
+      const roleLabel=a.role==='admin'?'<span class="status-pill pill-approved">Full admin</span>':'<span class="status-pill" style="background:#FEE2E2;color:#991B1B">View only</span>';
+      const statusLabel=a.status==='revoked'?'<span class="status-pill pill-rejected">Revoked</span>':'<span class="status-pill pill-approved">Active</span>';
+      const actions=isSelf?'<span style="font-size:11px;color:#aaa">You</span>':`
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${a.role==='admin_view'?`<button class="btn btn-sm btn-primary" onclick="updateAdminRole('${a.id}','admin')"><i class="ti ti-arrow-up"></i> Full</button>`:''}
+          ${a.role==='admin'?`<button class="btn btn-sm" onclick="updateAdminRole('${a.id}','admin_view')"><i class="ti ti-arrow-down"></i> View only</button>`:''}
+          ${a.status!=='revoked'?`<button class="btn btn-sm btn-danger" onclick="revokeAdmin('${a.id}','${a.name.replace(/'/g,"\'")}')"><i class="ti ti-ban"></i> Revoke</button>`:`<button class="btn btn-sm btn-primary" onclick="restoreAdmin('${a.id}')"><i class="ti ti-refresh"></i> Restore</button>`}
+        </div>`;
+      return`<tr>
+        <td><div style="font-weight:500">${a.name}</div><div style="font-size:11px;color:#888">${a.email}</div></td>
+        <td>${roleLabel}</td>
+        <td>${statusLabel}</td>
+        <td>${fmtDate(a.created_at)}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+
+    openModal(`
+    <h3>Manage admin accounts</h3>
+    <p style="font-size:13px;color:#666;margin-top:-6px">Only you can see and use this panel.</p>
+    ${admins&&admins.length?`<div class="table-wrap"><table>
+      <tr><th>Admin</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr>
+      ${rows}
+    </table></div>`:`<div class="empty">No other admins yet.</div>`}
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Close</button>
+    </div>`);
+  }).catch(e=>openModal(`<div style="color:#A32D2D;padding:1rem">Error: ${e.message}</div>`));
+}
+
+async function updateAdminRole(userId, role){
+  try{
+    await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({role})});
+    toast('<i class="ti ti-check"></i> Role updated.');
+    openManageAdmins();
+  }catch(e){alert('Error updating role: '+e.message);}
+}
+
+async function revokeAdmin(userId, name){
+  if(!confirm(`Revoke access for ${name}? They will not be able to log in.`))return;
+  try{
+    await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({status:'revoked'})});
+    toast('<i class="ti ti-check"></i> Access revoked.');
+    openManageAdmins();
+  }catch(e){alert('Error revoking access: '+e.message);}
+}
+
+async function restoreAdmin(userId){
+  try{
+    await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({status:'active'})});
+    toast('<i class="ti ti-check"></i> Access restored.');
+    openManageAdmins();
+  }catch(e){alert('Error restoring access: '+e.message);}
+}
+
+// ─── COOPERATIVE SURPLUS DISTRIBUTION ─────────────────────
+
+function openSurplusDistribution(){
+  openModal(`
+  <h3>Distribute cooperative surplus</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">The amount will be distributed to all contributors proportional to their current savings balance.</p>
+  <div class="field"><label>Total amount to distribute (₦)</label><input id="sd-amount" type="number" min="1" placeholder="e.g. 500000" oninput="previewSurplus()"></div>
+  <div class="field"><label>Description <span style="color:#aaa;font-weight:400">(shown to contributors)</span></label><input id="sd-desc" placeholder="e.g. Year-end surplus distribution, December 2026" value="Cooperative surplus distribution ${new Date().getFullYear()}"></div>
+  <div id="sd-preview" style="background:#F0FDF8;border-radius:8px;padding:12px 14px;font-size:13px;display:none;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">Total to distribute</span><strong id="sd-total" class="green"></strong></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:#888">Eligible contributors</span><strong id="sd-count"></strong></div>
+  </div>
+  <div class="warn-box"><i class="ti ti-alert-triangle" style="flex-shrink:0;margin-top:1px"></i><div>This will credit bonus amounts to all active contributors. This action cannot be undone.</div></div>
+  <div class="error" id="sd-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="sd-btn" onclick="processSurplusDistribution()"><i class="ti ti-gift"></i> Distribute surplus</button>
+  </div>`);
+  // Load contributor count and total savings
+  previewSurplus();
+}
+
+let surplusContributors = [];
+let surplusTotalSavings = 0;
+
+async function previewSurplus(){
+  const amount = parseFloat(document.getElementById('sd-amount')?.value || 0);
+  const preview = document.getElementById('sd-preview');
+  const totalEl = document.getElementById('sd-total');
+  const countEl = document.getElementById('sd-count');
+  if(!preview)return;
+
+  if(!surplusContributors.length){
+    try{
+      const [contributors, payments] = await Promise.all([
+        sb('users?role=eq.contributor&select=id,name,email'),
+        sb('payments?withdrawn=eq.false&select=user_id,amount')
+      ]);
+      surplusContributors = contributors || [];
+      // Calculate each contributor's savings
+      surplusContributors = surplusContributors.map(c => {
+        const cPayments = (payments||[]).filter(p => p.user_id === c.id);
+        const savings = cPayments.reduce((a,p) => a + Number(p.amount), 0);
+        return {...c, savings};
+      }).filter(c => c.savings > 0);
+      surplusTotalSavings = surplusContributors.reduce((a,c) => a + c.savings, 0);
+    }catch(e){}
+  }
+
+  if(amount > 0 && preview){
+    totalEl.textContent = fmt(amount);
+    countEl.textContent = surplusContributors.length;
+    preview.style.display = 'block';
+  }
+}
+
+async function processSurplusDistribution(){
+  const amount = parseFloat(document.getElementById('sd-amount').value);
+  const description = document.getElementById('sd-desc').value.trim();
+  const err = document.getElementById('sd-err');
+  const btn = document.getElementById('sd-btn');
+
+  if(!amount||amount<=0){err.textContent='Please enter a valid amount.';return;}
+  if(!description){err.textContent='Please enter a description.';return;}
+  if(!surplusContributors.length){err.textContent='No eligible contributors found.';return;}
+  if(!confirm(`Distribute ${fmt(amount)} to ${surplusContributors.length} contributors? This cannot be undone.`))return;
+
+  btn.innerHTML='<span class="spinner"></span> Distributing…';btn.disabled=true;
+
+  try{
+    const today = new Date().toISOString().split('T')[0];
+    let distributed = 0;
+
+    for(const c of surplusContributors){
+      const share = +((c.savings / surplusTotalSavings) * amount).toFixed(2);
+      if(share > 0){
+        await sb('cooperative_bonuses', {method:'POST', body:JSON.stringify({
+          user_id: c.id,
+          amount: share,
+          description,
+          date: today,
+          status: 'available'
+        })});
+        distributed++;
+      }
+      btn.innerHTML = `<span class="spinner"></span> Distributing… ${distributed}/${surplusContributors.length}`;
+    }
+
+    surplusContributors = [];
+    surplusTotalSavings = 0;
+    closeModal();
+    toast(`<i class="ti ti-check"></i> Surplus distributed to ${distributed} contributors!`);
+    await renderAdmin();
+  }catch(e){
+    err.textContent = 'Error distributing: '+e.message;
+    btn.innerHTML = '<i class="ti ti-gift"></i> Distribute surplus';
+    btn.disabled = false;
+  }
+}
+
+
+async function loadCooperativeBonuses(){
+  try{
+    const bonuses = await sb(`cooperative_bonuses?user_id=eq.${currentUser.id}&status=eq.available&select=*&order=created_at.desc`);
+    const el = document.getElementById('bonus-section');
+    if(!el)return;
+    if(!bonuses||!bonuses.length){el.innerHTML='';return;}
+
+    const totalBonus = bonuses.reduce((a,b)=>a+Number(b.amount),0);
+    const rows = bonuses.map(b=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0ee">
+        <div>
+          <div style="font-size:13px;font-weight:500">${b.description}</div>
+          <div style="font-size:11px;color:#888">${fmtDate(b.date)}</div>
+        </div>
+        <div style="font-weight:700;color:#0F6E56;font-size:15px">${fmt(b.amount)}</div>
+      </div>`).join('');
+
+    el.innerHTML = `<div class="card" style="margin-bottom:1rem;border:2px solid #1D9E75">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:24px">🎁</span>
+        <div>
+          <h3 style="margin:0;color:#0F6E56">Cooperative bonus</h3>
+          <div style="font-size:12px;color:#888">Courtesy of Fundova Multipurpose Cooperative</div>
+        </div>
+      </div>
+      <div style="background:#F0FDF8;border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
+        <div style="font-size:12px;color:#065F46;font-weight:600;text-transform:uppercase;margin-bottom:4px">Total bonus available</div>
+        <div style="font-size:28px;font-weight:700;color:#0F6E56">${fmt(totalBonus)}</div>
+      </div>
+      ${rows}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="rollBonusToSavings()"><i class="ti ti-piggy-bank"></i> Add to savings</button>
+        <button class="btn btn-sm btn-warn" style="flex:1" onclick="withdrawBonus()"><i class="ti ti-cash"></i> Withdraw</button>
+      </div>
+    </div>`;
+  }catch(e){console.error('Bonus load error:',e);}
+}
+
+async function rollBonusToSavings(){
+  if(!confirm('Add your cooperative bonus to your savings balance? It will start earning 10% interest immediately.'))return;
+  try{
+    const bonuses = await sb(`cooperative_bonuses?user_id=eq.${currentUser.id}&status=eq.available&select=*`);
+    const total = (bonuses||[]).reduce((a,b)=>a+Number(b.amount),0);
+    const today = new Date().toISOString().split('T')[0];
+    // Credit to savings
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:total,date:today,withdrawn:false})});
+    // Mark bonuses as used
+    for(const b of bonuses){
+      await sb(`cooperative_bonuses?id=eq.${b.id}`,{method:'PATCH',body:JSON.stringify({status:'rolled_to_savings'})});
+    }
+    toast('<i class="ti ti-check"></i> Bonus added to your savings and now earning interest!');
+    await renderContributor();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+async function withdrawBonus(){
+  if(!confirm('Request withdrawal of your cooperative bonus? Admin will process the transfer.'))return;
+  try{
+    const bonuses = await sb(`cooperative_bonuses?user_id=eq.${currentUser.id}&status=eq.available&select=*`);
+    const total = (bonuses||[]).reduce((a,b)=>a+Number(b.amount),0);
+    // Create withdrawal request
+    await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:total,note:'Cooperative bonus withdrawal',status:'pending'})});
+    // Mark bonuses as pending withdrawal
+    for(const b of bonuses){
+      await sb(`cooperative_bonuses?id=eq.${b.id}`,{method:'PATCH',body:JSON.stringify({status:'withdrawal_requested'})});
+    }
+    toast('<i class="ti ti-check"></i> Withdrawal request submitted. Admin will process shortly.');
+    await renderContributor();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+
+// ─── COORDINATOR INTEREST BONUS ───────────────────────────
+
+async function calculateAndCreditCoordinatorBonus(groupId, coordinatorId, payoutAmount, daysHeld){
+  try{
+    // Calculate interest the payout amount would have generated
+    const weekdays = Math.round(daysHeld * 5/7); // approximate weekdays
+    const interestGenerated = payoutAmount * 0.10 * (weekdays / 261);
+    const coordinatorBonus = +(interestGenerated * 0.50).toFixed(2);
+
+    if(coordinatorBonus <= 0)return;
+
+    const today = new Date().toISOString().split('T')[0];
+    // Credit to coordinator's savings
+    await sb('payments',{method:'POST',body:JSON.stringify({
+      user_id: coordinatorId,
+      amount: coordinatorBonus,
+      date: today,
+      withdrawn: false
+    })});
+
+    // Record in coordinator earnings table
+    await sb('coordinator_earnings',{method:'POST',body:JSON.stringify({
+      group_id: groupId,
+      coordinator_id: coordinatorId,
+      payout_amount: payoutAmount,
+      days_held: daysHeld,
+      interest_generated: +interestGenerated.toFixed(2),
+      bonus_amount: coordinatorBonus,
+      date: today
+    })});
+
+    console.log('Coordinator bonus credited:', coordinatorBonus);
+  }catch(e){console.error('Coordinator bonus error:',e);}
+}
+
+// Update initiateGroupPayout to calculate and credit bonus
+async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle){
+  if(!confirm(`Initiate payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle}?`))return;
+  try{
+    const today = new Date().toISOString().split('T')[0];
+
+    // Find when this member's contribution was recorded to calculate days held
+    const contributions = await sb(`group_contributions?group_id=eq.${groupId}&member_id=eq.${memberId}&cycle=eq.${cycle}&status=eq.paid&select=*`);
+    let daysHeld = 5; // default 5 days if no contribution record
+    if(contributions && contributions.length){
+      const contribDate = new Date(contributions[0].date);
+      const payoutDate = new Date(today);
+      const diffTime = Math.abs(payoutDate - contribDate);
+      daysHeld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    await sb('group_payouts',{method:'POST',body:JSON.stringify({
+      group_id:groupId,recipient_id:memberId,amount,cycle,
+      status:'completed',initiated_at:today,processed_at:today
+    })});
+
+    // Get group to find coordinator
+    const groups = await sb(`savings_groups?id=eq.${groupId}&select=coordinator_id`);
+    if(groups && groups.length){
+      await calculateAndCreditCoordinatorBonus(groupId, groups[0].coordinator_id, amount, daysHeld);
+    }
+
+    toast('<i class="ti ti-check"></i> Payout recorded for '+memberName+'. Please process the bank transfer manually.');
+    await renderContributor();
+  }catch(e){alert('Error initiating payout: '+e.message);}
+}
+
+// ─── COORDINATOR EARNINGS DASHBOARD ───────────────────────
+
+async function renderCoordinatorEarnings(){
+  try{
+    const earnings = await sb(`coordinator_earnings?coordinator_id=eq.${currentUser.id}&select=*&order=created_at.desc`);
+    if(!earnings||!earnings.length)return'';
+
+    const totalBonus = earnings.reduce((a,e)=>a+Number(e.bonus_amount),0);
+    const thisMonth = new Date().toISOString().slice(0,7);
+    const monthBonus = earnings.filter(e=>e.date.startsWith(thisMonth)).reduce((a,e)=>a+Number(e.bonus_amount),0);
+
+    // Group by group_id
+    const groupIds = [...new Set(earnings.map(e=>e.group_id))];
+    const groups = await sb(`savings_groups?id=in.(${groupIds.join(',')})&select=id,name`);
+    const groupMap = {};
+    (groups||[]).forEach(g=>{groupMap[g.id]=g.name;});
+
+    const byGroup = {};
+    earnings.forEach(e=>{
+      if(!byGroup[e.group_id])byGroup[e.group_id]=0;
+      byGroup[e.group_id]+=Number(e.bonus_amount);
+    });
+
+    const groupRows = Object.entries(byGroup).map(([gid,amt])=>`
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0ee">
+        <span style="font-size:13px">${groupMap[gid]||'Unknown group'}</span>
+        <span style="font-weight:600;color:#0F6E56">${fmt(amt)}</span>
+      </div>`).join('');
+
+    return`<div class="card" style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:22px">💰</span>
+        <div>
+          <h3 style="margin:0">Coordination earnings</h3>
+          <div style="font-size:12px;color:#888">Bonus from group float interest</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="stat" style="padding:10px 12px">
+          <div class="stat-label">Total earned</div>
+          <div style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(totalBonus)}</div>
+        </div>
+        <div class="stat" style="padding:10px 12px">
+          <div class="stat-label">This month</div>
+          <div style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(monthBonus)}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:8px">Earnings by group</div>
+      ${groupRows}
+      <p style="font-size:11px;color:#aaa;margin-top:10px">All earnings are credited directly to your savings balance and earn 10% interest from the date of credit.</p>
+    </div>`;
+  }catch(e){return'';}
+}
+
+// ─── GROUP MEMBER INVITATION ───────────────────────────────
+
+function openInviteMember(groupId, groupName){
+  openModal(`
+  <h3>Invite member to group</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Invite someone to join <strong>${groupName}</strong>. They will receive an email invitation to sign up on Fundova.</p>
+  <div class="field"><label>Full name</label><input id="inv-name" placeholder="e.g. Chioma Okonkwo"></div>
+  <div class="field"><label>Email address</label><input id="inv-email" type="email" placeholder="chioma@email.com"></div>
+  <div class="field"><label>Contribution amount (₦)</label><input id="inv-amount" type="number" placeholder="e.g. 10000"></div>
+  <div class="field"><label>Payout order number</label><input id="inv-order" type="number" placeholder="e.g. 3"></div>
+  <div class="info-box" style="font-size:12px"><i class="ti ti-info-circle"></i> If they are already a Fundova contributor, they will be added directly. If not, they will receive an invitation email to sign up. You will earn ₦500 referral bonus once they make their first contribution.</div>
+  <div class="error" id="inv-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="inv-btn" onclick="inviteGroupMember('${groupId}')"><i class="ti ti-send"></i> Send invitation</button>
+  </div>`);
+}
+
+async function inviteGroupMember(groupId){
+  const name = document.getElementById('inv-name').value.trim();
+  const email = document.getElementById('inv-email').value.trim().toLowerCase();
+  const contribution_amount = parseFloat(document.getElementById('inv-amount').value);
+  const payout_order = parseInt(document.getElementById('inv-order').value)||null;
+  const err = document.getElementById('inv-err');
+  const btn = document.getElementById('inv-btn');
+
+  if(!name||!email||!contribution_amount){err.textContent='Name, email and contribution amount are required.';return;}
+  btn.innerHTML='<span class="spinner"></span> Sending…';btn.disabled=true;
+
+  try{
+    // Check if already a contributor
+    const existing = await sb(`users?email=eq.${email}&role=eq.contributor&select=id`);
+
+    if(existing && existing.length){
+      // Already a contributor — add directly to group
+      await sb('group_members',{method:'POST',body:JSON.stringify({
+        group_id:groupId, user_id:existing[0].id,
+        contribution_amount, payout_order, status:'active'
+      })});
+      closeModal();
+      toast('<i class="ti ti-check"></i> Member added to group directly — they are already a Fundova contributor!');
+    } else {
+      // Not a contributor — save pending invitation and send email
+      const group = await sb(`savings_groups?id=eq.${groupId}&select=name`);
+      const groupName = group&&group.length?group[0].name:'your group';
+
+      await sb('group_invitations',{method:'POST',body:JSON.stringify({
+        group_id:groupId, coordinator_id:currentUser.id,
+        invitee_name:name, invitee_email:email,
+        contribution_amount, payout_order,
+        referred_by:currentUser.name,
+        status:'pending'
+      })});
+
+      // Send invitation email
+      await fetch('/.netlify/functions/send-email',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          type:'group_invitation',
+          to:email, name, coordinator_name:currentUser.name,
+          group_name:groupName
+        })
+      });
+
+      closeModal();
+      toast('<i class="ti ti-check"></i> Invitation sent to '+name+'! They will receive an email to sign up on Fundova.');
+    }
+    await renderContributor();
+  }catch(e){
+    err.textContent='Error: '+e.message;
+    btn.innerHTML='<i class="ti ti-send"></i> Send invitation';
+    btn.disabled=false;
+  }
 }
 
 // Load saved session on startup
