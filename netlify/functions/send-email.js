@@ -93,7 +93,7 @@ exports.handler = async (event) => {
           </div>
         </div>
         <div style="background:#f5f5f3;border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.8">
-          <strong>Bank:</strong> First Bank &nbsp;|&nbsp; <strong>Account:</strong> 3070379829 &nbsp;|&nbsp; <strong>Name:</strong> Ajonibode Damilola
+          <strong>Bank:</strong> First City Monument Bank (FCMB) &nbsp;|&nbsp; <strong>Account:</strong> 2009239208 &nbsp;|&nbsp; <strong>Name:</strong> Fundova Multipurpose Cooperative Society Ltd
         </div>
         ${btn('Sign in to Fundova', SITE_URL)}
         <p style="color:#aaa;font-size:12px;font-style:italic;text-align:center">Save small small before your salary go disappear small small!</p>
@@ -152,7 +152,7 @@ exports.handler = async (event) => {
         <div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:14px;margin:16px 0;font-size:13px">
           <strong>Action required — please make payment within 48 hours</strong><br><br>
           Amount: <strong>&#x20A6;${Number(amount).toLocaleString('en-NG', {minimumFractionDigits:2})}</strong><br>
-          Bank: First Bank &nbsp;|&nbsp; Account: 3070379829 &nbsp;|&nbsp; Name: Ajonibode Damilola<br><br>
+          Bank: First City Monument Bank (FCMB) &nbsp;|&nbsp; Account: 2009239208 &nbsp;|&nbsp; Name: Fundova Multipurpose Cooperative Society Ltd<br><br>
           Use your name as reference. Then log in and click "I have made payment".
         </div>`}
         ${btn('View my investments', SITE_URL)}
