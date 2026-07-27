@@ -102,6 +102,15 @@ tr:hover td{background:#fafafa}
 .cf-wa{color:#065F46;background:#D1FAE5}.cf-wa:hover{background:#A7F3D0}
 .cf-ig{color:#9D174D;background:#FDE8F5}.cf-ig:hover{background:#FBCFE8}
 .app{padding-bottom:60px}
+
+@media(max-width:767px){
+  #hero{grid-template-columns:1fr!important;}
+  #hero>div:last-child{display:none!important;}
+  #about>div>div{grid-template-columns:1fr!important;}
+  #cooperative>div{grid-template-columns:1fr!important;}
+  nav>div:nth-child(2){display:none!important;}
+  footer>div>div:first-child>div{grid-template-columns:1fr 1fr!important;}
+}
 </style>
 </head>
 <body>
@@ -203,8 +212,12 @@ function toast(msg,color='#1D9E75'){
 const isViewOnly=()=>currentUser&&currentUser.role==='admin_view';
 
 async function render(){
-  // Check for /webinar route
+  // Route handling
   if(window.location.pathname==='/webinar'){renderWebinar();return;}
+  if(window.location.pathname==='/terms'){renderTermsPage();return;}
+  if(window.location.pathname==='/privacy'){renderPrivacyPage();return;}
+  if(window.location.pathname==='/faq'){renderFaqPage();return;}
+  if(window.location.pathname==='/learn'){renderLearnPage();return;}
   if(!currentUser){renderLogin();return;}
   if(currentUser.role==='admin'||currentUser.role==='admin_view')await renderAdmin();
   else if(currentUser.role==='pending')renderPendingScreen();
@@ -213,94 +226,374 @@ async function render(){
 
 // ─── LOGIN ───────────────────────────────────────────────
 function renderLogin(){
-  setHTML(`
-  <div style="min-height:100vh;background:#f5f5f3">
-    <div style="background:linear-gradient(135deg,#0F6E56 0%,#1D9E75 60%,#26C48A 100%);padding:3rem 1rem 4rem;text-align:center;position:relative;overflow:hidden">
-      <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.06)"></div>
-      <div style="position:absolute;bottom:-60px;left:-30px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.05)"></div>
-      <div style="position:relative;max-width:600px;margin:0 auto">
-        <div style="margin-bottom:1.5rem">
-          <img src="/logo.png" alt="Fundova" style="width:120px;height:120px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        </div>
-        <h1 style="color:#fff;font-size:clamp(28px,5vw,44px);font-weight:800;line-height:1.2;margin-bottom:1rem;letter-spacing:-.02em">Save together.<br>Grow together.</h1>
-        <p style="color:#9FE1CB;font-size:clamp(14px,2.5vw,17px);line-height:1.7;margin-bottom:1.75rem;max-width:480px;margin-left:auto;margin-right:auto">Fundova is a cooperative thrift savings platform where members save at their own pace and earn daily interest on every naira contributed. No fixed amounts, no pressure &mdash; just consistent saving that builds up over time.</p>
-        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:30px;padding:8px 18px;color:#fff;font-size:13px;font-weight:500">
-          <span style="font-size:16px">😄</span> Save small small before your salary go disappear small small
-        </div>
+  // Check route
+  if(window.location.pathname==='/webinar'){renderWebinar();return;}
+  if(window.location.pathname==='/learn'){renderLearnPage();return;}
+  if(window.location.pathname==='/terms'){renderTermsPage();return;}
+  if(window.location.pathname==='/privacy'){renderPrivacyPage();return;}
+  if(window.location.pathname==='/faq'){renderFaqPage();return;}
+
+  const NAV = `
+  <nav style="position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,0.97);backdrop-filter:blur(8px);border-bottom:1px solid #e5e5e2;padding:0 1.5rem;height:64px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img src="/logo.png" alt="Fundova" style="width:36px;height:36px;border-radius:8px;object-fit:cover">
+      <div>
+        <div style="font-weight:800;font-size:16px;color:#0D3D2A;letter-spacing:-.3px">FUNDOVA</div>
+        <div style="font-size:9px;color:#888;margin-top:-2px;letter-spacing:.05em">LIMITED</div>
       </div>
     </div>
-    <div style="max-width:700px;margin:-2rem auto 0;padding:0 1rem;position:relative;z-index:1">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:2rem">
-        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-chart-line"></i></div>
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Daily interest accrual</div>
-          <div style="font-size:12px;color:#888;line-height:1.5">Earn about 10% p.a. calculated every weekday from the day your money lands</div>
+    <div style="display:none;gap:2rem;align-items:center" class="nav-links" id="nav-links">
+      <a href="#about" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('about')">About</a>
+      <a href="#cooperative" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('cooperative')">Cooperative</a>
+      <a href="#learn" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('learn')">Learn</a>
+      <a href="#how" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('how')">How It Works</a>
+      <a href="#faq" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('faq')">FAQ</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="smoothScroll('signin')" style="background:none;border:2px solid #0D3D2A;color:#0D3D2A;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Log in</button>
+      <button onclick="renderSignup()" style="background:#0D3D2A;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Join Fundova</button>
+    </div>
+  </nav>`;
+
+  setHTML(`
+  <div style="background:#F7F5F0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    ${NAV}
+
+    <!-- HERO -->
+    <section style="padding:100px 1.5rem 60px;max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center" id="hero">
+      <div>
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#E8F5EE;color:#0D3D2A;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;margin-bottom:1.5rem;border:1px solid #C3E6D0">
+          <span style="width:6px;height:6px;background:#0D3D2A;border-radius:50%;display:inline-block"></span>
+          CAC Registered Cooperative &amp; Company
         </div>
-        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-eye"></i></div>
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Full transparency</div>
-          <div style="font-size:12px;color:#888;line-height:1.5">Track exactly what you have saved and how much interest you have earned, in real time</div>
+        <h1 style="font-size:clamp(32px,4vw,52px);font-weight:800;color:#0D1F14;line-height:1.1;margin-bottom:1.25rem;letter-spacing:-.5px">
+          Helping Africans<br>build wealth<br><span style="color:#C9961A">together.</span>
+        </h1>
+        <p style="font-size:16px;color:#555;line-height:1.75;margin-bottom:2rem;max-width:440px">
+          Fundova is a financial ecosystem built for everyday Nigerians. Save consistently, invest as a community, and grow through financial education — all in one place.
+        </p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:2rem">
+          <button onclick="renderSignup()" style="background:#0D3D2A;color:#fff;border:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;gap:8px">
+            <i class="ti ti-arrow-right"></i> Start Saving Today
+          </button>
+          <button onclick="smoothScroll('how')" style="background:#fff;color:#0D3D2A;border:2px solid #0D3D2A;padding:14px 24px;border-radius:10px;font-weight:600;font-size:15px;cursor:pointer">
+            See How It Works
+          </button>
         </div>
-        <div style="background:#fff;border-radius:14px;padding:1.25rem;border:1px solid #e5e5e2;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-          <div style="width:38px;height:38px;border-radius:10px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#0F6E56;font-size:18px"><i class="ti ti-users"></i></div>
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px">Community-driven</div>
-          <div style="font-size:12px;color:#888;line-height:1.5">A trusted cooperative built on accountability and shared growth</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="display:flex">
+            ${['#1D9E75','#0D3D2A','#C9961A','#2A6A4A'].map(c=>`<div style="width:32px;height:32px;border-radius:50%;background:${c};border:2px solid #fff;margin-left:-8px;first:margin-left:0"></div>`).join('')}
+          </div>
+          <span style="font-size:13px;color:#666">Join <strong style="color:#0D3D2A">38+</strong> members building their future</span>
         </div>
       </div>
-      <div style="text-align:center;margin-bottom:1.5rem">
-        <p style="font-size:14px;color:#555;margin-bottom:1rem">Join Fundova today and start earning on your savings from day one.</p>
-        <button onclick="renderSignup()" class="btn btn-primary" style="padding:12px 28px;font-size:15px;border-radius:10px"><i class="ti ti-user-plus"></i> Apply to join</button>
+      <div style="position:relative">
+        <div style="background:#0D3D2A;border-radius:20px;padding:1.5rem;box-shadow:0 20px 60px rgba(13,61,42,0.25)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
+            <div style="width:8px;height:8px;border-radius:50%;background:#C9961A"></div>
+            <span style="font-size:11px;color:#aaa;font-weight:500">FUNDOVA DASHBOARD</span>
+          </div>
+          <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:1rem;margin-bottom:10px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Current total value</div>
+            <div style="font-size:28px;font-weight:800;color:#C9961A">₦262,540.75</div>
+            <div style="font-size:11px;color:#1D9E75;margin-top:4px">↑ Interest growing every weekday</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:10px">
+              <div style="font-size:10px;color:#aaa;margin-bottom:3px">Principal saved</div>
+              <div style="font-size:15px;font-weight:700;color:#fff">₦250,000</div>
+            </div>
+            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:10px">
+              <div style="font-size:10px;color:#aaa;margin-bottom:3px">Interest earned</div>
+              <div style="font-size:15px;font-weight:700;color:#1D9E75">₦12,540.75</div>
+            </div>
+          </div>
+          <div style="background:rgba(201,150,26,.15);border-radius:10px;padding:10px">
+            <div style="font-size:10px;color:#C9961A;margin-bottom:4px;font-weight:600">SAVINGS GOAL</div>
+            <div style="background:rgba(255,255,255,.1);border-radius:4px;height:6px;overflow:hidden;margin-bottom:4px">
+              <div style="height:100%;background:#C9961A;width:52%"></div>
+            </div>
+            <div style="font-size:11px;color:#aaa">52% of ₦500,000 target</div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:-20px;right:-15px;background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;color:#0D3D2A;font-size:16px">✓</div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#0D3D2A">Payment confirmed</div>
+            <div style="font-size:10px;color:#888">₦10,000 recorded today</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST BAR -->
+    <section style="background:#0D3D2A;padding:1rem 1.5rem">
+      <div style="max-width:1100px;margin:0 auto;display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:1rem">
+        ${[
+          {icon:'🛡️',label:'CAC Registered',sub:'Cooperative & Company'},
+          {icon:'🔒',label:'Secure & Protected',sub:'Your data & money'},
+          {icon:'💰',label:'100% Payout Success',sub:'Real money, real results'},
+          {icon:'📈',label:'~10% p.a. Interest',sub:'Calculated every weekday'},
+        ].map(t=>`<div style="display:flex;align-items:center;gap:10px;color:#fff">
+          <span style="font-size:22px">${t.icon}</span>
+          <div><div style="font-size:13px;font-weight:600">${t.label}</div><div style="font-size:11px;color:#aaa">${t.sub}</div></div>
+        </div>`).join('<div style="width:1px;height:30px;background:rgba(255,255,255,.15)"></div>')}
+      </div>
+    </section>
+
+    <!-- THREE PILLARS -->
+    <section id="about" style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:3rem">
+        <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Our Pillars</div>
+        <h2 style="font-size:clamp(24px,3vw,38px);font-weight:800;color:#0D1F14;margin-bottom:12px">One Company. Many Ways to Grow.</h2>
+        <p style="font-size:15px;color:#666;max-width:520px;margin:0 auto;line-height:1.7">Fundova Limited is a financial ecosystem built for Africans who want to save smarter, invest together and learn how money really works.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
+        <div style="background:#0D3D2A;border-radius:20px;padding:2rem;color:#fff;position:relative;overflow:hidden">
+          <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
+          <div style="font-size:32px;margin-bottom:1rem">🏦</div>
+          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Fundova Cooperative</div>
+          <h3 style="font-size:20px;font-weight:700;margin-bottom:10px">Save. Invest. Grow.</h3>
+          <p style="font-size:13px;color:#aaa;line-height:1.7;margin-bottom:1.25rem">A registered multipurpose cooperative where your savings earn about 10% interest per annum — calculated every weekday from the day your money is recorded.</p>
+          ${['No fixed amounts — save what you can','Daily interest accrual — weekdays','Group investment opportunities','Flexible withdrawals anytime'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ccc"><span style="color:#1D9E75;font-size:14px">✓</span>${f}</div>`).join('')}
+          <button onclick="smoothScroll('signin')" style="margin-top:1.25rem;background:#C9961A;color:#0D1F14;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Join the Cooperative →</button>
+        </div>
+        <div style="background:#fff;border-radius:20px;padding:2rem;border:2px solid #e5e5e2;position:relative;overflow:hidden">
+          <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:#F7F5F0"></div>
+          <div style="font-size:32px;margin-bottom:1rem">📚</div>
+          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Fundova Learn</div>
+          <h3 style="font-size:20px;font-weight:700;color:#0D1F14;margin-bottom:10px">Money. Mindset. Growth.</h3>
+          <p style="font-size:13px;color:#666;line-height:1.7;margin-bottom:1.25rem">Financial education for real life. We break down complex money concepts into practical lessons that help you make smarter decisions every day.</p>
+          ${['Monthly webinars with finance experts','Practical savings & investment tips','Financial literacy for all levels','Free — open to everyone'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#444"><span style="color:#0D3D2A;font-size:14px">✓</span>${f}</div>`).join('')}
+          <button onclick="window.location.pathname='/webinar'" style="margin-top:1.25rem;background:#0D3D2A;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Explore Fundova Learn →</button>
+        </div>
+        <div style="background:#F7F5F0;border-radius:20px;padding:2rem;border:2px solid #e5e5e2;position:relative;overflow:hidden;opacity:.85">
+          <div style="position:absolute;top:12px;right:12px;background:#C9961A;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px">Coming Soon</div>
+          <div style="font-size:32px;margin-bottom:1rem">🏘️</div>
+          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Future Investments</div>
+          <h3 style="font-size:20px;font-weight:700;color:#0D1F14;margin-bottom:10px">Beyond Saving.</h3>
+          <p style="font-size:13px;color:#666;line-height:1.7;margin-bottom:1.25rem">We are building more ways for you to grow your wealth as a community — real estate, vehicles, capital and more.</p>
+          ${['Fundova Properties','Fundova Capital','Fundova Insurance','Fundova Foundation'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#888"><span style="color:#C9961A;font-size:14px">◎</span>${f}</div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" style="background:#0D1F14;padding:5rem 1.5rem">
+      <div style="max-width:1100px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:3rem">
+          <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">How It Works</div>
+          <h2 style="font-size:clamp(24px,3vw,38px);font-weight:800;color:#fff;margin-bottom:12px">Simple steps. Powerful impact.</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem">
+          ${[
+            {num:'01',icon:'👤',title:'Apply to Join',desc:'Fill in your details and bank information. Your application is reviewed and approved by our team.'},
+            {num:'02',icon:'💳',title:'Make Your First Contribution',desc:'Transfer any amount to our dedicated FCMB account. No minimum, no pressure — save what you can.'},
+            {num:'03',icon:'📈',title:'Watch Your Money Grow',desc:'Interest starts accruing every weekday from the day your payment is recorded on your dashboard.'},
+            {num:'04',icon:'🤝',title:'Access More Benefits',desc:'Invest as a group, access member deals, join the group savings scheme and earn referral bonuses.'},
+          ].map(s=>`<div style="text-align:center;padding:1.5rem">
+            <div style="font-size:11px;font-weight:700;color:#C9961A;margin-bottom:8px">${s.num}</div>
+            <div style="font-size:36px;margin-bottom:12px">${s.icon}</div>
+            <h3 style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">${s.title}</h3>
+            <p style="font-size:13px;color:#aaa;line-height:1.7">${s.desc}</p>
+          </div>`).join('<div style="width:1px;background:rgba(255,255,255,.08);display:none"></div>')}
+        </div>
+      </div>
+    </section>
+
+    <!-- COOPERATIVE SECTION -->
+    <section id="cooperative" style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Fundova Cooperative</div>
+          <h2 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#0D1F14;margin-bottom:1rem">Save consistently.<br>Earn daily interest.<br>Build wealth together.</h2>
+          <p style="font-size:14px;color:#666;line-height:1.75;margin-bottom:1.5rem">Our multipurpose cooperative gives you a safe, registered platform to save at your own pace and earn about 10% interest per annum — calculated every weekday from the exact day your payment is recorded.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem">
+            ${[
+              {val:'~10%',label:'Interest p.a.'},
+              {val:'100%',label:'Payout success rate'},
+              {val:'Daily',label:'Interest accrual'},
+              {val:'Flexible',label:'Withdraw anytime'},
+            ].map(s=>`<div style="background:#F7F5F0;border-radius:12px;padding:14px;text-align:center">
+              <div style="font-size:20px;font-weight:800;color:#0D3D2A">${s.val}</div>
+              <div style="font-size:11px;color:#888;margin-top:2px">${s.label}</div>
+            </div>`).join('')}
+          </div>
+          <button onclick="renderSignup()" style="background:#0D3D2A;color:#fff;border:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer">Join the Cooperative →</button>
+        </div>
+        <div style="background:#0D3D2A;border-radius:20px;padding:1.75rem">
+          <div style="font-size:12px;color:#C9961A;font-weight:600;margin-bottom:1rem">CONTRIBUTION ACCOUNT</div>
+          <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem;margin-bottom:12px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Bank</div>
+            <div style="font-size:14px;font-weight:600;color:#fff">First City Monument Bank (FCMB)</div>
+          </div>
+          <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem;margin-bottom:12px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account Number</div>
+            <div style="font-size:22px;font-weight:800;color:#C9961A;letter-spacing:2px">2009239208</div>
+          </div>
+          <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account Name</div>
+            <div style="font-size:13px;font-weight:600;color:#fff">Fundova Multipurpose Cooperative Society Ltd</div>
+          </div>
+          <p style="font-size:11px;color:#666;margin-top:12px;text-align:center">After transferring, notify us on WhatsApp: 08035257262</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEARN SECTION -->
+    <section id="learn" style="background:#F0EDE6;padding:5rem 1.5rem">
+      <div style="max-width:1100px;margin:0 auto;text-align:center">
+        <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Fundova Learn</div>
+        <h2 style="font-size:clamp(24px,3vw,38px);font-weight:800;color:#0D1F14;margin-bottom:12px">Financial education for real life.</h2>
+        <p style="font-size:15px;color:#666;max-width:520px;margin:0 auto 2.5rem;line-height:1.7">We simplify money concepts and empower you to make smarter financial decisions. Free for everyone — members and non-members alike.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem;margin-bottom:2.5rem">
+          ${[
+            {icon:'🎙️',title:'Monthly Webinars',desc:'Live sessions with finance experts on savings, investments and wealth building.'},
+            {icon:'📝',title:'Practical Lessons',desc:'Real-world tips on saving, budgeting and making your money work harder.'},
+            {icon:'🎯',title:'Workshops & Events',desc:'Hands-on sessions designed to change how you think about and manage money.'},
+            {icon:'🌍',title:'For All Ages',desc:'Whether you are just starting out or planning for retirement — there is something for you.'},
+          ].map(f=>`<div style="background:#fff;border-radius:14px;padding:1.5rem;text-align:left">
+            <div style="font-size:28px;margin-bottom:10px">${f.icon}</div>
+            <h3 style="font-size:14px;font-weight:700;color:#0D1F14;margin-bottom:6px">${f.title}</h3>
+            <p style="font-size:12px;color:#666;line-height:1.6">${f.desc}</p>
+          </div>`).join('')}
+        </div>
+        <button onclick="window.location.pathname='/webinar'" style="background:#0D3D2A;color:#fff;border:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer">Register for next webinar →</button>
+      </div>
+    </section>
+
+    <!-- DEALS SECTION -->
+    <section style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:2.5rem">
+        <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Marketplace</div>
+        <h2 style="font-size:clamp(22px,3vw,34px);font-weight:800;color:#0D1F14;margin-bottom:8px">🏷️ Deals of the Week</h2>
+        <p style="font-size:14px;color:#666">Exclusive offers from Fundova members</p>
       </div>
       <div id="homepage-deals"></div>
-      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:2rem">
-        <h2 style="font-size:16px;font-weight:700;margin-bottom:1.25rem">Already a member? Sign in</h2>
-        <div class="field" style="margin-bottom:12px"><label>Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
-        <div class="field" style="margin-bottom:12px"><label>PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
-        <div class="error" id="l-err" style="margin-bottom:8px"></div>
-        <button class="btn btn-primary" id="l-btn" onclick="doLogin()" style="width:100%"><i class="ti ti-login"></i> Sign in</button>
+    </section>
+
+    <!-- FAQ SECTION -->
+    <section id="faq" style="background:#0D1F14;padding:5rem 1.5rem">
+      <div style="max-width:700px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:3rem">
+          <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">FAQ</div>
+          <h2 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#fff">Common questions</h2>
+        </div>
+        ${[
+          {q:'Is Fundova registered?',a:'Yes. Fundova Limited is a registered company and Fundova Multipurpose Cooperative Society Ltd is a CAC-registered cooperative. Your money is protected by law.'},
+          {q:'How much do I need to start?',a:'There is no minimum amount. You can start with any amount you are comfortable with. The important thing is consistency.'},
+          {q:'How is my interest calculated?',a:'Your savings earn about 10% per annum, calculated every weekday from the exact day your payment is recorded. Each contribution earns independently from its own start date.'},
+          {q:'When can I withdraw my money?',a:'You can request a withdrawal anytime from your dashboard. Requests are reviewed and processed within 1-2 business days.'},
+          {q:'How do I make a contribution?',a:'Transfer any amount to our FCMB account (2009239208 — Fundova Multipurpose Cooperative Society Ltd), then notify us on WhatsApp at 08035257262.'},
+          {q:'What is the group investment feature?',a:'Members can pool funds together to purchase real assets like vehicles or property. Income generated by those assets is shared monthly among investors based on their unit ownership.'},
+          {q:'How do I refer someone?',a:'Once you are a member, you will have a unique referral link on your dashboard. Share it with anyone — when they join and make their first contribution, you earn ₦500 credited to your account.'},
+        ].map((f,i)=>`<div style="border-bottom:1px solid rgba(255,255,255,.08);padding:1.25rem 0">
+          <button onclick="toggleFaq(${i})" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem">
+            <span style="font-size:14px;font-weight:600;color:#fff">${f.q}</span>
+            <span id="faq-icon-${i}" style="color:#C9961A;font-size:18px;flex-shrink:0">+</span>
+          </button>
+          <div id="faq-${i}" style="display:none;font-size:13px;color:#aaa;line-height:1.75;padding-top:10px">${f.a}</div>
+        </div>`).join('')}
       </div>
-      <!-- CONTACT US -->
-      <div style="background:#fff;border:1px solid #e5e5e2;border-radius:16px;padding:1.75rem;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:1.5rem">
-        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">Contact us</h2>
-        <p style="font-size:13px;color:#888;margin-bottom:1.25rem">Have questions? We're happy to help.</p>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <a href="tel:08035257262" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
-            <div style="width:36px;height:36px;border-radius:9px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;color:#0F6E56;font-size:18px;flex-shrink:0"><i class="ti ti-phone"></i></div>
-            <div>
-              <div style="font-weight:600">Phone call</div>
-              <div style="color:#888;font-size:12px;margin-top:1px">08035257262</div>
-            </div>
-            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
-          </a>
-          <a href="https://wa.me/2348035257262" target="_blank" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
-            <div style="width:36px;height:36px;border-radius:9px;background:#D1FAE5;display:flex;align-items:center;justify-content:center;color:#065F46;font-size:18px;flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></div>
-            <div>
-              <div style="font-weight:600">WhatsApp</div>
-              <div style="color:#888;font-size:12px;margin-top:1px">08035257262</div>
-            </div>
-            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
-          </a>
-          <a href="https://instagram.com/fundova_cooperative" target="_blank" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f5f3;border-radius:10px;text-decoration:none;color:#1a1a1a;font-size:13px;font-weight:500;transition:background .15s" onmouseover="this.style.background='#ece9e6'" onmouseout="this.style.background='#f5f5f3'">
-            <div style="width:36px;height:36px;border-radius:9px;background:#FDE8F5;display:flex;align-items:center;justify-content:center;color:#9D174D;font-size:18px;flex-shrink:0"><i class="ti ti-brand-instagram"></i></div>
-            <div>
-              <div style="font-weight:600">Instagram</div>
-              <div style="color:#888;font-size:12px;margin-top:1px">@fundova_cooperative</div>
-            </div>
-            <i class="ti ti-chevron-right" style="margin-left:auto;color:#ccc"></i>
-          </a>
+    </section>
+
+    <!-- SIGN IN SECTION -->
+    <section id="signin" style="padding:5rem 1.5rem;background:#F7F5F0">
+      <div style="max-width:420px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:2rem">
+          <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Access</div>
+          <h2 style="font-size:26px;font-weight:800;color:#0D1F14">Sign in to your dashboard</h2>
+        </div>
+        <div style="background:#fff;border-radius:20px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
+          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
+          <div class="error" id="l-err" style="margin-bottom:10px"></div>
+          <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
+          <p style="text-align:center;font-size:12px;color:#888;margin-top:14px">Not a member yet? <button onclick="renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
         </div>
       </div>
+    </section>
 
-      <p style="text-align:center;font-size:12px;color:#aaa;padding-bottom:2rem">© ${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
-    </div>
+    <!-- FOOTER -->
+    <footer style="background:#0D1F14;padding:3rem 1.5rem 1.5rem">
+      <div style="max-width:1100px;margin:0 auto">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:2rem;margin-bottom:2.5rem;flex-wrap:wrap">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px">
+              <div>
+                <div style="font-weight:800;font-size:14px;color:#fff">FUNDOVA</div>
+                <div style="font-size:9px;color:#888;letter-spacing:.05em">LIMITED</div>
+              </div>
+            </div>
+            <p style="font-size:12px;color:#888;line-height:1.7;max-width:240px">Building financial freedom for individuals and communities across Africa.</p>
+            <div style="display:flex;gap:10px;margin-top:14px">
+              <a href="https://instagram.com/fundova_cooperative" target="_blank" style="color:#888;font-size:18px"><i class="ti ti-brand-instagram"></i></a>
+              <a href="https://wa.me/2348035257262" target="_blank" style="color:#888;font-size:18px"><i class="ti ti-brand-whatsapp"></i></a>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Company</div>
+            ${['About Us','How It Works','Careers'].map(l=>`<div style="margin-bottom:8px"><a href="#about" style="font-size:13px;color:#888;text-decoration:none">${l}</a></div>`).join('')}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Cooperative</div>
+            ${['Join Fundova','How It Works','Investments','FAQ'].map(l=>`<div style="margin-bottom:8px"><a href="#" style="font-size:13px;color:#888;text-decoration:none">${l}</a></div>`).join('')}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Contact</div>
+            <div style="font-size:12px;color:#888;margin-bottom:6px">hello@fundova.africa</div>
+            <div style="font-size:12px;color:#888;margin-bottom:6px">08035257262</div>
+            <div style="font-size:12px;color:#888">@fundova_cooperative</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:1.25rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <p style="font-size:11px;color:#555">&copy; ${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
+          <div style="display:flex;gap:1.5rem">
+            <a href="/privacy" style="font-size:11px;color:#555;text-decoration:none">Privacy Policy</a>
+            <a href="/terms" style="font-size:11px;color:#555;text-decoration:none">Terms of Service</a>
+          </div>
+        </div>
+      </div>
+    </footer>
   </div>`);
+
+  // Mobile nav toggle
+  const style = document.createElement('style');
+  style.textContent = `
+    @media(min-width:768px){#nav-links{display:flex!important}}
+    @media(max-width:767px){
+      #hero{grid-template-columns:1fr!important;padding-top:80px!important}
+      #hero>div:last-child{display:none}
+      #about .grid,#cooperative section{grid-template-columns:1fr!important}
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Smooth scroll
+  window.smoothScroll = function(id){
+    const el = document.getElementById(id);
+    if(el) el.scrollIntoView({behavior:'smooth'});
+  };
+
+  // FAQ toggle
+  window.toggleFaq = function(i){
+    const el = document.getElementById('faq-'+i);
+    const icon = document.getElementById('faq-icon-'+i);
+    if(el.style.display==='none'){el.style.display='block';icon.textContent='−';}
+    else{el.style.display='none';icon.textContent='+';}
+  };
+
+  // PIN enter key
   document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-  // Load featured deals on homepage
+
+  // Load featured deals
   sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
     const el=document.getElementById('homepage-deals');
-    if(el)el.innerHTML=buildDealsSection(deals,true);
+    if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,true):'<div style="text-align:center;color:#888;padding:2rem">No featured deals right now. Check back soon!</div>';
   }).catch(()=>{});
 }
+
 
 async function doLogin(){
   const email=document.getElementById('l-email').value.trim().toLowerCase();
@@ -366,14 +659,20 @@ function goSignupStep2(){
   document.getElementById('sd2').classList.add('active');
   document.getElementById('signup-body').innerHTML=`
     <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 &mdash; Bank details for payout</p>
-    <div class="field"><label>Bank name</label><input id="s-bank" placeholder="e.g. First Bank, GTBank, Zenith"></div>
+    <div class="field"><label>Bank name</label><input id="s-bank" placeholder="e.g. First City Monument Bank (FCMB), GTBank, Zenith"></div>
     <div class="field"><label>Account number</label><input id="s-anum" type="text" maxlength="10" placeholder="10-digit account number" oninput="checkNameMatch()"></div>
     <div class="field"><label>Account name <span style="color:#888;font-weight:400">(as shown on your bank account)</span></label><input id="s-aname" placeholder="e.g. Adaeze Okonkwo" oninput="checkNameMatch()"></div>
     <div id="s-mismatch" style="display:none" class="warn-box"><i class="ti ti-alert-triangle" style="margin-top:1px;flex-shrink:0"></i><div>Your account name <strong id="s-aname-val"></strong> doesn't seem to match your registered name <strong>${window._sName}</strong>. Please confirm this is correct before proceeding.</div></div>
     <label class="checkbox-row" id="s-consent-row" style="display:none"><input type="checkbox" id="s-consent"> I confirm that the bank account details above are correct and belong to me.</label>
     <hr style="border:none;border-top:1px solid #e5e5e2">
-    <div class="field"><label>Referred by <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="s-referral" placeholder="Full name of person who referred you" autocomplete="off"></div>
+    <div class="field"><label>Referred by <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="s-referral" placeholder="Full name of person who referred you" autocomplete="off" value="${getRefFromUrl()}"></div>
     <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;font-size:12px;color:#065F46;display:flex;gap:8px;align-items:flex-start"><i class="ti ti-gift" style="margin-top:1px;flex-shrink:0"></i><div><strong>Earn &#x20A6;500 per referral!</strong> For every person you refer who makes their first contribution, you will receive a one-time bonus of <strong>&#x20A6;500 only</strong> credited to your thrift savings account.</div></div>
+    <div class="field" style="margin-bottom:8px">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#666;cursor:pointer">
+        <input type="checkbox" id="s-privacy" style="margin-top:2px;flex-shrink:0">
+        <span>I agree to Fundova's <a href="/privacy" target="_blank" style="color:#1D9E75">Privacy Policy</a> and consent to my data being used to manage my savings account.</span>
+      </label>
+    </div>
     <div class="error" id="s-err2"></div>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="renderSignupStep1()"><i class="ti ti-arrow-left"></i> Back</button>
@@ -411,6 +710,8 @@ async function submitSignup(){
   const account_name=document.getElementById('s-aname').value.trim();
   const err=document.getElementById('s-err2');
   const btn=document.getElementById('s-btn2');
+  const privacyCheck=document.getElementById('s-privacy');
+  if(privacyCheck&&!privacyCheck.checked){document.getElementById('s-err2').textContent='Please agree to the Privacy Policy to continue.';return;}
   const mismatchVisible=document.getElementById('s-mismatch').style.display!=='none';
   const consentChecked=mismatchVisible?document.getElementById('s-consent').checked:true;
   if(!bank_name||!account_number||!account_name){err.textContent='All fields are required.';return;}
@@ -493,6 +794,7 @@ async function renderAdmin(){
       adminTab==='profile_requests'?await buildProfileRequestsAdminTab():
       adminTab==='webinars'?await buildWebinarsAdminTab():
       adminTab==='coordinators'?await buildCoordinatorApplicationsTab():
+      adminTab==='analytics'?await buildAnalyticsTab():
       await buildInvestmentsAdminTab(investments,contributors);
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
@@ -537,6 +839,7 @@ async function renderAdmin(){
       <button class="tab ${adminTab==='profile_requests'?'active':''}" onclick="setAdminTab('profile_requests')">Profile requests</button>
       <button class="tab ${adminTab==='webinars'?'active':''}" onclick="setAdminTab('webinars')">Webinars</button>
       <button class="tab ${adminTab==='coordinators'?'active':''}" onclick="setAdminTab('coordinators')">Coordinators</button>
+      <button class="tab ${adminTab==='analytics'?'active':''}" onclick="setAdminTab('analytics')">Analytics</button>
     </div>
     ${tabContent}
     `);
@@ -881,6 +1184,12 @@ async function renderContributor(){
     <div class="contrib-header">
       <div class="avatar" style="width:48px;height:48px;font-size:17px">${initials(currentUser.name)}</div>
       <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} &middot; Thrift savings 2025</div></div>
+      <div style="position:relative;display:inline-block">
+        <button class="btn btn-sm" onclick="openNotifications()" style="position:relative"><i class="ti ti-bell"></i>
+          <span id="notif-badge" style="position:absolute;top:-4px;right:-4px;background:#A32D2D;color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:none;align-items:center;justify-content:center"></span>
+        </button>
+        <div id="notif-panel" style="display:none;position:absolute;right:0;top:36px;width:300px;background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;overflow:hidden;max-height:400px;overflow-y:auto"></div>
+      </div>
       <button class="btn btn-sm" onclick="openChangePin()" style="white-space:nowrap"><i class="ti ti-lock"></i> Change PIN</button>
       <button class="btn btn-sm" onclick="openEditProfile()" style="white-space:nowrap"><i class="ti ti-user-edit"></i> Edit profile</button>
     </div>
@@ -900,17 +1209,17 @@ async function renderContributor(){
           <div style="width:32px;height:32px;border-radius:8px;background:#C9A84C;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1a1a2e">₦</div>
           <div>
             <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.06em;font-weight:500">Make your contribution</div>
-            <div style="font-size:13px;font-weight:600;color:#C9A84C">First Bank</div>
+            <div style="font-size:13px;font-weight:600;color:#C9A84C">First City Monument Bank (FCMB)</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
           <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 14px">
             <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account number</div>
-            <div style="font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;color:#fff">3070379829</div>
+            <div style="font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;color:#fff">2009239208</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 14px">
             <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account name</div>
-            <div style="font-size:14px;font-weight:600;color:#fff">Ajonibode Damilola</div>
+            <div style="font-size:14px;font-weight:600;color:#fff">Fundova Multipurpose Cooperative Society Ltd</div>
           </div>
         </div>
         <div style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#C9A84C;line-height:1.5">
@@ -995,6 +1304,16 @@ async function renderContributor(){
       <div id="contrib-deals-content"><div style="text-align:center;padding:1rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-right:8px"></div>Loading…</div></div>
     </div>
 
+    <div class="card" style="margin-bottom:1rem">
+      <h3 style="margin-bottom:4px;font-size:15px">My referral link</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:12px">Share your unique link — earn ₦500 when someone joins and makes their first contribution</p>
+      <div style="background:#f5f5f3;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <span style="font-size:12px;color:#444;word-break:break-all" id="referral-link-text">https://www.fundova.africa/?ref=${generateReferralCode(currentUser.name,currentUser.id)}</span>
+        <button class="btn btn-sm" onclick="copyReferralLink()" style="flex-shrink:0"><i class="ti ti-copy"></i> Copy</button>
+      </div>
+      <div style="font-size:12px;color:#888">Your referral code: <strong style="color:#0F6E56;font-family:monospace">${generateReferralCode(currentUser.name,currentUser.id)}</strong></div>
+    </div>
+
     ${!currentUser.is_coordinator?`
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1038,6 +1357,8 @@ async function renderContributor(){
   }
   // Load cooperative bonuses
   loadCooperativeBonuses();
+  // Load notifications
+  loadNotifications().catch(()=>{});
   // Load deals asynchronously
   sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
     const el=document.getElementById('contrib-deals-content');
@@ -1260,7 +1581,7 @@ function openEditBankDetails(userId,userName,bankId,bankName,accountName,account
   openModal(`
   <h3>${bankId&&bankId!=='null'?'Edit':'Add'} bank details</h3>
   <p style="font-size:13px;color:#666;margin-top:-6px">${userName}</p>
-  <div class="field"><label>Bank name</label><input id="bd-bank" placeholder="e.g. First Bank" value="${bankName}"></div>
+  <div class="field"><label>Bank name</label><input id="bd-bank" placeholder="e.g. First City Monument Bank (FCMB)" value="${bankName}"></div>
   <div class="field"><label>Account name</label><input id="bd-aname" placeholder="e.g. Adaeze Okonkwo" value="${accountName}"></div>
   <div class="field"><label>Account number</label><input id="bd-anum" type="text" maxlength="10" placeholder="e.g. 0123456789" value="${accountNumber}"></div>
   <div class="error" id="bd-err"></div>
@@ -1358,6 +1679,7 @@ async function buildInvestmentsAdminTab(investments,contributors){
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-sm btn-edit" onclick="openEditInvestment('${inv.id}')"><i class="ti ti-pencil"></i></button>
           <button class="btn btn-sm" onclick="openInvestmentDetail('${inv.id}')"><i class="ti ti-eye"></i> Details</button>
+          ${inv.status!=='closed'?`<button class="btn btn-sm btn-warn" onclick="refundFailedInvestment('${inv.id}')"><i class="ti ti-refresh"></i> Refund all</button>`:''}
           <button class="btn btn-sm btn-danger" onclick="deleteInvestment('${inv.id}')"><i class="ti ti-trash"></i></button>
         </div>
       </div>
@@ -1746,7 +2068,7 @@ async function renderContributorInvestments(){
             actionHtml='<div style="background:#E6F1FB;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px">'
               +'<div style="font-weight:600;color:#185FA5;margin-bottom:6px"><i class="ti ti-info-circle"></i> Payment instructions</div>'
               +'<div style="color:#1E40AF;line-height:1.6">Please transfer <strong>N'+totalCost.toLocaleString('en-NG',{minimumFractionDigits:2})+'</strong> to:<br>'
-              +'<strong>First Bank &middot; 3070379829 &middot; Ajonibode Damilola</strong><br>'
+              +'<strong>First City Monument Bank (FCMB) &middot; 2009239208 &middot; Fundova Multipurpose Cooperative Society Ltd</strong><br>'
               +'Use your name as the payment reference.</div>'
               +'</div>'
               +'<button class="btn btn-primary" data-res-id="'+r.id+'" onclick="markPaymentMade(this)" style="width:100%;margin-top:10px"><i class="ti ti-check"></i> I have made payment</button>';
@@ -2251,7 +2573,7 @@ function openEditProfile(){
   <div class="field"><label>WhatsApp number</label><input id="pu-whatsapp" type="tel" value="${currentUser.whatsapp||''}" placeholder="e.g. 08012345678"></div>
   <hr class="divider">
   <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Bank details</div>
-  <div class="field"><label>Bank name</label><input id="pu-bank" placeholder="e.g. First Bank"></div>
+  <div class="field"><label>Bank name</label><input id="pu-bank" placeholder="e.g. First City Monument Bank (FCMB)"></div>
   <div class="field"><label>Account number</label><input id="pu-anum" type="text" maxlength="10" placeholder="10-digit account number"></div>
   <div class="field"><label>Account name</label><input id="pu-aname" placeholder="As shown on your bank account"></div>
   <p style="font-size:12px;color:#888">Leave bank fields blank if you are not requesting a bank details change.</p>
@@ -3797,6 +4119,328 @@ async function inviteGroupMember(groupId){
     btn.innerHTML='<i class="ti ti-send"></i> Send invitation';
     btn.disabled=false;
   }
+}
+
+
+// ─── LEGAL & INFO PAGES ───────────────────────────────────
+
+function renderTermsPage(){
+  setHTML(`
+  <div style="min-height:100vh;background:#F7F5F0;padding-bottom:4rem">
+    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/logo.png" style="width:28px;height:28px;border-radius:6px">
+        <span style="font-weight:800;color:#fff;font-size:14px">FUNDOVA</span>
+      </div>
+      <a href="/" style="font-size:13px;color:#C9961A;text-decoration:none">← Back to home</a>
+    </div>
+    <div style="max-width:720px;margin:3rem auto;padding:0 1.5rem">
+      <h1 style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:8px">Terms of Service</h1>
+      <p style="font-size:13px;color:#888;margin-bottom:2rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
+      <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1rem 1.25rem;margin-bottom:2rem;font-size:13px;color:#92400E">
+        <strong>Note:</strong> This page is currently being updated. Full terms of service will be published shortly. Please contact us at 08035257262 or hello@fundova.africa for any questions.
+      </div>
+      <div style="background:#fff;border-radius:16px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+        <p style="font-size:14px;color:#666;line-height:1.8">By using Fundova's platform and services, you agree to these terms. Fundova Limited and Fundova Multipurpose Cooperative Society Ltd operate under Nigerian law and are registered with the Corporate Affairs Commission (CAC).</p>
+        <p style="font-size:14px;color:#666;line-height:1.8;margin-top:1rem">Full terms of service are currently being drafted and will be published on this page. In the meantime, please reach out to us directly with any questions.</p>
+      </div>
+    </div>
+  </div>`);
+}
+
+function renderPrivacyPage(){
+  setHTML(`
+  <div style="min-height:100vh;background:#F7F5F0;padding-bottom:4rem">
+    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/logo.png" style="width:28px;height:28px;border-radius:6px">
+        <span style="font-weight:800;color:#fff;font-size:14px">FUNDOVA</span>
+      </div>
+      <a href="/" style="font-size:13px;color:#C9961A;text-decoration:none">← Back to home</a>
+    </div>
+    <div style="max-width:720px;margin:3rem auto;padding:0 1.5rem">
+      <h1 style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:8px">Privacy Policy</h1>
+      <p style="font-size:13px;color:#888;margin-bottom:2rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
+      <div style="background:#fff;border-radius:16px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">What data we collect</h2>
+        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">We collect your name, email address, phone number, WhatsApp number and bank account details to provide our savings and cooperative services.</p>
+        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">How we use your data</h2>
+        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">Your data is used solely to manage your savings account, process contributions and withdrawals, and communicate with you about your account. We never sell your data to third parties.</p>
+        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">How we protect your data</h2>
+        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">All data is stored securely on Supabase infrastructure with encryption in transit. Access is restricted to authorised personnel only.</p>
+        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">Your rights</h2>
+        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">You have the right to access, update or request deletion of your personal data. Contact us at hello@fundova.africa or 08035257262.</p>
+        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1rem;font-size:12px;color:#92400E">
+          This privacy policy is being expanded in compliance with the Nigeria Data Protection Regulation (NDPR). Full policy coming soon.
+        </div>
+      </div>
+    </div>
+  </div>`);
+}
+
+function renderFaqPage(){
+  setHTML(`
+  <div style="min-height:100vh;background:#F7F5F0;padding-bottom:4rem">
+    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/logo.png" style="width:28px;height:28px;border-radius:6px">
+        <span style="font-weight:800;color:#fff;font-size:14px">FUNDOVA</span>
+      </div>
+      <a href="/" style="font-size:13px;color:#C9961A;text-decoration:none">← Back to home</a>
+    </div>
+    <div style="max-width:720px;margin:3rem auto;padding:0 1.5rem">
+      <h1 style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:8px">Frequently Asked Questions</h1>
+      <p style="font-size:14px;color:#666;margin-bottom:2rem">Everything you need to know about Fundova.</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${[
+          {q:'Is Fundova registered?',a:'Yes. Fundova Limited is a registered company and Fundova Multipurpose Cooperative Society Ltd is a CAC-registered cooperative. Your money is protected by law.'},
+          {q:'How much do I need to start saving?',a:'There is no minimum amount. You can start with any amount you are comfortable with. The important thing is consistency.'},
+          {q:'How is my interest calculated?',a:'Your savings earn about 10% per annum, calculated every weekday from the exact day your payment is recorded. Each contribution earns independently from its own start date.'},
+          {q:'When can I withdraw my money?',a:'You can request a withdrawal anytime from your dashboard. Requests are reviewed and processed within 1-2 business days to your registered bank account.'},
+          {q:'How do I make a contribution?',a:'Transfer any amount to our FCMB account (2009239208 — Fundova Multipurpose Cooperative Society Ltd), then notify us on WhatsApp at 08035257262. Once confirmed, it is recorded on your dashboard.'},
+          {q:'What is the group investment feature?',a:'Members can pool funds together to purchase real assets like vehicles or property. Income generated is shared monthly among investors based on their unit ownership.'},
+          {q:'How do I refer someone?',a:'Once you are a member, you will have a unique referral link on your dashboard. When someone joins and makes their first contribution via your link, you earn ₦500 credited to your account.'},
+          {q:'What is a group savings coordinator?',a:'A coordinator is a Fundova member who runs a rotating savings group (ajo) using the Fundova platform. They invite members, track contributions and initiate payouts. Coordinators earn a bonus from the interest generated while group funds are held in Fundova account.'},
+          {q:'Is my money safe?',a:'Yes. Fundova is a registered cooperative and company. Your funds are held in a dedicated FCMB account in the name of Fundova Multipurpose Cooperative Society Ltd. We have a 100% payout success record.'},
+          {q:'How do I contact Fundova?',a:'WhatsApp: 08035257262 | Instagram: @fundova_cooperative | Email: hello@fundova.africa'},
+        ].map(f=>`<div style="background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+          <h3 style="font-size:14px;font-weight:700;color:#0D1F14;margin-bottom:6px">${f.q}</h3>
+          <p style="font-size:13px;color:#666;line-height:1.7">${f.a}</p>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`);
+}
+
+function renderLearnPage(){
+  window.location.pathname='/webinar';
+}
+
+// ─── REFERRAL SYSTEM ──────────────────────────────────────
+
+function generateReferralCode(name, userId){
+  const namepart = name.replace(/[^a-zA-Z]/g,'').substring(0,4).toUpperCase();
+  const idpart = userId.replace(/-/g,'').substring(0,4).toUpperCase();
+  return namepart + idpart;
+}
+
+function getRefFromUrl(){
+  const params = new URLSearchParams(window.location.search);
+  return params.get('ref') || '';
+}
+
+// ─── NOTIFICATION CENTRE ──────────────────────────────────
+
+let notifCount = 0;
+
+async function loadNotifications(){
+  try{
+    const notifs = await sb(`notifications?user_id=eq.${currentUser.id}&select=*&order=created_at.desc&limit=20`);
+    notifCount = (notifs||[]).filter(n=>!n.read).length;
+    updateNotifBadge();
+    return notifs||[];
+  }catch(e){return[];}
+}
+
+function updateNotifBadge(){
+  const badge = document.getElementById('notif-badge');
+  if(badge){
+    badge.textContent = notifCount > 9 ? '9+' : notifCount;
+    badge.style.display = notifCount > 0 ? 'flex' : 'none';
+  }
+}
+
+async function openNotifications(){
+  const panel = document.getElementById('notif-panel');
+  if(!panel)return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if(!isOpen){
+    panel.innerHTML = '<div style="padding:1rem;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block"></div></div>';
+    const notifs = await loadNotifications();
+    if(!notifs.length){
+      panel.innerHTML = '<div style="padding:2rem;text-align:center;color:#888"><i class="ti ti-bell-off" style="font-size:28px;display:block;margin-bottom:8px"></i>No notifications yet</div>';
+      return;
+    }
+    panel.innerHTML = notifs.map(n=>`
+      <div style="padding:12px 14px;border-bottom:1px solid #f0f0ee;display:flex;gap:10px;align-items:flex-start;background:${n.read?'#fff':'#F0FDF8'}">
+        <div style="width:8px;height:8px;border-radius:50%;background:${n.read?'#ddd':'#1D9E75'};margin-top:5px;flex-shrink:0"></div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:#1a1a1a;margin-bottom:2px">${n.message}</div>
+          <div style="font-size:11px;color:#aaa">${fmtDate(n.created_at)}</div>
+        </div>
+      </div>`).join('');
+    // Mark all as read
+    await sb(`notifications?user_id=eq.${currentUser.id}&read=eq.false`,{method:'PATCH',body:JSON.stringify({read:true})}).catch(()=>{});
+    notifCount = 0;
+    updateNotifBadge();
+  }
+}
+
+async function addNotification(userId, message){
+  try{
+    await sb('notifications',{method:'POST',body:JSON.stringify({user_id:userId,message,read:false})});
+  }catch(e){console.error('Notification error:',e);}
+}
+
+// ─── ADMIN ANALYTICS ──────────────────────────────────────
+
+async function buildAnalyticsTab(){
+  try{
+    const [contributors, allPayments, requests, investments] = await Promise.all([
+      sb('users?role=eq.contributor&select=id,created_at'),
+      sb('payments?select=*&order=date.asc'),
+      sb('withdrawal_requests?select=*'),
+      sb('investments?select=*')
+    ]);
+
+    const totalMembers = (contributors||[]).length;
+    const activePayments = (allPayments||[]).filter(p=>!p.withdrawn);
+    const totalSavings = activePayments.reduce((a,p)=>a+Number(p.amount),0);
+    const lifetimeInflow = (allPayments||[]).reduce((a,p)=>a+Number(p.amount),0);
+    const totalWithdrawn = (allPayments||[]).filter(p=>p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
+    const pendingWithdrawals = (requests||[]).filter(r=>r.status==='pending').length;
+    const totalInterest = activePayments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+
+    // Monthly inflow data (last 6 months)
+    const months = [];
+    for(let i=5;i>=0;i--){
+      const d = new Date();
+      d.setMonth(d.getMonth()-i);
+      const key = d.toISOString().slice(0,7);
+      const label = d.toLocaleString('default',{month:'short'});
+      const inflow = (allPayments||[]).filter(p=>p.date&&p.date.startsWith(key)).reduce((a,p)=>a+Number(p.amount),0);
+      months.push({label,inflow,key});
+    }
+
+    // Member growth (last 6 months)
+    const memberGrowth = months.map(m=>{
+      const count = (contributors||[]).filter(c=>c.created_at&&c.created_at.startsWith(m.key)).length;
+      return{...m,count};
+    });
+
+    const maxInflow = Math.max(...months.map(m=>m.inflow),1);
+    const maxCount = Math.max(...memberGrowth.map(m=>m.count),1);
+
+    return`<div>
+      <!-- Stats cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem">
+        ${[
+          {label:'Total members',val:totalMembers,color:'#0D3D2A',icon:'ti-users'},
+          {label:'Current savings',val:fmt(totalSavings),color:'#185FA5',icon:'ti-currency-naira'},
+          {label:'Lifetime inflow',val:fmt(lifetimeInflow),color:'#065F46',icon:'ti-trending-up'},
+          {label:'Interest accrued',val:fmt(totalInterest),color:'#856404',icon:'ti-percentage'},
+          {label:'Total withdrawn',val:fmt(totalWithdrawn),color:'#991B1B',icon:'ti-cash'},
+          {label:'Pending withdrawals',val:pendingWithdrawals,color:pendingWithdrawals>0?'#991B1B':'#065F46',icon:'ti-clock'},
+        ].map(s=>`<div style="background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.04em">${s.label}</div>
+            <i class="ti ${s.icon}" style="color:${s.color};font-size:18px"></i>
+          </div>
+          <div style="font-size:22px;font-weight:800;color:${s.color}">${s.val}</div>
+        </div>`).join('')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
+        <!-- Monthly inflow chart -->
+        <div style="background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+          <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:1rem">Monthly inflow (last 6 months)</div>
+          <div style="display:flex;align-items:flex-end;gap:8px;height:120px">
+            ${months.map(m=>{
+              const h = Math.max(8,Math.round((m.inflow/maxInflow)*110));
+              return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                <div style="font-size:9px;color:#888">${m.inflow>0?'₦'+Math.round(m.inflow/1000)+'k':''}</div>
+                <div style="width:100%;background:#1D9E75;border-radius:4px 4px 0 0;height:${h}px;transition:height .3s"></div>
+                <div style="font-size:10px;color:#888">${m.label}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Member growth chart -->
+        <div style="background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+          <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:1rem">New members (last 6 months)</div>
+          <div style="display:flex;align-items:flex-end;gap:8px;height:120px">
+            ${memberGrowth.map(m=>{
+              const h = Math.max(8,Math.round((m.count/maxCount)*110));
+              return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                <div style="font-size:9px;color:#888">${m.count>0?m.count:''}</div>
+                <div style="width:100%;background:#0D3D2A;border-radius:4px 4px 0 0;height:${h}px"></div>
+                <div style="font-size:10px;color:#888">${m.label}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Savings breakdown pie-style -->
+      <div style="background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+        <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:1rem">Funds breakdown</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+          ${[
+            {label:'Current savings',amount:totalSavings,color:'#1D9E75',pct:lifetimeInflow>0?Math.round((totalSavings/lifetimeInflow)*100):0},
+            {label:'Withdrawn',amount:totalWithdrawn,color:'#185FA5',pct:lifetimeInflow>0?Math.round((totalWithdrawn/lifetimeInflow)*100):0},
+            {label:'Interest accrued',amount:totalInterest,color:'#C9961A',pct:lifetimeInflow>0?Math.round((totalInterest/lifetimeInflow)*100):0},
+          ].map(b=>`<div style="background:#f5f5f3;border-radius:10px;padding:12px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <div style="width:10px;height:10px;border-radius:50%;background:${b.color}"></div>
+              <span style="font-size:11px;color:#888">${b.label}</span>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:${b.color}">${fmt(b.amount)}</div>
+            <div style="background:#e5e5e2;border-radius:4px;height:4px;margin-top:6px;overflow:hidden">
+              <div style="height:100%;background:${b.color};width:${b.pct}%"></div>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:3px">${b.pct}% of lifetime inflow</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }catch(e){return`<div class="card"><div class="empty">Error loading analytics: ${e.message}</div></div>`;}
+}
+
+// ─── INVESTMENT AUTO-REFUND ────────────────────────────────
+
+async function refundFailedInvestment(invId){
+  if(!confirm('Mark this investment as failed and refund all confirmed investors? This cannot be undone.'))return;
+  try{
+    const reservations = await sb(`investment_reservations?investment_id=eq.${invId}&status=eq.payment_confirmed&select=*`);
+    const inv = await sb(`investments?id=eq.${invId}&select=*`);
+    if(!inv||!inv.length)throw new Error('Investment not found');
+    const today = new Date().toISOString().split('T')[0];
+    let refunded = 0;
+
+    for(const r of (reservations||[])){
+      const refundAmount = +(r.units * inv[0].unit_price).toFixed(2);
+      // Credit back to savings
+      await sb('payments',{method:'POST',body:JSON.stringify({user_id:r.user_id,amount:refundAmount,date:today,withdrawn:false})});
+      // Cancel reservation
+      await sb(`investment_reservations?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});
+      // Notify investor
+      const userArr = await sb(`users?id=eq.${r.user_id}&select=name,email`);
+      if(userArr&&userArr.length){
+        await notify({type:'investment_cancelled',to:userArr[0].email,name:userArr[0].name,investment:inv[0].title});
+      }
+      refunded++;
+    }
+    // Mark investment as closed/failed
+    await sb(`investments?id=eq.${invId}`,{method:'PATCH',body:JSON.stringify({status:'closed'})});
+    toast(`<i class="ti ti-check"></i> Investment closed. ${refunded} investor${refunded!==1?'s':''} refunded.`);
+    await renderAdmin();
+  }catch(e){alert('Error processing refund: '+e.message);}
+}
+
+
+// ─── REFERRAL HELPERS ─────────────────────────────────────
+
+function copyReferralLink(){
+  const code = generateReferralCode(currentUser.name, currentUser.id);
+  const link = 'https://www.fundova.africa/?ref=' + code;
+  navigator.clipboard.writeText(link).then(()=>{
+    toast('<i class="ti ti-check"></i> Referral link copied!');
+  }).catch(()=>{
+    const el = document.getElementById('referral-link-text');
+    if(el){const range=document.createRange();range.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(range);}
+  });
 }
 
 // Load saved session on startup
