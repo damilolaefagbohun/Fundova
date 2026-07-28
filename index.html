@@ -3,8 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fundova &mdash; Thrift Savings</title>
+<title>Fundova — Save. Invest. Grow.</title>
+<meta name="description" content="Fundova is a registered cooperative savings platform where your money earns about 10% interest per annum. Save consistently, invest as a community and grow your wealth.">
+<meta name="theme-color" content="#0D3D2A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fundova">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
+<link rel="manifest" href="/manifest.json">
+<!-- Open Graph -->
+<meta property="og:title" content="Fundova — Save. Invest. Grow.">
+<meta property="og:description" content="A registered cooperative savings platform helping Africans build wealth together. Earn ~10% interest p.a. on your savings.">
+<meta property="og:url" content="https://www.fundova.africa">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://www.fundova.africa/logo.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -284,7 +298,7 @@ function renderLogin(){
           <div style="display:flex">
             ${['#1D9E75','#0D3D2A','#C9961A','#2A6A4A'].map(c=>`<div style="width:32px;height:32px;border-radius:50%;background:${c};border:2px solid #fff;margin-left:-8px;first:margin-left:0"></div>`).join('')}
           </div>
-          <span style="font-size:13px;color:#666">Join <strong style="color:#0D3D2A">38+</strong> members building their future</span>
+          <span style="font-size:13px;color:#666">Join <strong style="color:#0D3D2A" id="member-count">38+</strong> members building their future</span>
         </div>
       </div>
       <div style="position:relative">
@@ -588,6 +602,14 @@ function renderLogin(){
   document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
   // Load featured deals
+  // Fetch real member count
+  sb('users?role=eq.contributor&select=id').then(members=>{
+    const el=document.getElementById('member-count');
+    if(el&&members&&members.length){
+      const count=members.length;
+      el.textContent=(count>=10?count+'+ ':'');
+    }
+  }).catch(()=>{});
   sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
     const el=document.getElementById('homepage-deals');
     if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,true):'<div style="text-align:center;color:#888;padding:2rem">No featured deals right now. Check back soon!</div>';
@@ -848,6 +870,15 @@ async function renderAdmin(){
 
 function buildContributorsTab(contributors,payments){
   if(!contributors.length)return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No contributors yet.<br><br><button class="btn btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add first contributor</button></div></div>`;
+  // Search bar
+  const searchBar=`<div style="margin-bottom:1rem;display:flex;gap:8px;align-items:center">
+    <div style="position:relative;flex:1;max-width:340px">
+      <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#aaa;font-size:16px"></i>
+      <input id="contrib-search" type="text" placeholder="Search by name..." oninput="filterContributors()" style="width:100%;padding:9px 12px 9px 34px;border:1.5px solid #e5e5e2;border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>
+    <span id="contrib-count" style="font-size:12px;color:#888">${contributors.length} contributors</span>
+  </div>`;
+
   const rows=contributors.map(c=>{
     const pays=payments.filter(p=>p.user_id===c.id);
     const principal=pays.reduce((a,p)=>a+Number(p.amount),0);
@@ -870,7 +901,8 @@ function buildContributorsTab(contributors,payments){
       <h3 style="margin:0">All contributors</h3>
       ${!isViewOnly()?`<button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>`:''}
     </div>
-    <div class="table-wrap"><table>
+    ${searchBar}
+    <div class="table-wrap" id="contrib-table-wrap"><table id="contrib-table">
       <tr><th>Name</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
       ${rows}
     </table></div>
@@ -1360,6 +1392,14 @@ async function renderContributor(){
   // Load notifications
   loadNotifications().catch(()=>{});
   // Load deals asynchronously
+  // Fetch real member count
+  sb('users?role=eq.contributor&select=id').then(members=>{
+    const el=document.getElementById('member-count');
+    if(el&&members&&members.length){
+      const count=members.length;
+      el.textContent=(count>=10?count+'+ ':'');
+    }
+  }).catch(()=>{});
   sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
     const el=document.getElementById('contrib-deals-content');
     if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,false):'<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
@@ -4443,6 +4483,29 @@ function copyReferralLink(){
   });
 }
 
+
+// ─── CONTRIBUTOR SEARCH ───────────────────────────────────
+
+function filterContributors(){
+  const query = document.getElementById('contrib-search')?.value?.toLowerCase().trim() || '';
+  const table = document.getElementById('contrib-table');
+  const countEl = document.getElementById('contrib-count');
+  if(!table)return;
+
+  const rows = table.querySelectorAll('tr:not(:first-child)');
+  let visible = 0;
+  rows.forEach(row => {
+    const name = row.querySelector('td')?.textContent?.toLowerCase() || '';
+    const show = !query || name.includes(query);
+    row.style.display = show ? '' : 'none';
+    if(show) visible++;
+  });
+
+  if(countEl) countEl.textContent = query
+    ? `${visible} of ${rows.length} contributors`
+    : `${rows.length} contributors`;
+}
+
 // Load saved session on startup
 const savedUser=loadSession();
 if(savedUser)currentUser=savedUser;
@@ -4454,6 +4517,14 @@ render();
   <a href="https://wa.me/2348035257262" target="_blank" class="cf-wa"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
   <a href="https://instagram.com/fundova_cooperative" target="_blank" class="cf-ig"><i class="ti ti-brand-instagram"></i> @fundova_cooperative</a>
 </div>
+
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+</script>
 </body>
 </html>
  
