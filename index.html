@@ -738,6 +738,7 @@ async function submitSignup(){
   }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
 }
 
+let adminRefreshTimer=null;
 async function renderAdmin(){
   // Clear any existing refresh timer
   if(adminRefreshTimer)clearInterval(adminRefreshTimer);
