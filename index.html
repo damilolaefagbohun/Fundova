@@ -345,6 +345,7 @@ function renderLogin(){
       <div style="max-width:1100px;margin:0 auto;display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:1rem">
         ${[
           {icon:'🛡️',label:'CAC Registered',sub:'Cooperative & Company'},
+          {icon:'📋',label:'SCUML Registered',sub:'Anti-money laundering'},
           {icon:'🔒',label:'Secure & Protected',sub:'Your data & money'},
           {icon:'💰',label:'100% Payout Success',sub:'Real money, real results'},
           {icon:'📈',label:'~10% p.a. Interest',sub:'Calculated every weekday'},
@@ -436,20 +437,15 @@ function renderLogin(){
           <button onclick="renderSignup()" style="background:#0D3D2A;color:#fff;border:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer">Join the Cooperative →</button>
         </div>
         <div style="background:#0D3D2A;border-radius:20px;padding:1.75rem">
-          <div style="font-size:12px;color:#C9961A;font-weight:600;margin-bottom:1rem">CONTRIBUTION ACCOUNT</div>
+          <div style="font-size:12px;color:#C9961A;font-weight:600;margin-bottom:1rem">HOW TO CONTRIBUTE</div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem;margin-bottom:12px">
-            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Bank</div>
-            <div style="font-size:14px;font-weight:600;color:#fff">First City Monument Bank (FCMB)</div>
+            <div style="font-size:13px;color:#aaa;line-height:1.8">Join Fundova as a member to access your dedicated contribution account details and dashboard.</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem;margin-bottom:12px">
-            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account Number</div>
-            <div style="font-size:22px;font-weight:800;color:#C9961A;letter-spacing:2px">2009239208</div>
+            <div style="font-size:11px;color:#aaa;margin-bottom:8px;font-weight:600">WHAT YOU GET</div>
+            ${['Daily interest accrual from day one','Full dashboard with savings tracking','Access to group investments','Member deals marketplace'].map(f=>`<div style="font-size:12px;color:#ccc;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="color:#1D9E75">✓</span>${f}</div>`).join('')}
           </div>
-          <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:1.25rem">
-            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Account Name</div>
-            <div style="font-size:13px;font-weight:600;color:#fff">Fundova Multipurpose Cooperative Society Ltd</div>
-          </div>
-          <p style="font-size:11px;color:#666;margin-top:12px;text-align:center">After transferring, notify us on WhatsApp: 08035257262</p>
+          <button onclick="renderSignup()" style="width:100%;background:#C9961A;color:#0D1F14;border:none;padding:12px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;margin-top:4px">Join to see account details →</button>
         </div>
       </div>
     </section>
@@ -519,7 +515,7 @@ function renderLogin(){
           <h2 style="font-size:26px;font-weight:800;color:#0D1F14">Sign in to your dashboard</h2>
         </div>
         <div style="background:#fff;border-radius:20px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
+          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" value="${localStorage.getItem('fundova_saved_email')||''}" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
           <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
           <div class="error" id="l-err" style="margin-bottom:10px"></div>
           <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
@@ -628,7 +624,7 @@ async function doLogin(){
     const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
     if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     if(users[0].status==='revoked'){err.textContent='Your account access has been revoked. Please contact the administrator.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    currentUser=users[0];saveSession(currentUser);await render();
+    currentUser=users[0];saveSession(currentUser);localStorage.setItem('fundova_saved_email',email);await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
 function doLogout(){currentUser=null;clearSession();signupStep=1;render();}
@@ -680,15 +676,11 @@ function goSignupStep2(){
   document.getElementById('sd1').classList.add('active');
   document.getElementById('sd2').classList.add('active');
   document.getElementById('signup-body').innerHTML=`
-    <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 &mdash; Bank details for payout</p>
-    <div class="field"><label>Bank name</label><input id="s-bank" placeholder="e.g. First City Monument Bank (FCMB), GTBank, Zenith"></div>
-    <div class="field"><label>Account number</label><input id="s-anum" type="text" maxlength="10" placeholder="10-digit account number" oninput="checkNameMatch()"></div>
-    <div class="field"><label>Account name <span style="color:#888;font-weight:400">(as shown on your bank account)</span></label><input id="s-aname" placeholder="e.g. Adaeze Okonkwo" oninput="checkNameMatch()"></div>
-    <div id="s-mismatch" style="display:none" class="warn-box"><i class="ti ti-alert-triangle" style="margin-top:1px;flex-shrink:0"></i><div>Your account name <strong id="s-aname-val"></strong> doesn't seem to match your registered name <strong>${window._sName}</strong>. Please confirm this is correct before proceeding.</div></div>
-    <label class="checkbox-row" id="s-consent-row" style="display:none"><input type="checkbox" id="s-consent"> I confirm that the bank account details above are correct and belong to me.</label>
-    <hr style="border:none;border-top:1px solid #e5e5e2">
-    <div class="field"><label>Referred by <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="s-referral" placeholder="Full name of person who referred you" autocomplete="off" value="${getRefFromUrl()}"></div>
-    <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;font-size:12px;color:#065F46;display:flex;gap:8px;align-items:flex-start"><i class="ti ti-gift" style="margin-top:1px;flex-shrink:0"></i><div><strong>Earn &#x20A6;500 per referral!</strong> For every person you refer who makes their first contribution, you will receive a one-time bonus of <strong>&#x20A6;500 only</strong> credited to your thrift savings account.</div></div>
+    <p style="font-size:13px;color:#666;margin-top:-6px">Step 2 of 2 &mdash; Referral & privacy</p>
+    <div class="field"><label>Referral code <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="s-referral" placeholder="Enter referral code if you have one" autocomplete="off" value="${getRefFromUrl()}"></div>
+    <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;color:#065F46">
+      <i class="ti ti-info-circle"></i> You will add your bank details and complete your KYC from your dashboard after approval. Bank details and KYC are required before withdrawals can be processed.
+    </div>
     <div class="field" style="margin-bottom:8px">
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#666;cursor:pointer">
         <input type="checkbox" id="s-privacy" style="margin-top:2px;flex-shrink:0">
@@ -697,9 +689,9 @@ function goSignupStep2(){
     </div>
     <div class="error" id="s-err2"></div>
     <div style="display:flex;gap:8px">
-      <button class="btn" onclick="renderSignupStep1()"><i class="ti ti-arrow-left"></i> Back</button>
-      <button class="btn btn-primary" id="s-btn2" onclick="submitSignup()" style="flex:1">Submit application <i class="ti ti-send"></i></button>
-    </div>`;
+      <button class="btn" onclick="renderSignup()"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-primary" id="s-btn2" onclick="submitSignup()" style="flex:1"><i class="ti ti-send"></i> Submit application</button>
+    </div>`
 }
 
 function checkNameMatch(){
@@ -726,65 +718,25 @@ function checkNameMatch(){
 }
 
 async function submitSignup(){
-  const bank_name=document.getElementById('s-bank').value.trim();
   const referred_by=(document.getElementById('s-referral')?.value||'').trim();
-  const account_number=document.getElementById('s-anum').value.trim();
-  const account_name=document.getElementById('s-aname').value.trim();
   const err=document.getElementById('s-err2');
   const btn=document.getElementById('s-btn2');
   const privacyCheck=document.getElementById('s-privacy');
-  if(privacyCheck&&!privacyCheck.checked){document.getElementById('s-err2').textContent='Please agree to the Privacy Policy to continue.';return;}
-  const mismatchVisible=document.getElementById('s-mismatch').style.display!=='none';
-  const consentChecked=mismatchVisible?document.getElementById('s-consent').checked:true;
-  if(!bank_name||!account_number||!account_name){err.textContent='All fields are required.';return;}
-  if(!/^\d{10}$/.test(account_number)){err.textContent='Account number must be exactly 10 digits.';return;}
-  if(mismatchVisible&&!consentChecked){err.textContent='Please tick the consent box to confirm your bank details before submitting.';return;}
+  if(privacyCheck&&!privacyCheck.checked){err.textContent='Please agree to the Privacy Policy to continue.';return;}
   btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
   try{
-    // Check email not already registered
-    const existing=await sb(`users?email=eq.${encodeURIComponent(window._sEmail)}&select=id`);
-    if(existing&&existing.length){err.textContent='This email is already registered. Please sign in.';btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;return;}
-    // Check not already in signup_requests
-    const existingReq=await sb(`signup_requests?email=eq.${encodeURIComponent(window._sEmail)}&select=id`);
-    if(existingReq&&existingReq.length){err.textContent='An application with this email already exists.';btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;return;}
+    const existing=await sb('users?email=eq.'+window._sEmail+'&select=id');
+    if(existing&&existing.length){err.textContent='An account with this email already exists.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;return;}
     await sb('signup_requests',{method:'POST',body:JSON.stringify({
-      name:window._sName,email:window._sEmail,
-      phone:window._sPhone||null,whatsapp:window._sWhatsapp||null,
-      bank_name,account_number,account_name,
-      name_mismatch:mismatchVisible,referred_by:referred_by||null,status:'pending'
+      name:window._sName,email:window._sEmail,phone:window._sPhone,
+      whatsapp:window._sWhatsapp,referred_by,status:'pending'
     })});
-    renderSignupSuccess();
-  }catch(e){
-    err.textContent='Error submitting application. Please try again.';
-    btn.innerHTML='Submit application <i class="ti ti-send"></i>';btn.disabled=false;
-  }
+    // Notify admin of new application
+    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:window._sName,applicant_email:window._sEmail}).catch(()=>{});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
+  }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
 }
-
-function renderSignupSuccess(){
-  setHTML(`<div class="login-wrap">
-    <div class="pending-screen">
-      <div class="pending-icon"><i class="ti ti-circle-check" style="color:#1D9E75"></i></div>
-      <h2 style="font-size:20px;font-weight:700">Application submitted!</h2>
-      <p style="color:#666;max-width:320px;line-height:1.6">Thank you, <strong>${window._sName}</strong>. Your application is being reviewed. You'll receive an email at <strong>${window._sEmail}</strong> once your account is approved.</p>
-      <button class="btn btn-primary" onclick="renderLogin()"><i class="ti ti-login"></i> Back to sign in</button>
-    </div>
-  </div>`);
-}
-
-// ─── PENDING SCREEN ───────────────────────────────────────
-function renderPendingScreen(){
-  setHTML(`<div class="login-wrap">
-    <div class="pending-screen">
-      <div class="pending-icon"><i class="ti ti-clock" style="color:#856404"></i></div>
-      <h2 style="font-size:20px;font-weight:700">Account pending approval</h2>
-      <p style="color:#666;max-width:320px;line-height:1.6">Hi <strong>${currentUser.name}</strong>, your account is currently being reviewed by the admin. You'll receive an email once it's approved.</p>
-      <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
-    </div>
-  </div>`);
-}
-
-// ─── ADMIN ───────────────────────────────────────────────
-let adminRefreshTimer=null;
 
 async function renderAdmin(){
   // Clear any existing refresh timer
@@ -821,6 +773,8 @@ async function renderAdmin(){
     const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
     const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+  const totalValue=totalPrincipal+totalInterest;
+  checkMilestones(totalValue).catch(()=>{});
     const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
     const currentSavingsOnly=allPayments.filter(p=>!p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
@@ -1057,7 +1011,8 @@ function buildCredentialsTab(contributors){
       <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
       <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
     </div></td>
-    <td><button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button></td>
+    <td><div style="display:flex;gap:4px"><button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button>
+      <button class="btn btn-sm" title="Send KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"></i></button></div></td>
   </tr>`).join('');
   return`<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -1215,7 +1170,7 @@ async function renderContributor(){
     </div>
     <div class="contrib-header">
       <div class="avatar" style="width:48px;height:48px;font-size:17px">${initials(currentUser.name)}</div>
-      <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} &middot; Thrift savings 2025</div></div>
+      <div style="flex:1"><div class="contrib-name">${currentUser.name}</div><div class="contrib-sub">${currentUser.email} &middot; Member since ${new Date(currentUser.created_at).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}</div></div>
       <div style="position:relative;display:inline-block">
         <button class="btn btn-sm" onclick="openNotifications()" style="position:relative"><i class="ti ti-bell"></i>
           <span id="notif-badge" style="position:absolute;top:-4px;right:-4px;background:#A32D2D;color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:none;align-items:center;justify-content:center"></span>
@@ -1259,6 +1214,7 @@ async function renderContributor(){
         </div>
       </div>
     </div>
+    <div id="profile-completion-bar"></div>
     ${payments.length?`
     <div class="accrued-box">
       <div class="accrued-label">Current total value</div>
@@ -1297,7 +1253,7 @@ async function renderContributor(){
     </div>`}
     ${hasPending?`<div class="withdraw-banner"><i class="ti ti-clock" style="color:#856404;font-size:20px"></i><div><strong>Withdrawal request pending</strong><br><span style="color:#856404">Your request is being reviewed by the admin.</span></div></div>`:`
     <div style="margin-bottom:1rem;display:flex;justify-content:flex-end">
-      <button class="btn btn-warn" onclick="openWithdrawRequest(${currentTotal})"><i class="ti ti-cash"></i> Request withdrawal</button>
+      <button class="btn btn-warn" onclick="checkKycBeforeWithdrawal(${currentTotal})"><i class="ti ti-cash"></i> Request withdrawal</button>
     </div>`}
     <div class="card">
       <h3>Your payment history</h3>
@@ -1391,6 +1347,20 @@ async function renderContributor(){
   loadCooperativeBonuses();
   // Load notifications
   loadNotifications().catch(()=>{});
+  // Load profile completion
+  (async()=>{
+    try{
+      const [kyc,bank]=await Promise.all([
+        sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`),
+        sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
+      ]);
+      const kycData=kyc&&kyc.length?{...kyc[0],...(bank&&bank.length?{bank_name:bank[0].bank_name}:{})}:{};
+      const el=document.getElementById('profile-completion-bar');
+      if(el)el.innerHTML=await renderProfileCompletion(kycData);
+    }catch(e){}
+  })();
+  // Start tour for new users
+  setTimeout(()=>startTour(), 800);
   // Load deals asynchronously
   // Fetch real member count
   sb('users?role=eq.contributor&select=id').then(members=>{
@@ -4191,29 +4161,83 @@ function renderTermsPage(){
 function renderPrivacyPage(){
   setHTML(`
   <div style="min-height:100vh;background:#F7F5F0;padding-bottom:4rem">
-    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10">
       <div style="display:flex;align-items:center;gap:8px">
         <img src="/logo.png" style="width:28px;height:28px;border-radius:6px">
         <span style="font-weight:800;color:#fff;font-size:14px">FUNDOVA</span>
       </div>
       <a href="/" style="font-size:13px;color:#C9961A;text-decoration:none">← Back to home</a>
     </div>
-    <div style="max-width:720px;margin:3rem auto;padding:0 1.5rem">
-      <h1 style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:8px">Privacy Policy</h1>
-      <p style="font-size:13px;color:#888;margin-bottom:2rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
-      <div style="background:#fff;border-radius:16px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">What data we collect</h2>
-        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">We collect your name, email address, phone number, WhatsApp number and bank account details to provide our savings and cooperative services.</p>
-        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">How we use your data</h2>
-        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">Your data is used solely to manage your savings account, process contributions and withdrawals, and communicate with you about your account. We never sell your data to third parties.</p>
-        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">How we protect your data</h2>
-        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">All data is stored securely on Supabase infrastructure with encryption in transit. Access is restricted to authorised personnel only.</p>
-        <h2 style="font-size:16px;font-weight:700;color:#0D1F14;margin-bottom:8px">Your rights</h2>
-        <p style="font-size:13px;color:#666;line-height:1.8;margin-bottom:1rem">You have the right to access, update or request deletion of your personal data. Contact us at hello@fundova.africa or 08035257262.</p>
-        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1rem;font-size:12px;color:#92400E">
-          This privacy policy is being expanded in compliance with the Nigeria Data Protection Regulation (NDPR). Full policy coming soon.
-        </div>
-      </div>
+    <div style="max-width:760px;margin:3rem auto;padding:0 1.5rem">
+      <h1 style="font-size:30px;font-weight:800;color:#0D1F14;margin-bottom:6px">Privacy Policy</h1>
+      <p style="font-size:13px;color:#888;margin-bottom:2rem">Effective: July 2026 &nbsp;·&nbsp; Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
+
+      ${[
+        {title:'1. Introduction', body:`Fundova Limited and Fundova Multipurpose Cooperative Society Ltd (collectively "Fundova", "we", "us" or "our") are committed to protecting the privacy and personal data of our members and users.<br><br>
+This Privacy Policy explains how we collect, use, store, protect and handle your personal information when you use our platform at www.fundova.africa, including our cooperative savings services, investment features, financial education offerings and any related services.<br><br>
+By using Fundova's platform or becoming a member of the cooperative, you agree to the terms of this Privacy Policy.<br><br>
+This policy is prepared in compliance with the <strong>Nigeria Data Protection Regulation (NDPR) 2019</strong>, and in alignment with the requirements of the <strong>NFIU</strong>, <strong>SCUML</strong> and the <strong>CAC</strong>.`},
+
+        {title:'2. Who We Are', body:`<strong>Fundova Limited</strong> is a registered company operating as a financial ecosystem for savings, investment and financial education.<br><br>
+<strong>Fundova Multipurpose Cooperative Society Ltd</strong> is a CAC-registered multipurpose cooperative society. Both entities are SCUML-registered and fully compliant with Nigerian anti-money laundering regulations.<br><br>
+For privacy-related questions contact us at:<br>
+📧 fundovamultipurposecooperative@gmail.com<br>
+📱 08035257262`},
+
+        {title:'3. Information We Collect', body:`<strong>Account & identity information:</strong> Full legal name, email address, phone number, WhatsApp number, date of birth.<br><br>
+<strong>Financial information:</strong> Bank account name, number and bank name, savings contribution history, withdrawal history, investment participation records.<br><br>
+<strong>KYC information:</strong> Bank Verification Number (BVN), National Identification Number (NIN), government-issued ID type and number, home address, ID document uploads where required.<br><br>
+<strong>Automatically collected:</strong> Browser type, device information, pages visited, login timestamps, session data stored in your browser's local storage.<br><br>
+<strong>We do not collect:</strong> Credit or debit card numbers, ATM PINs, internet banking passwords, or any information from minors under 18.`},
+
+        {title:'4. Why We Collect Your Information', body:`We collect your data to: create and manage your savings account; record and track contributions and withdrawals; verify your identity in compliance with Nigerian regulations; prevent fraud and money laundering; send account notifications; process withdrawals; distribute investment income; send financial education content; improve our platform; and comply with regulatory requirements.`},
+
+        {title:'5. KYC Data — Special Notice', body:`<div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:1rem;margin-bottom:8px">
+Fundova collects KYC information including your BVN, NIN, government ID and home address <strong>solely in compliance with Nigerian financial regulations</strong>, including requirements from SCUML and the NFIU.<br><br>
+✅ Your KYC data is collected only for identity verification and regulatory compliance<br>
+✅ It is stored securely with restricted access<br>
+✅ It is <strong>never sold, shared or distributed</strong> to any third party for commercial purposes<br>
+✅ It will only be disclosed to regulatory authorities if legally required<br>
+✅ Providing KYC information is required to access withdrawal services on Fundova
+</div>`},
+
+        {title:'6. How We Store and Protect Your Data', body:`All data transmitted between your device and our servers is encrypted using HTTPS/TLS. Your data is stored on Supabase, a secure cloud database platform with enterprise-grade security. Only authorised Fundova personnel can access member data. Sensitive data including KYC information and bank details is never displayed publicly. All API keys and service credentials are stored securely as server-side environment variables.`},
+
+        {title:'7. Third Party Services', body:`We work with the following trusted service providers:<br><br>
+<strong>Supabase</strong> — Secure database and storage (account and transaction data)<br>
+<strong>Netlify</strong> — Website hosting and serverless functions (no member data directly)<br>
+<strong>Resend</strong> — Email notification delivery (name and email address only)<br><br>
+We do not sell your data to any of these providers or any other third party. We do not use your data for advertising purposes.`},
+
+        {title:'8. Data Retention', body:`We retain your personal data for as long as your account is active and for <strong>5 years after your account is closed</strong>. This retention period is necessary to comply with Nigerian financial regulations, resolve disputes and maintain accurate financial records as required by law.<br><br>
+If you request deletion of your data, we will review your request within <strong>30 days</strong>. Where deletion is not possible due to regulatory compliance obligations, we will inform you and retain only the minimum data required by law. All other data will be deleted.`},
+
+        {title:'9. Your Rights', body:`Under the Nigeria Data Protection Regulation (NDPR), you have the right to: access your personal data; correct inaccurate data; request deletion of your data; object to certain uses of your data; request your data in a portable format; and withdraw consent where processing is based on consent.<br><br>
+To exercise any of these rights, contact us at <strong>fundovamultipurposecooperative@gmail.com</strong>. We will respond within <strong>30 days</strong>.`},
+
+        {title:'10. Cookies and Browser Storage', body:`Our platform uses browser localStorage to keep you logged in for up to 24 hours and to remember your email address for faster login. We do not use advertising cookies or tracking cookies. No data stored in your browser is shared with third parties.`},
+
+        {title:'11. Children Privacy', body:`Fundova services are intended for adults aged 18 and above. We do not knowingly collect personal information from anyone under 18. If you believe a minor has registered, please contact us immediately at fundovamultipurposecooperative@gmail.com.`},
+
+        {title:'12. Data Breach Notification', body:`In the unlikely event of a data breach, Fundova will notify relevant regulatory authorities within 72 hours, notify affected members as soon as reasonably practicable, take immediate steps to contain and remediate the breach, and provide guidance on protective steps you can take.`},
+
+        {title:'13. Changes to This Policy', body:`We may update this Privacy Policy from time to time. When we make significant changes, we will update the effective date and notify members via email or through the platform dashboard. Continued use of Fundova after changes are published constitutes acceptance of the updated policy.`},
+
+        {title:'14. Regulatory Compliance', body:`Fundova operates in compliance with: Nigeria Data Protection Regulation (NDPR) 2019; Nigerian Financial Intelligence Unit (NFIU) guidelines; SCUML requirements; CAC cooperative regulations; and CBN guidelines where applicable.`},
+
+        {title:'15. Contact Us', body:`For any privacy questions, concerns or complaints:<br><br>
+📧 fundovamultipurposecooperative@gmail.com<br>
+📱 08035257262<br>
+📸 @fundova_cooperative<br>
+🌐 www.fundova.africa<br><br>
+We are committed to resolving all privacy concerns promptly and fairly.`},
+
+      ].map(s=>`<div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 1px 6px rgba(0,0,0,.06);margin-bottom:1rem">
+        <h2 style="font-size:15px;font-weight:700;color:#0D3D2A;margin-bottom:10px">${s.title}</h2>
+        <div style="font-size:13px;color:#555;line-height:1.85">${s.body}</div>
+      </div>`).join('')}
+
+      <p style="font-size:11px;color:#aaa;text-align:center;margin-top:1rem">© ${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
     </div>
   </div>`);
 }
@@ -4506,6 +4530,314 @@ function filterContributors(){
     : `${rows.length} contributors`;
 }
 
+
+// ─── ONBOARDING TOUR ──────────────────────────────────────
+
+const TOUR_STEPS = [
+  { id:'accrued-box', title:'Your savings overview', body:'This is your total value — principal saved plus all interest earned. It updates every weekday automatically.' },
+  { id:'savings-goal-card', title:'Savings goal', body:'Set a target amount and watch your progress in real time. A great way to stay motivated and focused.' },
+  { id:'bonus-section', title:'Cooperative bonuses', body:'Any surplus distributed by Fundova appears here. You can add it to your savings or request a withdrawal.' },
+  { id:'inv-content', title:'Group investments', body:'Pool funds with other members to purchase real assets like vehicles or property and earn monthly income from them.' },
+  { id:'deals-content', title:'Deals marketplace', body:'Exclusive offers from fellow Fundova members. Contact sellers directly via WhatsApp — no middleman.' },
+  { id:'coordinator-section', title:'Group savings (Ajo)', body:'Apply to become a coordinator and run your own rotating savings group on Fundova. Earn bonuses while helping others save.' },
+];
+
+let tourStep = 0;
+let tourOverlay = null;
+
+function startTour(){
+  if(localStorage.getItem('fundova_tour_seen')==='1'){return;}
+  tourStep = 0;
+  showTourStep();
+}
+
+function showTourStep(){
+  clearTourOverlay();
+  if(tourStep >= TOUR_STEPS.length){endTour();return;}
+  const step = TOUR_STEPS[tourStep];
+  const el = document.getElementById(step.id);
+
+  tourOverlay = document.createElement('div');
+  tourOverlay.style.cssText = 'position:fixed;inset:0;z-index:9000;pointer-events:none';
+
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.55);pointer-events:all';
+  tourOverlay.appendChild(backdrop);
+
+  // Tooltip
+  const tip = document.createElement('div');
+  tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);width:min(340px,90vw);background:#fff;border-radius:16px;padding:1.25rem;box-shadow:0 8px 32px rgba(0,0,0,.25);z-index:9001;pointer-events:all';
+  tip.innerHTML = `
+    <div style="font-size:10px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Step ${tourStep+1} of ${TOUR_STEPS.length}</div>
+    <h3 style="font-size:15px;font-weight:700;color:#0D1F14;margin-bottom:6px">${step.title}</h3>
+    <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:1rem">${step.body}</p>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+      <button onclick="skipTour()" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer;text-decoration:underline">Do not show me again</button>
+      <div style="display:flex;gap:6px">
+        ${tourStep > 0 ? '<button onclick="prevTourStep()" style="background:#f5f5f3;border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">← Back</button>' : ''}
+        <button onclick="nextTourStep()" style="background:#0D3D2A;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">${tourStep < TOUR_STEPS.length-1 ? 'Next →' : 'Done ✓'}</button>
+      </div>
+    </div>`;
+
+  tourOverlay.appendChild(tip);
+  document.body.appendChild(tourOverlay);
+
+  // Scroll to element
+  if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function nextTourStep(){ tourStep++; showTourStep(); }
+function prevTourStep(){ tourStep--; showTourStep(); }
+function skipTour(){ localStorage.setItem('fundova_tour_seen','1'); endTour(); }
+function endTour(){ clearTourOverlay(); localStorage.setItem('fundova_tour_seen','1'); }
+function clearTourOverlay(){ if(tourOverlay){tourOverlay.remove();tourOverlay=null;} }
+
+// ─── PROFILE COMPLETION ───────────────────────────────────
+
+async function renderProfileCompletion(kyc){
+  const fields = [
+    { label:'Bank details', done: !!(kyc&&kyc.bank_name) },
+    { label:'Savings goal', done: !!(currentUser.savings_goal) },
+    { label:'Date of birth', done: !!(kyc&&kyc.date_of_birth) },
+    { label:'Home address', done: !!(kyc&&kyc.home_address) },
+    { label:'BVN', done: !!(kyc&&kyc.bvn) },
+    { label:'NIN', done: !!(kyc&&kyc.nin) },
+    { label:'Government ID', done: !!(kyc&&kyc.id_type) },
+  ];
+
+  const completed = fields.filter(f=>f.done).length;
+  const total = fields.length;
+  const pct = Math.round((completed/total)*100);
+  const allKycDone = fields.slice(1).filter(f=>!f.done).length === 0 && fields[0].done;
+
+  return`<div class="card" style="margin-bottom:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h3 style="margin:0;font-size:15px">Profile completion</h3>
+      <span style="font-size:13px;font-weight:700;color:${pct===100?'#0F6E56':'#C9961A'}">${pct}%</span>
+    </div>
+    <div style="background:#e5e5e2;border-radius:6px;height:8px;overflow:hidden;margin-bottom:10px">
+      <div style="height:100%;background:${pct===100?'#1D9E75':'#C9961A'};width:${pct}%;transition:width .5s"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+      ${fields.map(f=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${f.done?'#065F46':'#888'}">
+        <span style="font-size:14px">${f.done?'✅':'⬜'}</span>${f.label}
+      </div>`).join('')}
+    </div>
+    ${!allKycDone?`<div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400E">
+      <i class="ti ti-lock"></i> Complete all fields above to unlock withdrawals
+    </div>`:'<div style="background:#D1FAE5;border-radius:8px;padding:8px 12px;font-size:12px;color:#065F46"><i class="ti ti-check"></i> Profile complete — withdrawals unlocked!</div>'}
+    <button onclick="openKycForm()" style="width:100%;margin-top:10px;background:#0D3D2A;color:#fff;border:none;padding:10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer"><i class="ti ti-edit"></i> Update profile & KYC</button>
+  </div>`;
+}
+
+// ─── KYC FORM ─────────────────────────────────────────────
+
+async function openKycForm(){
+  // Load existing KYC data
+  let kyc = {};
+  let bank = {};
+  try{
+    const kycArr = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`);
+    if(kycArr&&kycArr.length) kyc = kycArr[0];
+    const bankArr = await sb(`bank_details?user_id=eq.${currentUser.id}&select=*`);
+    if(bankArr&&bankArr.length) bank = bankArr[0];
+  }catch(e){}
+
+  openModal(`
+  <h3>Profile & KYC details</h3>
+  <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:#065F46">
+    <i class="ti ti-shield-check"></i> <strong>Your information is safe.</strong> KYC details are collected solely in compliance with Nigerian financial regulations (SCUML, NFIU) and are never shared with third parties. See our <a href="/privacy" target="_blank" style="color:#065F46">Privacy Policy</a>.
+  </div>
+
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Bank details (required for withdrawals)</div>
+  <div class="field"><label>Bank name</label><input id="kyc-bank" placeholder="e.g. FCMB, GTBank, Zenith" value="${bank.bank_name||''}"></div>
+  <div class="field"><label>Account number</label><input id="kyc-anum" type="tel" maxlength="10" placeholder="10-digit account number" value="${bank.account_number||''}"></div>
+  <div class="field"><label>Account name</label><input id="kyc-aname" placeholder="Name on your bank account" value="${bank.account_name||''}"></div>
+
+  <hr class="divider">
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">KYC information (required for withdrawals)</div>
+  <div class="field"><label>Date of birth</label><input id="kyc-dob" type="date" value="${kyc.date_of_birth||''}"></div>
+  <div class="field"><label>Home address</label><input id="kyc-address" placeholder="Your residential address" value="${kyc.home_address||''}"></div>
+  <div class="field"><label>BVN (Bank Verification Number)</label><input id="kyc-bvn" type="tel" maxlength="11" placeholder="11-digit BVN" value="${kyc.bvn||''}"></div>
+  <div class="field"><label>NIN (National Identification Number)</label><input id="kyc-nin" type="tel" maxlength="11" placeholder="11-digit NIN" value="${kyc.nin||''}"></div>
+  <div class="field"><label>Government ID type</label>
+    <select id="kyc-idtype" style="width:100%;padding:10px;border:1.5px solid #e5e5e2;border-radius:8px;font-size:14px">
+      <option value="">Select ID type</option>
+      ${['National ID Card','Voters Card','International Passport','Drivers Licence'].map(t=>`<option value="${t}" ${kyc.id_type===t?'selected':''}>${t}</option>`).join('')}
+    </select>
+  </div>
+  <div class="field"><label>Government ID number</label><input id="kyc-idnum" placeholder="ID number" value="${kyc.id_number||''}"></div>
+
+  <hr class="divider">
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Optional</div>
+  <div class="field"><label>Upload ID document <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="kyc-doc" type="file" accept="image/*,.pdf"></div>
+
+  <div class="error" id="kyc-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="kyc-btn" onclick="saveKyc()"><i class="ti ti-device-floppy"></i> Save details</button>
+  </div>`);
+}
+
+async function saveKyc(){
+  const btn = document.getElementById('kyc-btn');
+  const err = document.getElementById('kyc-err');
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+
+  try{
+    const bankName = document.getElementById('kyc-bank').value.trim();
+    const accountNumber = document.getElementById('kyc-anum').value.trim();
+    const accountName = document.getElementById('kyc-aname').value.trim();
+    const dateOfBirth = document.getElementById('kyc-dob').value;
+    const homeAddress = document.getElementById('kyc-address').value.trim();
+    const bvn = document.getElementById('kyc-bvn').value.trim();
+    const nin = document.getElementById('kyc-nin').value.trim();
+    const idType = document.getElementById('kyc-idtype').value;
+    const idNumber = document.getElementById('kyc-idnum').value.trim();
+
+    // Save bank details if provided
+    if(bankName||accountNumber||accountName){
+      const existing = await sb(`bank_details?user_id=eq.${currentUser.id}&select=id`);
+      if(existing&&existing.length){
+        await sb(`bank_details?user_id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({bank_name:bankName,account_number:accountNumber,account_name:accountName})});
+      } else {
+        await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:currentUser.id,bank_name:bankName,account_number:accountNumber,account_name:accountName})});
+      }
+    }
+
+    // Save KYC details
+    const kycData = {user_id:currentUser.id,date_of_birth:dateOfBirth||null,home_address:homeAddress||null,bvn:bvn||null,nin:nin||null,id_type:idType||null,id_number:idNumber||null};
+    const existingKyc = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=id`);
+    if(existingKyc&&existingKyc.length){
+      await sb(`kyc_details?user_id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify(kycData)});
+    } else {
+      await sb('kyc_details',{method:'POST',body:JSON.stringify(kycData)});
+    }
+
+    closeModal();
+    toast('<i class="ti ti-check"></i> Profile details saved!');
+    await renderContributor();
+  }catch(e){
+    err.textContent='Error saving: '+e.message;
+    btn.innerHTML='<i class="ti ti-device-floppy"></i> Save details';
+    btn.disabled=false;
+  }
+}
+
+// ─── ANNIVERSARY & SAVINGS GOAL NOTIFICATIONS ─────────────
+
+async function checkMilestones(totalSavings){
+  try{
+    const joinDate = new Date(currentUser.created_at);
+    const now = new Date();
+    const monthsElapsed = (now.getFullYear()-joinDate.getFullYear())*12+(now.getMonth()-joinDate.getMonth());
+
+    // Anniversary check — every 6 months
+    const anniversaryMonths = [6,12,18,24,30,36,42,48,54,60];
+    for(const m of anniversaryMonths){
+      if(monthsElapsed >= m){
+        const key = `fundova_anniv_${currentUser.id}_${m}`;
+        if(!localStorage.getItem(key)){
+          localStorage.setItem(key,'1');
+          const years = m/12;
+          const label = m < 12 ? `${m} months` : years === 1 ? '1 year' : `${years} years`;
+          await addNotification(currentUser.id,`🎉 Happy ${label} anniversary with Fundova! You have saved ${fmt(totalSavings)} since joining. Thank you for being part of our community!`);
+          notify({
+            type:'broadcast',
+            to:currentUser.email,
+            name:currentUser.name,
+            subject:`Happy ${label} anniversary with Fundova! 🎉`,
+            body:`Congratulations on ${label} of saving with Fundova!
+
+You have saved ${fmt(totalSavings)} since joining. That is something to be proud of.
+
+Keep saving, keep growing. We are honoured to be part of your financial journey.
+
+Helping you build wealth, one smart decision at a time.
+
+Fundova Limited`
+          }).catch(()=>{});
+        }
+      }
+    }
+
+    // Savings goal milestone check
+    if(currentUser.savings_goal && totalSavings > 0){
+      const pct = (totalSavings / currentUser.savings_goal) * 100;
+      const milestones = [{pct:25,label:'25%',msg:'You are a quarter of the way to your savings goal!'},{pct:50,label:'50%',msg:'Halfway there! Keep going!'},{pct:75,label:'75%',msg:'Almost there — you are 75% of the way to your goal!'},{pct:100,label:'100%',msg:'Congratulations! You have reached your savings goal! 🎉'}];
+      for(const m of milestones){
+        if(pct >= m.pct){
+          const key = `fundova_goal_${currentUser.id}_${m.label}`;
+          if(!localStorage.getItem(key)){
+            localStorage.setItem(key,'1');
+            await addNotification(currentUser.id,`🎯 ${m.msg} You have saved ${fmt(totalSavings)} of your ${fmt(currentUser.savings_goal)} goal.`);
+          }
+        }
+      }
+    }
+  }catch(e){console.error('Milestone check error:',e);}
+}
+
+// ─── KYC STATUS IN ADMIN ──────────────────────────────────
+
+async function getKycStatus(userId){
+  try{
+    const [kyc,bank] = await Promise.all([
+      sb(`kyc_details?user_id=eq.${userId}&select=*`),
+      sb(`bank_details?user_id=eq.${userId}&select=*`)
+    ]);
+    const k = kyc&&kyc.length?kyc[0]:{};
+    const b = bank&&bank.length?bank[0]:{};
+    const fields = [b.bank_name,k.date_of_birth,k.home_address,k.bvn,k.nin,k.id_type];
+    const done = fields.filter(Boolean).length;
+    return{done,total:6,complete:done===6,k,b};
+  }catch(e){return{done:0,total:6,complete:false};}
+}
+
+async function sendKycNudge(userId, userName){
+  if(!confirm(`Send a KYC reminder notification to ${userName}?`))return;
+  try{
+    await addNotification(userId,'📋 Please complete your KYC details to unlock withdrawals. Go to your dashboard and click "Update profile & KYC".');
+    toast('<i class="ti ti-check"></i> KYC reminder sent to '+userName);
+  }catch(e){alert('Error sending nudge: '+e.message);}
+}
+
+
+async function checkKycBeforeWithdrawal(amount){
+  try{
+    const [kyc,bank]=await Promise.all([
+      sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`),
+      sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
+    ]);
+    const k=kyc&&kyc.length?kyc[0]:{};
+    const b=bank&&bank.length?bank[0]:{};
+    const complete=!!(b.bank_name&&k.date_of_birth&&k.home_address&&k.bvn&&k.nin&&k.id_type);
+    if(!complete){
+      openModal(`
+      <h3>Complete your KYC first</h3>
+      <p style="font-size:13px;color:#666;margin-top:-6px">You need to complete your profile and KYC before requesting a withdrawal.</p>
+      <div style="display:grid;gap:8px;margin:1rem 0">
+        ${[
+          {label:'Bank details',done:!!(b.bank_name)},
+          {label:'Date of birth',done:!!(k.date_of_birth)},
+          {label:'Home address',done:!!(k.home_address)},
+          {label:'BVN',done:!!(k.bvn)},
+          {label:'NIN',done:!!(k.nin)},
+          {label:'Government ID',done:!!(k.id_type)},
+        ].map(f=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:${f.done?'#065F46':'#888'}">
+          <span>${f.done?'✅':'⬜'}</span>${f.label}
+        </div>`).join('')}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="closeModal();openKycForm()"><i class="ti ti-edit"></i> Complete KYC now</button>
+      </div>`);
+      return;
+    }
+    openWithdrawRequest(amount);
+  }catch(e){openWithdrawRequest(amount);}
+}
+
 // Load saved session on startup
 const savedUser=loadSession();
 if(savedUser)currentUser=savedUser;
@@ -4517,6 +4849,8 @@ render();
   <a href="https://wa.me/2348035257262" target="_blank" class="cf-wa"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
   <a href="https://instagram.com/fundova_cooperative" target="_blank" class="cf-ig"><i class="ti ti-brand-instagram"></i> @fundova_cooperative</a>
 </div>
+
+<a href="https://wa.me/2348035257262" target="_blank" style="position:fixed;bottom:24px;right:24px;z-index:999;background:#25D366;color:#fff;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(37,211,102,.4);font-size:26px;text-decoration:none" title="Chat with us on WhatsApp"><i class="ti ti-brand-whatsapp"></i></a>
 
 <script>
 if('serviceWorker' in navigator){
