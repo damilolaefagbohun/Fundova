@@ -1,0 +1,27 @@
+{
+  "name": "Fundova — Save. Invest. Grow.",
+  "short_name": "Fundova",
+  "description": "A registered cooperative savings platform helping Africans build wealth together.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F5F0",
+  "theme_color": "#0D3D2A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "business"],
+  "lang": "en",
+  "scope": "/"
+}
