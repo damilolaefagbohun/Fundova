@@ -858,7 +858,7 @@ function buildContributorsTab(contributors,payments){
     </div>
     ${searchBar}
     <div class="table-wrap" id="contrib-table-wrap"><table id="contrib-table">
-      <tr><th>Name</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
+      <tr><th>Name</th><th>KYC</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
@@ -1013,7 +1013,8 @@ function buildCredentialsTab(contributors){
       <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
     </div></td>
     <td><div style="display:flex;gap:4px"><button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button>
-      <button class="btn btn-sm" title="Send KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"></i></button></div></td>
+      <button class="btn btn-sm" title="Send KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"
+              <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-shield-check"></i></button>></i></button></div></td>
   </tr>`).join('');
   return`<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -1382,8 +1383,8 @@ function openWithdrawRequest(currentTotal){
   openModal(`
   <h3>Request withdrawal</h3>
   <p style="font-size:13px;color:#666">Your current total is <strong>${fmt(currentTotal)}</strong>. You cannot request more than this amount.</p>
-  <div class="field"><label>Amount to withdraw (₦)</label><input id="wr-amt" type="number" min="1" step="0.01" placeholder="e.g. 50000"></div>
-  <div style="font-size:12px;color:#888;margin-top:-6px">Maximum: ${fmt(currentTotal)}</div>
+  <div class="field"><label>Amount to withdraw (₦)</label><input id="wr-amt" type="number" min="5000" step="0.01" placeholder="Minimum ₦5,000"></div>
+  <div style="font-size:12px;color:#888;margin-top:-6px">Minimum: ₦5,000 &nbsp;·&nbsp; Maximum: ${fmt(currentTotal)}</div>
   <div class="field"><label>Note <span style="color:#aaa;font-weight:400">(optional)</span></label><textarea id="wr-note" placeholder="e.g. I need funds for school fees"></textarea></div>
   <div class="error" id="wr-err"></div>
   <div class="modal-footer">
@@ -1404,6 +1405,7 @@ async function saveWithdrawRequest(currentTotal){
   const err=document.getElementById('wr-err');
   const btn=document.getElementById('wr-btn');
   if(!amount||amount<=0){err.textContent='Please enter a valid amount.';return;}
+  if(amount<5000){err.textContent='Minimum withdrawal amount is ₦5,000.';return;}
   if(amount>currentTotal){err.textContent=`Amount cannot exceed your current total of ${fmt(currentTotal)}.`;return;}
   btn.innerHTML='<span class="spinner" style="border-top-color:#856404"></span> Submitting…';btn.disabled=true;
   try{
@@ -3947,7 +3949,7 @@ async function calculateAndCreditCoordinatorBonus(groupId, coordinatorId, payout
     if(coordinatorBonus <= 0)return;
 
     const today = new Date().toISOString().split('T')[0];
-    // Credit to coordinator's savings
+    // Credit to coordinators savings
     await sb('payments',{method:'POST',body:JSON.stringify({
       user_id: coordinatorId,
       amount: coordinatorBonus,
@@ -3976,7 +3978,7 @@ async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle){
   try{
     const today = new Date().toISOString().split('T')[0];
 
-    // Find when this member's contribution was recorded to calculate days held
+    // Find when this members contribution was recorded to calculate days held
     const contributions = await sb(`group_contributions?group_id=eq.${groupId}&member_id=eq.${memberId}&cycle=eq.${cycle}&status=eq.paid&select=*`);
     let daysHeld = 5; // default 5 days if no contribution record
     if(contributions && contributions.length){
@@ -4138,23 +4140,36 @@ async function inviteGroupMember(groupId){
 function renderTermsPage(){
   setHTML(`
   <div style="min-height:100vh;background:#F7F5F0;padding-bottom:4rem">
-    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="background:#0D3D2A;padding:14px 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10">
       <div style="display:flex;align-items:center;gap:8px">
         <img src="/logo.png" style="width:28px;height:28px;border-radius:6px">
         <span style="font-weight:800;color:#fff;font-size:14px">FUNDOVA</span>
       </div>
       <a href="/" style="font-size:13px;color:#C9961A;text-decoration:none">← Back to home</a>
     </div>
-    <div style="max-width:720px;margin:3rem auto;padding:0 1.5rem">
-      <h1 style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:8px">Terms of Service</h1>
-      <p style="font-size:13px;color:#888;margin-bottom:2rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
-      <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1rem 1.25rem;margin-bottom:2rem;font-size:13px;color:#92400E">
-        <strong>Note:</strong> This page is currently being updated. Full terms of service will be published shortly. Please contact us at 08035257262 or hello@fundova.africa for any questions.
-      </div>
-      <div style="background:#fff;border-radius:16px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.06)">
-        <p style="font-size:14px;color:#666;line-height:1.8">By using Fundova's platform and services, you agree to these terms. Fundova Limited and Fundova Multipurpose Cooperative Society Ltd operate under Nigerian law and are registered with the Corporate Affairs Commission (CAC).</p>
-        <p style="font-size:14px;color:#666;line-height:1.8;margin-top:1rem">Full terms of service are currently being drafted and will be published on this page. In the meantime, please reach out to us directly with any questions.</p>
-      </div>
+    <div style="max-width:760px;margin:3rem auto;padding:0 1.5rem">
+      <h1 style="font-size:30px;font-weight:800;color:#0D1F14;margin-bottom:6px">Terms of Service</h1>
+      <p style="font-size:13px;color:#888;margin-bottom:2rem">Effective: July 2026 &nbsp;·&nbsp; Last updated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
+      ${[
+        {title:'1. Introduction', body:'These Terms of Service govern your use of the Fundova platform at www.fundova.africa and your membership of Fundova Multipurpose Cooperative Society Ltd. By registering, you confirm that you have read, understood and agreed to these terms. These terms form a legally binding agreement between you and Fundova Limited and Fundova Multipurpose Cooperative Society Ltd (collectively "Fundova").'},
+        {title:'2. Eligibility', body:'Membership is open to Nigerians aged 18 and above, whether residing in Nigeria or in the diaspora. By applying to join, you confirm that you are at least 18 years old, that the information you provide is accurate and complete, and that you have a valid Nigerian bank account in your name.'},
+        {title:'3. Account Responsibilities', body:'You are responsible for keeping your PIN confidential. Do not share your PIN with anyone, including Fundova staff. Fundova will never ask for your PIN. If you believe your account has been compromised, contact us immediately at 08035257262. You are responsible for all activity on your account. Use of another person identity or false information is a violation of these terms and may result in immediate account termination.'},
+        {title:'4. Savings and Contributions', body:'There is no minimum contribution amount. Contributions can be made at any time by transferring funds to the Fundova cooperative account at FCMB (Account: 2009239208 — Fundova Multipurpose Cooperative Society Ltd). Interest accrues at approximately 10% per annum, calculated every weekday from the date your payment is recorded. Interest rates may be reviewed periodically and members will be notified of any changes. Savings are not a fixed deposit and returns are not guaranteed by any government agency. Fundova operates as a registered cooperative and manages funds responsibly on behalf of its members.'},
+        {title:'5. Withdrawals', body:'Members may request withdrawals at any time from their dashboard. The minimum withdrawal amount is ₦5,000. Withdrawals are processed within 24 hours of approval. Approval is at the discretion of Fundova administration, subject to liquidity availability. Partial withdrawals are permitted — you may withdraw a portion of your savings and leave the remainder to continue earning interest. KYC verification and valid bank details on file are required before any withdrawal can be processed.'},
+        {title:'6. KYC Requirements', body:'In compliance with Nigerian financial regulations including SCUML and NFIU requirements, members are required to complete KYC verification before withdrawals can be processed. Required KYC fields include: date of birth, home address, BVN, NIN and government ID type and number. KYC information is used solely for identity verification and regulatory compliance and is never shared with third parties. When KYC details are updated, the previous version is retained for audit purposes and verification status resets pending admin review.'},
+        {title:'7. Investments', body:'From time to time, Fundova may offer group investment opportunities where members pool funds to purchase real assets. Participation in investments is voluntary. Investment income is distributed monthly based on unit ownership. If an investment goal is not reached, all contributions are refunded to participants. Members may request a refund of their investment at any time, subject to admin review. Investment participation does not affect your regular savings balance or interest accrual. Investments carry inherent risk and Fundova does not guarantee returns from investment activities.'},
+        {title:'8. Group Savings (Coordinator Feature)', body:'Members may apply to become savings group coordinators. Coordinators are responsible for managing their group members, tracking contributions and initiating payouts. All group funds pass through Fundova account. Coordinators earn a bonus of 50% of the interest generated on group funds during the period held by Fundova. Coordinators are responsible for managing defaults within their groups. Fundova processes payouts on coordinator instruction and is not responsible for disputes between coordinators and group members.'},
+        {title:'9. Referrals', body:'Members earn a ₦500 bonus when someone they refer joins Fundova and makes their first contribution. The referral bonus is credited to the referring members savings balance and begins earning interest immediately. Referral bonuses are subject to admin verification and may be withheld if fraudulent activity is suspected.'},
+        {title:'10. Account Termination', body:'Members who wish to leave Fundova must give 30 days notice by contacting us at fundovamultipurposecooperative@gmail.com or 08035257262. Upon exit, any outstanding savings balance plus accrued interest will be transferred to the members registered bank account within the notice period. Fundova reserves the right to suspend or terminate accounts that violate these terms, engage in fraudulent activity or provide false information. In such cases, funds will be returned minus any applicable charges.'},
+        {title:'11. Liability', body:'Fundova Limited and Fundova Multipurpose Cooperative Society Ltd are committed to the responsible management of member funds. Fundova accepts liability for losses arising from negligence or mismanagement on its part. However, Fundova is not liable for losses arising from circumstances beyond its reasonable control including but not limited to regulatory changes, force majeure events or third party service failures. Members are encouraged to make informed decisions about their savings and investments.'},
+        {title:'12. Dispute Resolution', body:'In the event of a dispute between a member and Fundova, both parties agree to first attempt resolution through direct communication. Contact us at fundovamultipurposecooperative@gmail.com or 08035257262. If a resolution cannot be reached through direct communication, the dispute shall be referred to arbitration in accordance with the Arbitration and Conciliation Act (as amended) of Nigeria. If arbitration fails to resolve the matter, either party may seek resolution through the Nigerian courts. These terms are governed by the laws of the Federal Republic of Nigeria.'},
+        {title:'13. Changes to These Terms', body:'Fundova may update these terms from time to time. When significant changes are made, members will be notified via email and through the platform dashboard. Continued use of Fundova after changes are published constitutes acceptance of the updated terms.'},
+        {title:'14. Contact Us', body:'For any questions about these terms, contact us at:<br>📧 fundovamultipurposecooperative@gmail.com<br>📱 08035257262<br>📸 @fundova_cooperative<br>🌐 www.fundova.africa'},
+      ].map(s=>`<div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 1px 6px rgba(0,0,0,.06);margin-bottom:1rem">
+        <h2 style="font-size:15px;font-weight:700;color:#0D3D2A;margin-bottom:10px">${s.title}</h2>
+        <div style="font-size:13px;color:#555;line-height:1.85">${s.body}</div>
+      </div>`).join('')}
+      <p style="font-size:11px;color:#aaa;text-align:center;margin-top:1rem">© ${new Date().getFullYear()} Fundova Limited. All rights reserved.</p>
     </div>
   </div>`);
 }
@@ -4646,6 +4661,7 @@ async function openKycForm(){
 
   openModal(`
   <h3>Profile & KYC details</h3>
+  <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:12px">Fill in whatever you are comfortable with and save. You can come back and update any field at any time.</p>
   <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:#065F46">
     <i class="ti ti-shield-check"></i> <strong>Your information is safe.</strong> KYC details are collected solely in compliance with Nigerian financial regulations (SCUML, NFIU) and are never shared with third parties. See our <a href="/privacy" target="_blank" style="color:#065F46">Privacy Policy</a>.
   </div>
@@ -4676,7 +4692,7 @@ async function openKycForm(){
   <div class="error" id="kyc-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="kyc-btn" onclick="saveKyc()"><i class="ti ti-device-floppy"></i> Save details</button>
+    <button class="btn btn-primary" id="kyc-btn" onclick="saveKycWithAudit()"><i class="ti ti-device-floppy"></i> Save details</button>
   </div>`);
 }
 
@@ -4837,6 +4853,186 @@ async function checkKycBeforeWithdrawal(amount){
     }
     openWithdrawRequest(amount);
   }catch(e){openWithdrawRequest(amount);}
+}
+
+
+// ─── ADMIN KYC VIEW & VERIFICATION ───────────────────────
+
+async function openContributorKyc(userId, userName){
+  openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:18px;height:18px;margin:0 auto 10px"></div>Loading KYC...</div>`);
+  try{
+    const [kyc, bank, kycLog] = await Promise.all([
+      sb(`kyc_details?user_id=eq.${userId}&select=*`),
+      sb(`bank_details?user_id=eq.${userId}&select=*`),
+      sb(`kyc_audit_log?user_id=eq.${userId}&select=*&order=changed_at.desc&limit=5`)
+    ]);
+    const k = kyc&&kyc.length?kyc[0]:{};
+    const b = bank&&bank.length?bank[0]:{};
+    const logs = kycLog||[];
+
+    const fields = [
+      {label:'Bank name', val:b.bank_name},
+      {label:'Account number', val:b.account_number},
+      {label:'Account name', val:b.account_name},
+      {label:'Date of birth', val:k.date_of_birth},
+      {label:'Home address', val:k.home_address},
+      {label:'BVN', val:k.bvn},
+      {label:'NIN', val:k.nin},
+      {label:'ID type', val:k.id_type},
+      {label:'ID number', val:k.id_number},
+    ];
+
+    const completed = fields.filter(f=>f.val).length;
+    const pct = Math.round((completed/fields.length)*100);
+
+    openModal(`
+    <h3>KYC details — ${userName}</h3>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="flex:1;background:#e5e5e2;border-radius:6px;height:8px;overflow:hidden">
+        <div style="height:100%;background:${pct===100?'#1D9E75':'#C9961A'};width:${pct}%"></div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:${pct===100?'#0F6E56':'#856404'}">${pct}% complete</span>
+      ${k.kyc_verified?'<span class="status-pill pill-approved">Verified</span>':'<span class="status-pill pill-pending">Not verified</span>'}
+    </div>
+
+    <div style="display:grid;gap:6px;margin-bottom:14px">
+      ${fields.map(f=>`<div style="display:flex;justify-content:space-between;padding:8px 12px;background:${f.val?'#F0FDF8':'#FEF2F2'};border-radius:8px;font-size:13px">
+        <span style="color:#888">${f.label}</span>
+        <span style="font-weight:500;color:${f.val?'#0D1F14':'#aaa'}">${f.val||'Not provided'}</span>
+      </div>`).join('')}
+    </div>
+
+    ${logs.length?`
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:8px">Edit history</div>
+      ${logs.map(l=>`<div style="font-size:11px;color:#888;padding:6px 10px;background:#f5f5f3;border-radius:6px;margin-bottom:4px">
+        ${fmtDate(l.changed_at)} — ${l.changed_fields||'Details updated'}
+      </div>`).join('')}
+    </div>`:''}
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Close</button>
+      ${!k.kyc_verified&&pct===100?`<button class="btn btn-primary" onclick="verifyKyc('${userId}','${userName.replace(/'/g,"\'")}')"><i class="ti ti-shield-check"></i> Mark as verified</button>`:''}
+      ${k.kyc_verified?`<button class="btn btn-warn" onclick="unverifyKyc('${userId}')"><i class="ti ti-shield-off"></i> Remove verification</button>`:''}
+    </div>`);
+  }catch(e){
+    openModal(`<div style="color:#A32D2D;padding:1rem">Error loading KYC: ${e.message}</div>`);
+  }
+}
+
+async function verifyKyc(userId, userName){
+  try{
+    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:true})});
+    // Notify contributor
+    const userArr = await sb(`users?id=eq.${userId}&select=name,email`);
+    if(userArr&&userArr.length){
+      await notify({type:'broadcast',to:userArr[0].email,name:userArr[0].name,
+        subject:'Your KYC has been verified — Fundova',
+        body:'Great news! Your KYC details have been verified by our team. Your withdrawals are now fully unlocked. Thank you for completing your profile. Fundova Limited'
+      });
+    }
+    toast('<i class="ti ti-check"></i> KYC verified for '+userName);
+    closeModal();
+    await renderAdmin();
+  }catch(e){alert('Error verifying KYC: '+e.message);}
+}
+
+async function unverifyKyc(userId){
+  if(!confirm('Remove KYC verification? Member will need to be re-verified before withdrawals.'))return;
+  try{
+    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:false})});
+    toast('<i class="ti ti-check"></i> KYC verification removed.');
+    closeModal();
+    await renderAdmin();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+// ─── KYC AUDIT LOG ON SAVE ────────────────────────────────
+
+async function saveKycWithAudit(){
+  const btn = document.getElementById('kyc-btn');
+  const err = document.getElementById('kyc-err');
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+
+  try{
+    const bankName = document.getElementById('kyc-bank').value.trim();
+    const accountNumber = document.getElementById('kyc-anum').value.trim();
+    const accountName = document.getElementById('kyc-aname').value.trim();
+    const dateOfBirth = document.getElementById('kyc-dob').value;
+    const homeAddress = document.getElementById('kyc-address').value.trim();
+    const bvn = document.getElementById('kyc-bvn').value.trim();
+    const nin = document.getElementById('kyc-nin').value.trim();
+    const idType = document.getElementById('kyc-idtype').value;
+    const idNumber = document.getElementById('kyc-idnum').value.trim();
+
+    // Get existing KYC to detect changes
+    const existingKyc = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`);
+    const existing = existingKyc&&existingKyc.length?existingKyc[0]:{};
+
+    // Detect which fields changed
+    const changedFields = [];
+    if(dateOfBirth && dateOfBirth !== existing.date_of_birth) changedFields.push('Date of birth');
+    if(homeAddress && homeAddress !== existing.home_address) changedFields.push('Home address');
+    if(bvn && bvn !== existing.bvn) changedFields.push('BVN');
+    if(nin && nin !== existing.nin) changedFields.push('NIN');
+    if(idType && idType !== existing.id_type) changedFields.push('ID type');
+    if(idNumber && idNumber !== existing.id_number) changedFields.push('ID number');
+
+    // Save bank details
+    if(bankName||accountNumber||accountName){
+      const existingBank = await sb(`bank_details?user_id=eq.${currentUser.id}&select=id`);
+      if(existingBank&&existingBank.length){
+        await sb(`bank_details?user_id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({bank_name:bankName,account_number:accountNumber,account_name:accountName})});
+      } else {
+        await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:currentUser.id,bank_name:bankName,account_number:accountNumber,account_name:accountName})});
+      }
+    }
+
+    // Save KYC — reset verification if fields changed
+    const kycData = {
+      user_id:currentUser.id,
+      date_of_birth:dateOfBirth||existing.date_of_birth||null,
+      home_address:homeAddress||existing.home_address||null,
+      bvn:bvn||existing.bvn||null,
+      nin:nin||existing.nin||null,
+      id_type:idType||existing.id_type||null,
+      id_number:idNumber||existing.id_number||null,
+      kyc_verified: changedFields.length>0 ? false : (existing.kyc_verified||false),
+      updated_at: new Date().toISOString()
+    };
+
+    if(existingKyc&&existingKyc.length){
+      await sb(`kyc_details?user_id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify(kycData)});
+    } else {
+      await sb('kyc_details',{method:'POST',body:JSON.stringify(kycData)});
+    }
+
+    // Log changes for audit trail
+    if(changedFields.length>0){
+      await sb('kyc_audit_log',{method:'POST',body:JSON.stringify({
+        user_id:currentUser.id,
+        changed_fields:changedFields.join(', '),
+        changed_at:new Date().toISOString()
+      })}).catch(()=>{});
+      // Notify admin of KYC update
+      notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',
+        name:'KYC Update',
+        applicant_email:currentUser.email,
+        applicant_name:currentUser.name
+      }).catch(()=>{});
+    }
+
+    closeModal();
+    toast(changedFields.length>0?
+      '<i class="ti ti-check"></i> KYC updated. Admin will re-verify your details.':
+      '<i class="ti ti-check"></i> Profile details saved!'
+    );
+    await renderContributor();
+  }catch(e){
+    err.textContent='Error saving: '+e.message;
+    btn.innerHTML='<i class="ti ti-device-floppy"></i> Save details';
+    btn.disabled=false;
+  }
 }
 
 // Load saved session on startup
