@@ -725,16 +725,16 @@ async function submitSignup(){
   if(privacyCheck&&!privacyCheck.checked){err.textContent='Please agree to the Privacy Policy to continue.';return;}
   btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
   try{
-    const existing=await sb('users?email=eq.'+window._sEmail+'&select=id');
-    if(existing&&existing.length){err.textContent='An account with this email already exists.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;return;}
     await sb('signup_requests',{method:'POST',body:JSON.stringify({
       name:window._sName,email:window._sEmail,phone:window._sPhone,
       whatsapp:window._sWhatsapp,referred_by,status:'pending'
     })});
-    // Notify admin of new application
     notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:window._sName,applicant_email:window._sEmail}).catch(()=>{});
-    closeModal();
-    toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
+    btn.innerHTML='<i class="ti ti-check"></i> Submitted!';
+    setTimeout(()=>{
+      closeModal();
+      toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
+    },800);
   }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
 }
 
@@ -928,7 +928,7 @@ function buildSignupsTab(signups){
   const rows=signups.map(s=>{
     const pill=s.status==='pending'?`<span class="status-pill pill-pending">Pending</span>`:s.status==='approved'?`<span class="status-pill pill-approved">Approved</span>`:`<span class="status-pill pill-rejected">Rejected</span>`;
     const mismatchFlag=s.name_mismatch?`<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:4px;margin-left:6px"><i class="ti ti-alert-triangle"></i> Name mismatch</span>`:'';
-    const actions=!isViewOnly()&&s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${s.bank_name.replace(/'/g,"\\'")}','${s.account_name.replace(/'/g,"\\'")}','${s.account_number}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
+    const actions=!isViewOnly()&&s.status==='pending'?`<button class="btn btn-sm btn-primary" onclick="openApproveSignup('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.email}','${(s.bank_name||'').replace(/'/g,"\\'")}','${(s.account_name||'').replace(/'/g,"\\'")}','${s.account_number||''}','${s.phone||''}','${s.whatsapp||''}')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="rejectSignup('${s.id}')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">&mdash;</span>`;
     return`<tr>
       <td><div style="font-weight:500">${s.name}${mismatchFlag}</div><div style="font-size:11px;color:#888">${s.email}</div></td>
@@ -1216,7 +1216,6 @@ async function renderContributor(){
         </div>
       </div>
     </div>
-    <div id="profile-completion-bar"></div>
     ${payments.length?`
     <div class="accrued-box">
       <div class="accrued-label">Current total value</div>
@@ -1228,35 +1227,35 @@ async function renderContributor(){
       </div>
     </div>
 
-    ${currentUser.savings_goal?`
-    <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem;margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div>
-          <div style="font-size:12px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Savings goal</div>
-          <div style="font-size:15px;font-weight:700">${fmt(currentUser.savings_goal)}</div>
-        </div>
-        <button class="btn btn-sm" onclick="openSetSavingsGoal()"><i class="ti ti-pencil"></i> Edit</button>
-      </div>
-      <div style="background:#f5f5f3;border-radius:8px;height:10px;overflow:hidden;margin-bottom:6px">
-        <div style="height:100%;border-radius:8px;background:${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))>=100?'#1D9E75':'#1D9E75'};width:${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}%;transition:width .5s"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:#0F6E56;font-weight:600">${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}% reached</span>
-        <span style="color:#888">${fmt(Math.max(0,currentUser.savings_goal-currentTotal))} remaining</span>
-      </div>
-      ${Math.round((currentTotal/currentUser.savings_goal)*100)>=100?'<div style="background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:13px;color:#0F6E56;font-weight:500;text-align:center"><i class="ti ti-trophy"></i> Congratulations! You have reached your savings goal!</div>':''}
-    </div>`:`
-    <div style="background:#f5f5f3;border-radius:14px;padding:1.25rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
+    ${!currentUser.savings_goal?`
+    <div style="background:#f5f5f3;border-radius:14px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:14px;font-weight:500;margin-bottom:2px">Set a savings goal</div>
         <div style="font-size:12px;color:#888">Track your progress toward a target amount</div>
       </div>
       <button class="btn btn-sm btn-primary" onclick="openSetSavingsGoal()"><i class="ti ti-target"></i> Set goal</button>
-    </div>`}
+    </div>`:''}
     ${hasPending?`<div class="withdraw-banner"><i class="ti ti-clock" style="color:#856404;font-size:20px"></i><div><strong>Withdrawal request pending</strong><br><span style="color:#856404">Your request is being reviewed by the admin.</span></div></div>`:`
     <div style="margin-bottom:1rem;display:flex;justify-content:flex-end">
-      <button class="btn btn-warn" onclick="checkKycBeforeWithdrawal(${currentTotal})"><i class="ti ti-cash"></i> Request withdrawal</button>
-    </div>`}
+      <button class="btn btn-warn" onclick=""><i class="ti ti-cash"></i> Request withdrawal</button>
+    </div>
+    ${currentUser.savings_goal?`
+    <div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:1rem 1.25rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:#1a1a1a"><i class="ti ti-target" style="color:#1D9E75"></i> Savings goal</div>
+        <span style="font-size:12px;font-weight:600;color:${Math.round((currentTotal/currentUser.savings_goal)*100)>=100?'#0F6E56':'#C9961A'}">${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}%</span>
+      </div>
+      <div style="background:#e5e5e2;border-radius:6px;height:8px;overflow:hidden;margin-bottom:8px">
+        <div style="height:100%;background:${Math.round((currentTotal/currentUser.savings_goal)*100)>=100?'#1D9E75':'#C9961A'};width:${Math.min(100,Math.round((currentTotal/currentUser.savings_goal)*100))}%;transition:width .5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#888">
+        <span>${fmt(currentTotal)} saved</span>
+        <span>Target: ${fmt(currentUser.savings_goal)}</span>
+      </div>
+      ${Math.round((currentTotal/currentUser.savings_goal)*100)>=100?`<div style="background:#D1FAE5;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#065F46;text-align:center">🎉 Congratulations! You have reached your savings goal!</div>`:`<div style="font-size:11px;color:#888;margin-top:6px">${fmt(Math.max(0,currentUser.savings_goal-currentTotal))} remaining to reach your goal</div>`}
+    </div>`:''}
+    `}
+    <div id="profile-completion-bar"></div>
     <div class="card">
       <h3>Your payment history</h3>
       <div class="table-wrap"><table>
@@ -4686,6 +4685,25 @@ async function openKycForm(){
   <div class="field"><label>Government ID number</label><input id="kyc-idnum" placeholder="ID number" value="${kyc.id_number||''}"></div>
 
   <hr class="divider">
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Next of kin</div>
+  <p style="font-size:12px;color:#888;margin-bottom:12px;margin-top:-6px">In case of emergency. Not required for withdrawals.</p>
+  <div class="field"><label>Full name</label><input id="kyc-nok-name" placeholder="Next of kin full name" value="${kyc.nok_name||''}"></div>
+  <div class="field"><label>Relationship</label>
+    <select id="kyc-nok-rel" style="width:100%;padding:10px;border:1.5px solid #e5e5e2;border-radius:8px;font-size:14px">
+      <option value="">Select relationship</option>
+      ${['Spouse','Parent','Sibling','Child','Friend','Other'].map(r=>`<option value="${r}" ${kyc.nok_relationship===r?'selected':''}>${r}</option>`).join('')}
+    </select>
+  </div>
+  <div class="field"><label>Phone number</label><input id="kyc-nok-phone" type="tel" placeholder="e.g. 08012345678" value="${kyc.nok_phone||''}"></div>
+  <div class="field"><label>WhatsApp number <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="kyc-nok-whatsapp" type="tel" placeholder="e.g. 08012345678" value="${kyc.nok_whatsapp||''}"></div>
+  <div class="field"><label>Email address <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="kyc-nok-email" type="email" placeholder="nextofkin@email.com" value="${kyc.nok_email||''}"></div>
+  <div class="field" style="margin-bottom:8px">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#666;cursor:pointer">
+      <input type="checkbox" id="kyc-nok-mailinglist" style="margin-top:2px;flex-shrink:0" ${kyc.nok_mailing_list?'checked':''}>
+      <span>Add my next of kin to the Fundova mailing list to receive financial education and updates from Fundova Learn.</span>
+    </label>
+  </div>
+  <hr class="divider">
   <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Optional</div>
   <div class="field"><label>Upload ID document <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="kyc-doc" type="file" accept="image/*,.pdf"></div>
 
@@ -4711,6 +4729,12 @@ async function saveKyc(){
     const nin = document.getElementById('kyc-nin').value.trim();
     const idType = document.getElementById('kyc-idtype').value;
     const idNumber = document.getElementById('kyc-idnum').value.trim();
+    const nokName = document.getElementById('kyc-nok-name')?.value?.trim()||'';
+    const nokRel = document.getElementById('kyc-nok-rel')?.value||'';
+    const nokPhone = document.getElementById('kyc-nok-phone')?.value?.trim()||'';
+    const nokWhatsapp = document.getElementById('kyc-nok-whatsapp')?.value?.trim()||'';
+    const nokEmail = document.getElementById('kyc-nok-email')?.value?.trim()||'';
+    const nokMailingList = document.getElementById('kyc-nok-mailinglist')?.checked||false;
 
     // Save bank details if provided
     if(bankName||accountNumber||accountName){
@@ -4723,7 +4747,7 @@ async function saveKyc(){
     }
 
     // Save KYC details
-    const kycData = {user_id:currentUser.id,date_of_birth:dateOfBirth||null,home_address:homeAddress||null,bvn:bvn||null,nin:nin||null,id_type:idType||null,id_number:idNumber||null};
+    const kycData = {user_id:currentUser.id,date_of_birth:dateOfBirth||null,home_address:homeAddress||null,bvn:bvn||null,nin:nin||null,id_type:idType||null,id_number:idNumber||null,nok_name:nokName||null,nok_relationship:nokRel||null,nok_phone:nokPhone||null,nok_whatsapp:nokWhatsapp||null,nok_email:nokEmail||null,nok_mailing_list:nokMailingList};
     const existingKyc = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=id`);
     if(existingKyc&&existingKyc.length){
       await sb(`kyc_details?user_id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify(kycData)});
@@ -4823,8 +4847,8 @@ async function sendKycNudge(userId, userName){
 async function checkKycBeforeWithdrawal(amount){
   try{
     const [kyc,bank]=await Promise.all([
-      sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`),
-      sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
+      sb('kyc_details?user_id=eq.'+currentUser.id+'&select=*'),
+      sb('bank_details?user_id=eq.'+currentUser.id+'&select=*')
     ]);
     const k=kyc&&kyc.length?kyc[0]:{};
     const b=bank&&bank.length?bank[0]:{};
@@ -4964,6 +4988,12 @@ async function saveKycWithAudit(){
     const nin = document.getElementById('kyc-nin').value.trim();
     const idType = document.getElementById('kyc-idtype').value;
     const idNumber = document.getElementById('kyc-idnum').value.trim();
+    const nokName = document.getElementById('kyc-nok-name')?.value?.trim()||'';
+    const nokRel = document.getElementById('kyc-nok-rel')?.value||'';
+    const nokPhone = document.getElementById('kyc-nok-phone')?.value?.trim()||'';
+    const nokWhatsapp = document.getElementById('kyc-nok-whatsapp')?.value?.trim()||'';
+    const nokEmail = document.getElementById('kyc-nok-email')?.value?.trim()||'';
+    const nokMailingList = document.getElementById('kyc-nok-mailinglist')?.checked||false;
 
     // Get existing KYC to detect changes
     const existingKyc = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`);
@@ -5014,7 +5044,11 @@ async function saveKycWithAudit(){
         changed_fields:changedFields.join(', '),
         changed_at:new Date().toISOString()
       })}).catch(()=>{});
-      // Notify admin of KYC update
+      // Send welcome email to next of kin if opted in
+    if(nokMailingList && nokEmail){
+      notify({type:'nok_welcome',to:nokEmail,name:nokName,member_name:currentUser.name}).catch(()=>{});
+    }
+    // Notify admin of KYC update
       notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',
         name:'KYC Update',
         applicant_email:currentUser.email,
