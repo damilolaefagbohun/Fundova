@@ -761,15 +761,19 @@ async function renderAdmin(){
   },25*60*1000);
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [contributors,payments,allPayments,requests,signups,investments,deals]=await Promise.all([
+    const [contributors,payments,allPayments,requests,signups,investments,deals,kycAll]=await Promise.all([
       sb('users?role=eq.contributor&select=*&order=created_at.asc'),
       sb('payments?withdrawn=eq.false&select=*'),
       sb('payments?select=*&order=date.asc'),
       sb('withdrawal_requests?select=*&order=created_at.desc'),
       sb('signup_requests?select=*&order=created_at.desc'),
       sb('investments?select=*&order=created_at.desc'),
-      sb('deals?select=*&order=created_at.desc')
+      sb('deals?select=*&order=created_at.desc'),
+      sb('kyc_details?select=user_id,kyc_verified')
     ]);
+    // Build KYC verified lookup map
+    const kycMap={};
+    (kycAll||[]).forEach(k=>{ kycMap[k.user_id]=k.kyc_verified; });
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
     const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments):
       adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
@@ -809,11 +813,11 @@ async function renderAdmin(){
   const sidebarTab = document.createElement('button');
   sidebarTab.id = 'sidebar-toggle-tab';
   sidebarTab.title = 'Toggle sidebar';
-  sidebarTab.style.cssText = 'position:absolute;right:-14px;top:18px;z-index:101;background:#0D3D2A;border:1px solid rgba(255,255,255,.15);border-left:none;border-radius:0 8px 8px 0;width:14px;height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
-  sidebarTab.innerHTML = '<i class="ti ti-chevron-left" id="sidebar-tab-icon" style="font-size:10px;color:rgba(255,255,255,.6)"></i>';
+  sidebarTab.style.cssText = 'position:absolute;right:-16px;top:18px;z-index:101;background:#C9961A;border:none;border-radius:0 8px 8px 0;width:16px;height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:2px 0 6px rgba(0,0,0,.2)';
+  sidebarTab.innerHTML = '<i class="ti ti-chevron-left" id="sidebar-tab-icon" style="font-size:11px;color:#0D3D2A;font-weight:700"></i>';
   sidebarTab.addEventListener('click', toggleAdminSidebar);
-  sidebarTab.addEventListener('mouseover', () => sidebarTab.style.background='#1a5a3a');
-  sidebarTab.addEventListener('mouseout', () => sidebarTab.style.background='#0D3D2A');
+  sidebarTab.addEventListener('mouseover', () => sidebarTab.style.background='#b8871a');
+  sidebarTab.addEventListener('mouseout', () => sidebarTab.style.background='#C9961A');
   sidebar.appendChild(sidebarTab);
 
   const hr2 = new Date().getHours();
@@ -831,7 +835,7 @@ async function renderAdmin(){
       <i class="ti ti-speakerphone" style="color:#C9961A;font-size:22px;display:block;margin-bottom:6px"></i>
       <div style="font-size:11px;color:#fff;font-weight:500;margin-bottom:4px">Send an announcement</div>
       <div style="font-size:10px;color:#aaa;margin-bottom:8px">Reach all contributors</div>
-      <button onclick="openBroadcast()" style="width:100%;background:#C9961A;border:none;color:#0D1F14;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">Create announcement</button>
+      <button onclick="openBroadcastEmail()" style="width:100%;background:#C9961A;border:none;color:#0D1F14;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">Create announcement</button>
     </div>
     <div style="border-top:1px solid rgba(255,255,255,.1);padding:10px 1.25rem;display:flex;align-items:center;gap:8px">
       <div style="width:30px;height:30px;border-radius:50%;background:#C9961A;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0D3D2A;flex-shrink:0">A</div>
@@ -867,6 +871,7 @@ async function renderAdmin(){
     }
     item.innerHTML += `<i class="ti ${n.icon}" style="font-size:18px;width:20px;flex-shrink:0"></i><span class="sidebar-label" style="white-space:nowrap">${n.label}${n.badge?`<span style="background:#A32D2D;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:6px">${n.badge}</span>`:''}
     </span>`;
+    item.title = n.label;  // Always show tooltip on hover
     item.addEventListener('click', () => { setAdminTab(n.tab); renderAdmin(); });
     item.addEventListener('mouseover', () => { if(!isActive) item.style.background='rgba(255,255,255,.06)'; });
     item.addEventListener('mouseout', () => { if(!isActive) item.style.background=''; });
@@ -1033,7 +1038,10 @@ async function renderAdmin(){
       return `<tr>
         <td><div style="display:flex;align-items:center;gap:8px"><div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${ini}</div><div><div style="font-size:13px;font-weight:500;color:#0D1F14">${c.name}</div><div style="font-size:11px;color:#aaa">${c.email}</div></div></div></td>
         <td><span class="status-pill ${cP.length?'pill-approved':'pill-pending'}">${cP.length?'Active':'No payments'}</span></td>
-        <td><i class="ti ti-shield-check" style="color:#1D9E75;font-size:16px"></i></td>
+        <td>${kycMap[c.id]
+          ? '<span title="KYC Verified" style="display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield-check\" style=\"font-size:12px\"></i> Verified</span>'
+          : '<span title="KYC Not Verified" style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#856404;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield\" style=\"font-size:12px\"></i> Pending</span>'
+        }</td>
         <td>${gpHTML}</td>
         <td style="font-weight:600;color:#0D1F14">${fmt(tot)}</td>
         <td style="font-size:12px;color:#888">${lastP?fmtDate(lastP.date):'Never'}</td>
@@ -1134,7 +1142,7 @@ function buildContributorsTab(contributors,payments){
     </div>
     ${searchBar}
     <div class="table-wrap" id="contrib-table-wrap"><table id="contrib-table">
-      <tr><th>Name</th><th>KYC</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
+      <tr><th>Name</th><th>KYC Status</th><th>Payments</th><th>Principal</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
