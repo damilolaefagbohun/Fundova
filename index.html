@@ -805,6 +805,16 @@ async function renderAdmin(){
   const sidebar = document.createElement('div');
   sidebar.id = 'admin-sidebar';
   sidebar.style.cssText = 'width:220px;background:#0D3D2A;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;z-index:100;transition:width .25s ease';
+  // Always-visible toggle tab on the right edge of sidebar
+  const sidebarTab = document.createElement('button');
+  sidebarTab.id = 'sidebar-toggle-tab';
+  sidebarTab.title = 'Toggle sidebar';
+  sidebarTab.style.cssText = 'position:absolute;right:-14px;top:18px;z-index:101;background:#0D3D2A;border:1px solid rgba(255,255,255,.15);border-left:none;border-radius:0 8px 8px 0;width:14px;height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
+  sidebarTab.innerHTML = '<i class="ti ti-chevron-left" id="sidebar-tab-icon" style="font-size:10px;color:rgba(255,255,255,.6)"></i>';
+  sidebarTab.addEventListener('click', toggleAdminSidebar);
+  sidebarTab.addEventListener('mouseover', () => sidebarTab.style.background='#1a5a3a');
+  sidebarTab.addEventListener('mouseout', () => sidebarTab.style.background='#0D3D2A');
+  sidebar.appendChild(sidebarTab);
 
   const hr2 = new Date().getHours();
   const greeting = hr2<12?'morning':hr2<17?'afternoon':'evening';
@@ -823,10 +833,12 @@ async function renderAdmin(){
       <div style="font-size:10px;color:#aaa;margin-bottom:8px">Reach all contributors</div>
       <button onclick="openBroadcast()" style="width:100%;background:#C9961A;border:none;color:#0D1F14;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">Create announcement</button>
     </div>
-    <div style="padding:12px 1.25rem;border-top:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px">
+    <div style="border-top:1px solid rgba(255,255,255,.1);padding:10px 1.25rem;display:flex;align-items:center;gap:8px">
       <div style="width:30px;height:30px;border-radius:50%;background:#C9961A;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0D3D2A;flex-shrink:0">A</div>
-      <div class="sidebar-label" style="flex:1;overflow:hidden"><div style="font-size:11px;font-weight:600;color:#fff">Admin</div><div style="font-size:10px;color:#aaa">${isSuperAdmin()?'Super Administrator':'Administrator'}</div></div>
-      <button onclick="doLogout()" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;flex-shrink:0"><i class="ti ti-logout" style="font-size:16px"></i></button>
+      <div class="sidebar-label" style="flex:1;overflow:hidden">
+        <div style="font-size:11px;font-weight:600;color:#fff;white-space:nowrap">Admin</div>
+        <div style="font-size:10px;color:#aaa">${isSuperAdmin()?'Super Administrator':'Administrator'}</div>
+      </div>
     </div>`;
 
   // Build nav items
@@ -887,6 +899,7 @@ async function renderAdmin(){
       </div>
       ${!isViewOnly()?'<button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> New</button>':''}
       ${isSuperAdmin()?'<button class="btn btn-sm" onclick="openManageAdmins()" title="Manage admins"><i class="ti ti-shield-lock"></i></button>':''}
+      <button class="btn btn-sm" onclick="doLogout()" title="Sign out" style="color:#A32D2D;border-color:#A32D2D"><i class="ti ti-logout"></i></button>
     </div>`;
   main.appendChild(topBar);
 
@@ -1460,10 +1473,7 @@ async function renderContributor(){
             <div style="font-size:10px;color:#aaa">Member since ${new Date(currentUser.created_at).toLocaleDateString('en-GB',{month:'short',year:'numeric'})}</div>
           </div>
         </div>
-        <button onclick="doLogout()" title="Sign out" style="width:100%;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.75);padding:8px;border-radius:8px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-          <i class="ti ti-logout" style="font-size:15px"></i>
-          <span class="sidebar-label"> Sign out</span>
-        </button>
+
       </div>
     </div>
 
@@ -1485,6 +1495,7 @@ async function renderContributor(){
           </div>
           <button class="btn btn-sm" onclick="openChangePin()"><i class="ti ti-lock"></i></button>
           <button class="btn btn-sm" onclick="openEditProfile()"><i class="ti ti-user-edit"></i></button>
+          <button class="btn btn-sm" onclick="doLogout()" title="Sign out" style="color:#A32D2D;border-color:#A32D2D"><i class="ti ti-logout"></i></button>
         </div>
       </div>
 
@@ -5647,7 +5658,8 @@ function toggleAdminSidebar(){
     if(main) main.style.marginLeft = '56px';
     labels.forEach(l => l.style.display = 'none');
     if(icon) icon.className = 'ti ti-layout-sidebar-left-expand';
-    // Keep toggle button centered and visible
+    const tabIcon = document.getElementById('sidebar-tab-icon');
+    if(tabIcon) tabIcon.className = 'ti ti-chevron-right';
     const toggleBtn = document.getElementById('sidebar-toggle-btn');
     if(toggleBtn) toggleBtn.style.margin = '0 auto';
     // Add tooltips and center icons
@@ -5662,6 +5674,8 @@ function toggleAdminSidebar(){
     if(main) main.style.marginLeft = '220px';
     labels.forEach(l => l.style.display = '');
     if(icon) icon.className = 'ti ti-layout-sidebar-left-collapse';
+    const tabIcon2 = document.getElementById('sidebar-tab-icon');
+    if(tabIcon2) tabIcon2.className = 'ti ti-chevron-left';
     const toggleBtn2 = document.getElementById('sidebar-toggle-btn');
     if(toggleBtn2) toggleBtn2.style.margin = '';
     // Restore normal layout
