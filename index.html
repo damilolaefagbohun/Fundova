@@ -797,303 +797,292 @@ async function renderAdmin(){
     const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
     const currentSavingsOnly=allPayments.filter(p=>!p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
-    setHTML(`
-  <div style="display:flex;min-height:100vh;background:#F7F5F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    // Build admin dashboard using DOM to avoid string escaping issues
+  const adminEl = document.createElement('div');
+  adminEl.style.cssText = 'display:flex;min-height:100vh;background:#F7F5F0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
-    <!-- SIDEBAR -->
-    <div id="admin-sidebar" style="width:220px;background:#0D3D2A;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;z-index:100;transition:width .25s ease">
-      <!-- Logo -->
-      <div style="padding:1.25rem;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px;min-height:64px">
-        <img src="/logo.png" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0">
-        <div class="sidebar-label" style="overflow:hidden">
-          <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap">FUNDOVA</div>
-          <div style="font-size:10px;color:#C9961A;letter-spacing:.05em">Admin</div>
-        </div>
-        <button onclick="toggleAdminSidebar()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:4px;flex-shrink:0" title="Toggle sidebar">
-          <i class="ti ti-layout-sidebar-left-collapse" style="font-size:18px" id="sidebar-toggle-icon"></i>
+  // ── SIDEBAR ──────────────────────────────────────────────
+  const sidebar = document.createElement('div');
+  sidebar.id = 'admin-sidebar';
+  sidebar.style.cssText = 'width:220px;background:#0D3D2A;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;z-index:100;transition:width .25s ease';
+
+  const hr2 = new Date().getHours();
+  const greeting = hr2<12?'morning':hr2<17?'afternoon':'evening';
+  const nowTime = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+  sidebar.innerHTML = `
+    <div style="padding:1.25rem;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px;min-height:64px">
+      <img src="/logo.png" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0">
+      <div class="sidebar-label"><div style="font-size:13px;font-weight:700;color:#fff">FUNDOVA</div><div style="font-size:10px;color:#C9961A;letter-spacing:.05em">Admin</div></div>
+      <button onclick="toggleAdminSidebar()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:4px;flex-shrink:0"><i class="ti ti-layout-sidebar-left-collapse" style="font-size:18px" id="sidebar-toggle-icon"></i></button>
+    </div>
+    <div id="admin-nav" style="flex:1;overflow-y:auto;padding:8px 0"></div>
+    <div class="sidebar-label" style="margin:0 12px 12px;background:rgba(201,150,26,.15);border:1px solid rgba(201,150,26,.3);border-radius:12px;padding:12px;text-align:center">
+      <i class="ti ti-speakerphone" style="color:#C9961A;font-size:22px;display:block;margin-bottom:6px"></i>
+      <div style="font-size:11px;color:#fff;font-weight:500;margin-bottom:4px">Send an announcement</div>
+      <div style="font-size:10px;color:#aaa;margin-bottom:8px">Reach all contributors</div>
+      <button onclick="openBroadcast()" style="width:100%;background:#C9961A;border:none;color:#0D1F14;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">Create announcement</button>
+    </div>
+    <div style="padding:12px 1.25rem;border-top:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px">
+      <div style="width:30px;height:30px;border-radius:50%;background:#C9961A;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0D3D2A;flex-shrink:0">A</div>
+      <div class="sidebar-label" style="flex:1;overflow:hidden"><div style="font-size:11px;font-weight:600;color:#fff">Admin</div><div style="font-size:10px;color:#aaa">${isSuperAdmin()?'Super Administrator':'Administrator'}</div></div>
+      <button onclick="doLogout()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;flex-shrink:0"><i class="ti ti-logout" style="font-size:16px"></i></button>
+    </div>`;
+
+  // Build nav items
+  const navItems = [
+    {icon:'ti-home',label:'Dashboard',tab:'dashboard'},
+    {icon:'ti-users',label:'Contributors',tab:'contributors'},
+    {icon:'ti-credit-card',label:'Transactions',tab:'payments'},
+    {icon:'ti-cash',label:'Withdrawals',tab:'requests'},
+    {icon:'ti-building-bank',label:'Investments',tab:'investments'},
+    {icon:'ti-checks',label:'Approvals',tab:'signups',badge:pendingSignups},
+    {icon:'ti-speakerphone',label:'Communications',tab:'credentials'},
+    {icon:'ti-chart-bar',label:'Analytics',tab:'analytics'},
+    {icon:'ti-users-group',label:'Ajo Groups',tab:'coordinators'},
+    {icon:'ti-settings',label:'Settings',tab:'profile_requests'},
+  ];
+
+  const navEl = sidebar.querySelector('#admin-nav');
+  navItems.forEach(n => {
+    const isActive = adminTab === n.tab;
+    const item = document.createElement('div');
+    item.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:${isActive?'#fff':'rgba(255,255,255,.65)'};background:${isActive?'rgba(255,255,255,.1)':''};font-size:13px;font-weight:500;transition:all .2s;position:relative`;
+    if(isActive){
+      const indicator = document.createElement('div');
+      indicator.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:3px;background:#C9961A;border-radius:0 3px 3px 0';
+      item.appendChild(indicator);
+    }
+    item.innerHTML += `<i class="ti ${n.icon}" style="font-size:18px;width:20px;flex-shrink:0"></i><span class="sidebar-label" style="white-space:nowrap">${n.label}${n.badge?`<span style="background:#A32D2D;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:6px">${n.badge}</span>`:''}
+    </span>`;
+    item.addEventListener('click', () => { setAdminTab(n.tab); renderAdmin(); });
+    item.addEventListener('mouseover', () => { if(!isActive) item.style.background='rgba(255,255,255,.06)'; });
+    item.addEventListener('mouseout', () => { if(!isActive) item.style.background=''; });
+    navEl.appendChild(item);
+  });
+
+  adminEl.appendChild(sidebar);
+
+  // ── MAIN CONTENT ─────────────────────────────────────────
+  const main = document.createElement('div');
+  main.id = 'admin-main';
+  main.style.cssText = 'margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s ease';
+
+  // Top bar
+  const topBar = document.createElement('div');
+  topBar.style.cssText = 'background:#fff;border-bottom:1px solid #e5e5e2;padding:0 1.5rem;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50';
+  topBar.innerHTML = `
+    <div>
+      <div style="font-size:18px;font-weight:700;color:#0D1F14">Good ${greeting}, Admin 👋</div>
+      <div style="font-size:12px;color:#888">Here's what's happening with Fundova today.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:11px;color:#888"><i class="ti ti-circle-filled" style="color:#1D9E75;font-size:8px"></i> Last updated: ${nowTime}</div>
+      <div style="position:relative">
+        <button class="btn btn-sm" onclick="openAdminNotifications()" style="position:relative">
+          <i class="ti ti-bell"></i>
+          <span id="admin-notif-badge" style="position:absolute;top:-4px;right:-4px;background:#A32D2D;color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px"></span>
         </button>
+        <div id="admin-notif-panel" style="display:none;position:absolute;right:0;top:38px;width:340px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:1000;overflow:hidden;max-height:500px;overflow-y:auto;border:1px solid #e5e5e2"></div>
       </div>
+      ${!isViewOnly()?'<button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> New</button>':''}
+      ${isSuperAdmin()?'<button class="btn btn-sm" onclick="openManageAdmins()" title="Manage admins"><i class="ti ti-shield-lock"></i></button>':''}
+    </div>`;
+  main.appendChild(topBar);
 
-      <!-- Nav -->
-      <div style="flex:1;overflow-y:auto;padding:8px 0">
-        \${[
-          {icon:'ti-home',label:'Dashboard',tab:'dashboard'},
-          {icon:'ti-users',label:'Contributors',tab:'contributors'},
-          {icon:'ti-credit-card',label:'Transactions',tab:'payments'},
-          {icon:'ti-cash',label:'Withdrawals',tab:'requests'},
-          {icon:'ti-building-bank',label:'Investments',tab:'investments'},
-          {icon:'ti-checks',label:'Approvals',tab:'signups',badge:pendingSignups},
-          {icon:'ti-speakerphone',label:'Communications',tab:'credentials'},
-          {icon:'ti-chart-bar',label:'Analytics',tab:'analytics'},
-          {icon:'ti-users-group',label:'Ajo Groups',tab:'coordinators'},
-          {icon:'ti-settings',label:'Settings',tab:'profile_requests'},
-        ].map(n=>\`<div onclick="setAdminTab('\${n.tab}');renderAdmin();" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:\${adminTab===n.tab?'#fff':'rgba(255,255,255,.65)'};background:\${adminTab===n.tab?'rgba(255,255,255,.1)':''};font-size:13px;font-weight:500;transition:all .2s;position:relative" onmouseover="if(adminTab!=='\${n.tab}')this.style.background='rgba(255,255,255,.06)'" onmouseout="if(adminTab!=='\${n.tab}')this.style.background=''">
-          \${adminTab===n.tab?\`<div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#C9961A;border-radius:0 3px 3px 0"></div>\`:''}
-          <i class="ti \${n.icon}" style="font-size:18px;width:20px;flex-shrink:0"></i>
-          <span class="sidebar-label" style="white-space:nowrap">\${n.label}\${n.badge?\`<span style="background:#A32D2D;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:6px">\${n.badge}</span>\`:''}
-          </span>
-        </div>\`).join('')}
-      </div>
+  // Page content
+  const pageContent = document.createElement('div');
+  pageContent.style.cssText = 'padding:1.5rem;flex:1';
 
-      <!-- Announcement CTA -->
-      <div class="sidebar-label" style="margin:0 12px 12px;background:rgba(201,150,26,.15);border:1px solid rgba(201,150,26,.3);border-radius:12px;padding:12px;text-align:center">
-        <i class="ti ti-speakerphone" style="color:#C9961A;font-size:22px;display:block;margin-bottom:6px"></i>
-        <div style="font-size:11px;color:#fff;font-weight:500;margin-bottom:4px">Send an announcement</div>
-        <div style="font-size:10px;color:#aaa;margin-bottom:8px">Reach all contributors</div>
-        <button onclick="openBroadcast()" style="width:100%;background:#C9961A;border:none;color:#0D1F14;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">Create announcement</button>
-      </div>
+  if(adminTab === 'dashboard'){
+    // ── STAT CARDS ──
+    const statsRow = document.createElement('div');
+    statsRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem;margin-bottom:1.5rem';
 
-      <!-- Admin info -->
-      <div style="padding:12px 1.25rem;border-top:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px">
-        <div style="width:30px;height:30px;border-radius:50%;background:#C9961A;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0D3D2A;flex-shrink:0">A</div>
-        <div class="sidebar-label" style="flex:1;overflow:hidden">
-          <div style="font-size:11px;font-weight:600;color:#fff;white-space:nowrap">Admin</div>
-          <div style="font-size:10px;color:#aaa">\${isSuperAdmin()?'Super Administrator':'Administrator'}</div>
+    const activeCount = (contributors||[]).filter(c=>payments.some(p=>p.user_id===c.id)).length;
+    const newThisMonth = (contributors||[]).filter(c=>{const d=new Date(c.created_at);const n=new Date();return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).length;
+    const pendingWdCount = (requests||[]).filter(r=>r.status==='pending').length;
+    const coordCount = (contributors||[]).filter(c=>c.is_coordinator).length;
+    const todayStr = new Date().toDateString();
+    const todayContribs = allPayments.filter(p=>new Date(p.date).toDateString()===todayStr).reduce((a,p)=>a+Number(p.amount),0);
+    const todayWd = (requests||[]).filter(r=>new Date(r.created_at).toDateString()===todayStr&&r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
+    const todayInterest = payments.reduce((a,p)=>a+Number(p.amount)*0.10/261,0);
+    const todayApps = (signups||[]).filter(s=>new Date(s.created_at).toDateString()===todayStr).length;
+
+    statsRow.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Money</div>
+          <div style="width:36px;height:36px;background:#E8F5EE;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-wallet" style="color:#0F6E56;font-size:18px"></i></div>
         </div>
-        <button onclick="doLogout()" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;flex-shrink:0"><i class="ti ti-logout" style="font-size:16px"></i></button>
-      </div>
-    </div>
-
-    <!-- MAIN CONTENT -->
-    <div id="admin-main" style="margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s ease">
-
-      <!-- TOP BAR -->
-      <div style="background:#fff;border-bottom:1px solid #e5e5e2;padding:0 1.5rem;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50">
-        <div>
-          <div style="font-size:18px;font-weight:700;color:#0D1F14">Good \${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, Admin 👋</div>
-          <div style="font-size:12px;color:#888">Here's what's happening with Fundova today.</div>
+        <div style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:2px">${fmt(totalValue)}</div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Current total value</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <div><div style="font-size:10px;color:#aaa">Inflow (Lifetime)</div><div style="font-size:12px;font-weight:600;color:#0F6E56">${fmt(lifetimeInflow)}</div></div>
+          <div><div style="font-size:10px;color:#aaa">Withdrawals</div><div style="font-size:12px;font-weight:600;color:#A32D2D">${fmt(totalWithdrawals)}</div></div>
+          <div><div style="font-size:10px;color:#aaa">Interest</div><div style="font-size:12px;font-weight:600;color:#C9961A">${fmt(totalInterest)}</div></div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:11px;color:#888"><i class="ti ti-circle-filled" style="color:#1D9E75;font-size:8px"></i> Last updated: \${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
-          <div style="position:relative">
-            <button class="btn btn-sm" onclick="openAdminNotifications()" style="position:relative"><i class="ti ti-bell"></i>
-              <span id="admin-notif-badge" style="position:absolute;top:-4px;right:-4px;background:#A32D2D;color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px"></span>
-            </button>
-            <div id="admin-notif-panel" style="display:none;position:absolute;right:0;top:38px;width:340px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:1000;overflow:hidden;max-height:500px;overflow-y:auto;border:1px solid #e5e5e2"></div>
-          </div>
-          \${!isViewOnly()?'<button class="btn btn-primary btn-sm" onclick="openAddContributor()"><i class="ti ti-plus"></i> New</button>':''}
-          \${isSuperAdmin()?'<button class="btn btn-sm" onclick="openManageAdmins()" title="Manage admins"><i class="ti ti-shield-lock"></i></button>':''}
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
+          <a onclick="setAdminTab('analytics');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View financial report →</a>
         </div>
       </div>
-
-      <!-- PAGE CONTENT -->
-      <div style="padding:1.5rem;flex:1">
-
-        \${adminTab==='dashboard'?\`
-
-        <!-- STAT CARDS ROW -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
-
-          <!-- MONEY CARD -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-              <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Money</div>
-              <div style="width:36px;height:36px;background:#E8F5EE;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-wallet" style="color:#0F6E56;font-size:18px"></i></div>
-            </div>
-            <div style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:2px">\${fmt(totalValue)}</div>
-            <div style="font-size:12px;color:#888;margin-bottom:12px">Current total value</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-              <div><div style="font-size:10px;color:#aaa">Inflow (Lifetime)</div><div style="font-size:12px;font-weight:600;color:#0F6E56">\${fmt(lifetimeInflow)}</div></div>
-              <div><div style="font-size:10px;color:#aaa">Withdrawals</div><div style="font-size:12px;font-weight:600;color:#A32D2D">\${fmt(totalWithdrawals)}</div></div>
-              <div><div style="font-size:10px;color:#aaa">Interest Accrued</div><div style="font-size:12px;font-weight:600;color:#C9961A">\${fmt(totalInterest)}</div></div>
-            </div>
-            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
-              <a onclick="setAdminTab('analytics');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View financial report →</a>
-            </div>
-          </div>
-
-          <!-- CONTRIBUTORS CARD -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-              <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Contributors</div>
-              <div style="width:36px;height:36px;background:#EEF2FF;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-users" style="color:#3730A3;font-size:18px"></i></div>
-            </div>
-            <div style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:2px">\${(contributors||[]).length}</div>
-            <div style="font-size:12px;color:#888;margin-bottom:12px">Total contributors</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-              <div><div style="font-size:10px;color:#aaa">Active</div><div style="font-size:12px;font-weight:600;color:#0D1F14">\${(contributors||[]).filter(c=>payments.some(p=>p.user_id===c.id)).length}</div></div>
-              <div><div style="font-size:10px;color:#aaa">New this month</div><div style="font-size:12px;font-weight:600;color:#0F6E56">\${(contributors||[]).filter(c=>{const d=new Date(c.created_at);const n=new Date();return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).length}</div></div>
-              <div><div style="font-size:10px;color:#aaa">Pending KYC</div><div style="font-size:12px;font-weight:600;color:#C9961A">\${pendingSignups}</div></div>
-            </div>
-            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
-              <a onclick="setAdminTab('contributors');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all contributors →</a>
-            </div>
-          </div>
-
-          <!-- OPERATIONS CARD -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-              <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Operations</div>
-              <div style="width:36px;height:36px;background:#FEF3C7;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-shield-check" style="color:#856404;font-size:18px"></i></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              \${[
-                {icon:'ti-cash',label:'Pending withdrawals',val:(requests||[]).filter(r=>r.status==='pending').length,color:'#856404',bg:'#FEF3C7',tab:'requests'},
-                {icon:'ti-user-edit',label:'Profile requests',val:'—',color:'#3730A3',bg:'#EEF2FF',tab:'profile_requests'},
-                {icon:'ti-user-plus',label:'New applications',val:pendingSignups,color:'#0F6E56',bg:'#E8F5EE',tab:'signups'},
-                {icon:'ti-users',label:'Coordinators',val:(contributors||[]).filter(c=>c.is_coordinator).length,color:'#555',bg:'#f5f5f3',tab:'coordinators'},
-              ].map(op=>\`<div onclick="setAdminTab('\${op.tab}');renderAdmin();" style="background:\${op.bg};border-radius:10px;padding:10px;cursor:pointer" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-                <i class="ti \${op.icon}" style="color:\${op.color};font-size:18px;display:block;margin-bottom:4px"></i>
-                <div style="font-size:18px;font-weight:700;color:\${op.color}">\${op.val}</div>
-                <div style="font-size:10px;color:\${op.color};opacity:.8">\${op.label}</div>
-              </div>\`).join('')}
-            </div>
-            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
-              <a onclick="setAdminTab('signups');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all approvals →</a>
-            </div>
-          </div>
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Contributors</div>
+          <div style="width:36px;height:36px;background:#EEF2FF;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-users" style="color:#3730A3;font-size:18px"></i></div>
         </div>
-
-        <!-- CHART + TODAY'S ACTIVITY -->
-        <div style="display:grid;grid-template-columns:1fr 340px;gap:1.25rem;margin-bottom:1.5rem">
-          <!-- Chart -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <div style="font-size:14px;font-weight:600;color:#0D1F14">Total value over time</div>
-            </div>
-            <div style="font-size:24px;font-weight:800;color:#0D1F14;margin-bottom:2px">\${fmt(totalValue)}</div>
-            <div style="font-size:12px;color:#1D9E75;margin-bottom:16px"><i class="ti ti-trending-up"></i> Growing every weekday</div>
-            <canvas id="admin-value-chart" style="width:100%;height:180px"></canvas>
-          </div>
-
-          <!-- Today's activity -->
-          <div style="background:#0D3D2A;border-radius:16px;padding:1.25rem">
-            <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:16px">Today's activity summary</div>
-            \${[
-              {icon:'ti-arrow-up',label:'Contributions',val:fmt(allPayments.filter(p=>{const d=new Date(p.date);const n=new Date();return d.toDateString()===n.toDateString();}).reduce((a,p)=>a+Number(p.amount),0)),color:'#1D9E75'},
-              {icon:'ti-arrow-down',label:'Withdrawals',val:fmt((requests||[]).filter(r=>{const d=new Date(r.created_at);return d.toDateString()===new Date().toDateString()&&r.status==='approved';}).reduce((a,r)=>a+Number(r.amount),0)),color:'#A32D2D'},
-              {icon:'ti-trending-up',label:'Interest credited',val:fmt(payments.reduce((a,p)=>a+Number(p.amount)*0.10/261,0)),color:'#C9961A'},
-              {icon:'ti-user-plus',label:'New applications',val:(signups||[]).filter(s=>{const d=new Date(s.created_at);return d.toDateString()===new Date().toDateString();}).length,color:'#60A5FA'},
-              {icon:'ti-shield-check',label:'KYC verifications',val:'—',color:'#A78BFA'},
-            ].map(a=>\`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">
-                  <i class="ti \${a.icon}" style="color:\${a.color};font-size:14px"></i>
-                </div>
-                <span style="font-size:13px;color:rgba(255,255,255,.75)">\${a.label}</span>
-              </div>
-              <span style="font-size:13px;font-weight:600;color:\${a.color}">\${a.val}</span>
-            </div>\`).join('')}
-            <div style="margin-top:12px">
-              <a onclick="setAdminTab('analytics');renderAdmin();" style="font-size:12px;color:#C9961A;cursor:pointer;font-weight:500">View full report →</a>
-            </div>
-          </div>
+        <div style="font-size:28px;font-weight:800;color:#0D1F14;margin-bottom:2px">${(contributors||[]).length}</div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Total contributors</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <div><div style="font-size:10px;color:#aaa">Active</div><div style="font-size:12px;font-weight:600;color:#0D1F14">${activeCount}</div></div>
+          <div><div style="font-size:10px;color:#aaa">New this month</div><div style="font-size:12px;font-weight:600;color:#0F6E56">${newThisMonth}</div></div>
+          <div><div style="font-size:10px;color:#aaa">Pending KYC</div><div style="font-size:12px;font-weight:600;color:#C9961A">${pendingSignups}</div></div>
         </div>
-
-        <!-- CONTRIBUTORS TABLE -->
-        <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-            <div style="font-size:15px;font-weight:600;color:#0D1F14">All contributors</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="position:relative">
-                <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i>
-                <input id="contrib-search" type="text" placeholder="Search by name, email or phone..." oninput="filterContributors()" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:240px">
-              </div>
-              <span style="font-size:12px;color:#888" id="contrib-count">\${(contributors||[]).length} contributors</span>
-              \${!isViewOnly()?'<button class="btn btn-sm btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>':''}
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table id="contrib-table">
-              <tr style="background:#f9f9f7">
-                <th>Contributor</th><th>Status</th><th>KYC</th><th>Goal progress</th><th>Current total</th><th>Last payment</th><th>Actions</th>
-              </tr>
-              \${(contributors||[]).map(c=>{
-                const cPayments=payments.filter(p=>p.user_id===c.id);
-                const principal=cPayments.reduce((a,p)=>a+Number(p.amount),0);
-                const interest=cPayments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
-                const total=principal+interest;
-                const lastPay=cPayments.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-                const goalPct=c.savings_goal?Math.min(100,Math.round((total/c.savings_goal)*100)):null;
-                const initials=c.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
-                return\`<tr>
-                  <td>
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">\${initials}</div>
-                      <div>
-                        <div style="font-size:13px;font-weight:500;color:#0D1F14">\${c.name}</div>
-                        <div style="font-size:11px;color:#aaa">\${c.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="status-pill \${cPayments.length?'pill-approved':'pill-pending'}">\${cPayments.length?'Active':'No payments'}</span></td>
-                  <td><i class="ti ti-shield-check" style="color:#1D9E75;font-size:16px" title="KYC status"></i></td>
-                  <td>\${goalPct!==null?\`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e5e5e2;border-radius:3px;height:5px;overflow:hidden"><div style="width:\${goalPct}%;height:100%;background:\${goalPct>=100?'#1D9E75':'#C9961A'}"></div></div><span style="font-size:11px;color:#888">\${goalPct}%</span></div>\`:'<span style="color:#ccc;font-size:12px">—</span>'}</td>
-                  <td style="font-weight:600;color:#0D1F14">\${fmt(total)}</td>
-                  <td style="font-size:12px;color:#888">\${lastPay?fmtDate(lastPay.date):'Never'}</td>
-                  <td>
-                    <div style="display:flex;gap:4px">
-                      <button class="btn btn-sm" title="View KYC" data-uid="\${c.id}" data-uname="\${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-eye"></i></button>
-                      <button class="btn btn-sm" title="KYC reminder" data-uid="\${c.id}" data-uname="\${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"></i></button>
-                      \${!isViewOnly()?\`<button class="btn btn-sm btn-edit" onclick="openEditCredentials('\${c.id}','\${c.name.replace(/'/g,"\\\\'")}','\${c.email}')"><i class="ti ti-pencil"></i></button>\`:''}
-                    </div>
-                  </td>
-                </tr>\`;
-              }).join('')}
-            </table>
-          </div>
-          <div style="margin-top:12px;text-align:center">
-            <a onclick="setAdminTab('contributors');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all contributors →</a>
-          </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
+          <a onclick="setAdminTab('contributors');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all contributors →</a>
         </div>
-
-        <!-- BOTTOM ROW: Recent Activity + Withdrawals -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
-          <!-- Recent activity -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-              <div style="font-size:15px;font-weight:600;color:#0D1F14">Recent activity</div>
-              <a onclick="setAdminTab('payments');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all</a>
-            </div>
-            \${allPayments.slice(-5).reverse().map(p=>{
-              const c=(contributors||[]).find(c=>c.id===p.user_id);
-              return\`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f3">
-                <div style="width:32px;height:32px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-arrow-up" style="color:#0F6E56;font-size:14px"></i></div>
-                <div style="flex:1">
-                  <div style="font-size:13px;font-weight:500;color:#0D1F14">\${c?c.name:'Unknown'} made a contribution</div>
-                  <div style="font-size:11px;color:#aaa">\${fmt(p.amount)} · \${fmtDate(p.date)}</div>
-                </div>
-              </div>\`;
-            }).join('')}
-          </div>
-
-          <!-- Recent withdrawals -->
-          <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-              <div style="font-size:15px;font-weight:600;color:#0D1F14">Recent withdrawals</div>
-              <a onclick="setAdminTab('requests');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all</a>
-            </div>
-            \${(requests||[]).slice(0,5).map(r=>{
-              const c=(contributors||[]).find(c=>c.id===r.user_id);
-              const pill=r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':r.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>';
-              const initials=c?c.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase():'?';
-              return\`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f3">
-                <div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">\${initials}</div>
-                <div style="flex:1">
-                  <div style="font-size:13px;font-weight:500;color:#0D1F14">\${c?c.name:'Unknown'}</div>
-                  <div style="font-size:11px;color:#aaa">\${fmt(r.amount)} · \${fmtDate(r.created_at)}</div>
-                </div>
-                \${pill}
-              </div>\`;
-            }).join('')}
-          </div>
-        </div>
-
-        \`:tabContent}
-
       </div>
-
-      <!-- FOOTER -->
-      <div style="background:#fff;border-top:1px solid #e5e5e2;padding:12px 1.5rem;display:flex;align-items:center;justify-content:space-between">
-        <div style="display:flex;align-items:center;gap:6px">
-          <i class="ti ti-shield-check" style="color:#1D9E75;font-size:14px"></i>
-          <span style="font-size:11px;color:#888">Fundova is secure, transparent and trusted.</span>
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em">Operations</div>
+          <div style="width:36px;height:36px;background:#FEF3C7;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-shield-check" style="color:#856404;font-size:18px"></i></div>
         </div>
-        <span style="font-size:11px;color:#aaa">© ${new Date().getFullYear()} Fundova Cooperative. All rights reserved.</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="op-cards"></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
+          <a onclick="setAdminTab('signups');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all approvals →</a>
+        </div>
+      </div>`;
+    pageContent.appendChild(statsRow);
+
+    // Operations cards (built via DOM to avoid quote issues)
+    const opCards = statsRow.querySelector('#op-cards');
+    [
+      {icon:'ti-cash',label:'Pending withdrawals',val:pendingWdCount,color:'#856404',bg:'#FEF3C7',tab:'requests'},
+      {icon:'ti-user-edit',label:'Profile requests',val:'—',color:'#3730A3',bg:'#EEF2FF',tab:'profile_requests'},
+      {icon:'ti-user-plus',label:'New applications',val:pendingSignups,color:'#0F6E56',bg:'#E8F5EE',tab:'signups'},
+      {icon:'ti-users',label:'Coordinators',val:coordCount,color:'#555',bg:'#f5f5f3',tab:'coordinators'},
+    ].forEach(op => {
+      const card = document.createElement('div');
+      card.style.cssText = `background:${op.bg};border-radius:10px;padding:10px;cursor:pointer`;
+      card.innerHTML = `<i class="ti ${op.icon}" style="color:${op.color};font-size:18px;display:block;margin-bottom:4px"></i><div style="font-size:18px;font-weight:700;color:${op.color}">${op.val}</div><div style="font-size:10px;color:${op.color};opacity:.8">${op.label}</div>`;
+      card.addEventListener('click', () => { setAdminTab(op.tab); renderAdmin(); });
+      card.addEventListener('mouseover', () => card.style.opacity='.85');
+      card.addEventListener('mouseout', () => card.style.opacity='1');
+      opCards.appendChild(card);
+    });
+
+    // ── CHART + ACTIVITY ──
+    const chartRow = document.createElement('div');
+    chartRow.style.cssText = 'display:grid;grid-template-columns:1fr 340px;gap:1.25rem;margin-bottom:1.5rem';
+    chartRow.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="font-size:14px;font-weight:600;color:#0D1F14;margin-bottom:4px">Total value over time</div>
+        <div style="font-size:24px;font-weight:800;color:#0D1F14;margin-bottom:2px">${fmt(totalValue)}</div>
+        <div style="font-size:12px;color:#1D9E75;margin-bottom:16px"><i class="ti ti-trending-up"></i> Growing every weekday</div>
+        <canvas id="admin-value-chart" style="width:100%;height:180px"></canvas>
       </div>
-    </div>
-  </div>
-`);
+      <div style="background:#0D3D2A;border-radius:16px;padding:1.25rem">
+        <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:16px">Today's activity</div>
+        <div id="activity-list"></div>
+        <div style="margin-top:12px"><a onclick="setAdminTab('analytics');renderAdmin();" style="font-size:12px;color:#C9961A;cursor:pointer;font-weight:500">View full report →</a></div>
+      </div>`;
+    pageContent.appendChild(chartRow);
+
+    // Activity items via DOM
+    const actList = chartRow.querySelector('#activity-list');
+    [
+      {icon:'ti-arrow-up',label:'Contributions',val:fmt(todayContribs),color:'#1D9E75'},
+      {icon:'ti-arrow-down',label:'Withdrawals',val:fmt(todayWd),color:'#A32D2D'},
+      {icon:'ti-trending-up',label:'Interest credited',val:fmt(todayInterest),color:'#C9961A'},
+      {icon:'ti-user-plus',label:'New applications',val:todayApps,color:'#60A5FA'},
+      {icon:'ti-shield-check',label:'KYC verifications',val:'—',color:'#A78BFA'},
+    ].forEach(a => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)';
+      row.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center"><i class="ti ${a.icon}" style="color:${a.color};font-size:14px"></i></div><span style="font-size:13px;color:rgba(255,255,255,.75)">${a.label}</span></div><span style="font-size:13px;font-weight:600;color:${a.color}">${a.val}</span>`;
+      actList.appendChild(row);
+    });
+
+    // ── CONTRIBUTORS TABLE ──
+    const contribSection = document.createElement('div');
+    contribSection.style.cssText = 'background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem';
+    const addBtn = !isViewOnly() ? '<button class="btn btn-sm btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>' : '';
+    const contribRows = (contributors||[]).map(c => {
+      const cP = payments.filter(p=>p.user_id===c.id);
+      const prin = cP.reduce((a,p)=>a+Number(p.amount),0);
+      const int = cP.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+      const tot = prin+int;
+      const lastP = [...cP].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+      const gp = c.savings_goal ? Math.min(100,Math.round((tot/c.savings_goal)*100)) : null;
+      const ini = c.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+      const gpHTML = gp!==null ? `<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e5e5e2;border-radius:3px;height:5px;overflow:hidden"><div style="width:${gp}%;height:100%;background:${gp>=100?'#1D9E75':'#C9961A'}"></div></div><span style="font-size:11px;color:#888">${gp}%</span></div>` : '<span style="color:#ccc;font-size:12px">—</span>';
+      const editBtn = !isViewOnly() ? `<button class="btn btn-sm btn-edit" data-uid="${c.id}" data-uname="${c.name}" data-email="${c.email}" onclick="openEditCredentials(this.dataset.uid,this.dataset.uname,this.dataset.email)"><i class="ti ti-pencil"></i></button>` : '';
+      return `<tr>
+        <td><div style="display:flex;align-items:center;gap:8px"><div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${ini}</div><div><div style="font-size:13px;font-weight:500;color:#0D1F14">${c.name}</div><div style="font-size:11px;color:#aaa">${c.email}</div></div></div></td>
+        <td><span class="status-pill ${cP.length?'pill-approved':'pill-pending'}">${cP.length?'Active':'No payments'}</span></td>
+        <td><i class="ti ti-shield-check" style="color:#1D9E75;font-size:16px"></i></td>
+        <td>${gpHTML}</td>
+        <td style="font-weight:600;color:#0D1F14">${fmt(tot)}</td>
+        <td style="font-size:12px;color:#888">${lastP?fmtDate(lastP.date):'Never'}</td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-eye"></i></button>
+          <button class="btn btn-sm" title="KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"></i></button>
+          ${editBtn}
+        </div></td>
+      </tr>`;
+    }).join('');
+    contribSection.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="font-size:15px;font-weight:600;color:#0D1F14">All contributors</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="contrib-search" type="text" placeholder="Search by name..." oninput="filterContributors()" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:220px"></div>
+          <span style="font-size:12px;color:#888" id="contrib-count">${(contributors||[]).length} contributors</span>
+          ${addBtn}
+        </div>
+      </div>
+      <div class="table-wrap"><table id="contrib-table"><tr style="background:#f9f9f7"><th>Contributor</th><th>Status</th><th>KYC</th><th>Goal</th><th>Total</th><th>Last payment</th><th>Actions</th></tr>${contribRows}</table></div>
+      <div style="margin-top:12px;text-align:center"><a onclick="setAdminTab('contributors');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all contributors →</a></div>`;
+    pageContent.appendChild(contribSection);
+
+    // ── BOTTOM ROW ──
+    const bottomRow = document.createElement('div');
+    bottomRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:1.25rem';
+    const recentAct = allPayments.slice(-5).reverse().map(p=>{
+      const c=(contributors||[]).find(c=>c.id===p.user_id);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f3"><div style="width:32px;height:32px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-arrow-up" style="color:#0F6E56;font-size:14px"></i></div><div style="flex:1"><div style="font-size:13px;font-weight:500;color:#0D1F14">${c?c.name:'Unknown'} made a contribution</div><div style="font-size:11px;color:#aaa">${fmt(p.amount)} · ${fmtDate(p.date)}</div></div></div>`;
+    }).join('');
+    const recentWd = (requests||[]).slice(0,5).map(r=>{
+      const c=(contributors||[]).find(c=>c.id===r.user_id);
+      const pill=r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':r.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>';
+      const ini=c?c.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase():'?';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f3"><div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${ini}</div><div style="flex:1"><div style="font-size:13px;font-weight:500;color:#0D1F14">${c?c.name:'Unknown'}</div><div style="font-size:11px;color:#aaa">${fmt(r.amount)} · ${fmtDate(r.created_at)}</div></div>${pill}</div>`;
+    }).join('');
+    bottomRow.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:15px;font-weight:600;color:#0D1F14">Recent activity</div><a onclick="setAdminTab('payments');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all</a></div>
+        ${recentAct||'<div class="empty">No payments yet</div>'}
+      </div>
+      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:15px;font-weight:600;color:#0D1F14">Recent withdrawals</div><a onclick="setAdminTab('requests');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View all</a></div>
+        ${recentWd||'<div class="empty">No withdrawals yet</div>'}
+      </div>`;
+    pageContent.appendChild(bottomRow);
+
+  } else {
+    pageContent.innerHTML = tabContent;
+  }
+
+  main.appendChild(pageContent);
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.style.cssText = 'background:#fff;border-top:1px solid #e5e5e2;padding:12px 1.5rem;display:flex;align-items:center;justify-content:space-between';
+  footer.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><i class="ti ti-shield-check" style="color:#1D9E75;font-size:14px"></i><span style="font-size:11px;color:#888">Fundova is secure, transparent and trusted.</span></div><span style="font-size:11px;color:#aaa">© ${new Date().getFullYear()} Fundova Cooperative. All rights reserved.</span>`;
+  main.appendChild(footer);
+  adminEl.appendChild(main);
+
+  const app = document.getElementById('app');
+  if(app){ app.innerHTML=''; app.appendChild(adminEl); }
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);
 }}
 
@@ -5786,6 +5775,17 @@ function renderAdminChart(allPayments){
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.fill(); ctx.stroke();
+  }
+}
+
+
+
+function adminGoTab(tab){ setAdminTab(tab); renderAdmin(); }
+
+function adminNavHover(el, isOver){
+  const tab = el.dataset.tab;
+  if(tab !== adminTab){
+    el.style.background = isOver ? 'rgba(255,255,255,.06)' : '';
   }
 }
 
