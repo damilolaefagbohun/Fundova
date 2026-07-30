@@ -285,6 +285,23 @@ exports.handler = async (event) => {
         <p style="color:#aaa;font-size:12px;text-align:center">This invitation was sent by ${coordinator_name} via Fundova.</p>
       `);
 
+    // ── NEXT OF KIN WELCOME ──
+    } else if (type === 'nok_welcome') {
+      to = body.to; const name = body.name; const member_name = body.member_name;
+      subject = member_name + ' added you to their Fundova contacts';
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">Hello ${name},</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has added you as their next of kin on <strong>Fundova</strong> — a registered cooperative savings platform in Nigeria.</p>
+        <p style="color:#555;line-height:1.7">By adding you, ${member_name} has also opted you in to receive occasional financial education content and updates from <strong>Fundova Learn</strong> — our free financial literacy programme.</p>
+        <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:14px;margin:16px 0;font-size:13px;color:#065F46">
+          <strong>What is Fundova?</strong><br>
+          Fundova is a CAC-registered multipurpose cooperative where members save at their own pace and earn approximately 10% interest per annum. We also offer group investments, financial education and a member marketplace.
+        </div>
+        <p style="color:#666;font-size:13px">You will receive occasional emails about financial education topics and Fundova events. You can unsubscribe at any time by contacting us.</p>
+        ${btn('Learn more about Fundova', SITE_URL)}
+        <p style="color:#aaa;font-size:12px;text-align:center">You received this because ${member_name} added you as their next of kin on Fundova. Contact us at fundovamultipurposecooperative@gmail.com to unsubscribe.</p>
+      `);
+
     } else {
       console.log('Unknown type:', type);
       return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type: ' + type }) };
