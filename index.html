@@ -826,7 +826,7 @@ async function renderAdmin(){
     <div style="padding:12px 1.25rem;border-top:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px">
       <div style="width:30px;height:30px;border-radius:50%;background:#C9961A;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0D3D2A;flex-shrink:0">A</div>
       <div class="sidebar-label" style="flex:1;overflow:hidden"><div style="font-size:11px;font-weight:600;color:#fff">Admin</div><div style="font-size:10px;color:#aaa">${isSuperAdmin()?'Super Administrator':'Administrator'}</div></div>
-      <button onclick="doLogout()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;flex-shrink:0"><i class="ti ti-logout" style="font-size:16px"></i></button>
+      <button onclick="doLogout()" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;flex-shrink:0"><i class="ti ti-logout" style="font-size:16px"></i></button>
     </div>`;
 
   // Build nav items
@@ -1400,6 +1400,8 @@ async function renderContributor(){
     const principal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const interest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
     const currentTotal=+(principal+interest).toFixed(2);
+    const totalPrincipal=principal;
+    const totalInterest=interest;
     const today=new Date();today.setHours(0,0,0,0);
     const hasPending=(requests||[]).some(r=>r.status==='pending');
 
@@ -1432,8 +1434,8 @@ async function renderContributor(){
             <div style="font-size:13px;font-weight:700;color:#fff">FUNDOVA</div>
             <div style="font-size:10px;color:#C9961A;letter-spacing:.05em">LIMITED</div>
           </div>
-          <button onclick="toggleContribSidebar()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:4px;flex-shrink:0" title="Toggle sidebar">
-            <i class="ti ti-layout-sidebar-left-collapse" style="font-size:18px"></i>
+          <button id="contrib-toggle-btn" onclick="toggleContribSidebar()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:4px;flex-shrink:0" title="Toggle sidebar">
+            <i class="ti ti-layout-sidebar-left-collapse sidebar-toggle-icon" style="font-size:18px"></i>
           </button>
         </div>
       </div>
@@ -1458,7 +1460,10 @@ async function renderContributor(){
             <div style="font-size:10px;color:#aaa">Member since ${new Date(currentUser.created_at).toLocaleDateString('en-GB',{month:'short',year:'numeric'})}</div>
           </div>
         </div>
-        <button onclick="doLogout()" style="width:100%;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.75);padding:8px;border-radius:8px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-logout" style="font-size:15px"></i> Sign out</button>
+        <button onclick="doLogout()" title="Sign out" style="width:100%;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.75);padding:8px;border-radius:8px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ti ti-logout" style="font-size:15px"></i>
+          <span class="sidebar-label"> Sign out</span>
+        </button>
       </div>
     </div>
 
@@ -1505,7 +1510,7 @@ async function renderContributor(){
           </div>
         </div>
         ${currentUser.savings_goal?`
-        <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px">
+        <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px;cursor:pointer" onclick="openSetSavingsGoal()" title="Edit your savings goal">
           <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px">
             <span>Savings goal progress</span>
             <span style="color:#C9961A;font-weight:600">${Math.min(100,Math.round(((totalPrincipal+totalInterest)/currentUser.savings_goal)*100))}% of ₦${Number(currentUser.savings_goal).toLocaleString()}</span>
@@ -3542,12 +3547,23 @@ async function viewWebinarRegistrations(id,title,count){
 
 function openSetSavingsGoal(){
   openModal(`
-  <h3>${currentUser.savings_goal?'Edit':'Set'} savings goal</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">Your dashboard will show how close you are to reaching this target.</p>
-  <div class="field"><label>Target amount (₦)</label><input id="sg-amount" type="number" min="1" placeholder="e.g. 500000" value="${currentUser.savings_goal||''}"></div>
+  <h3>${currentUser.savings_goal?'Edit':'Set a'} savings goal</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Set a target amount to work towards. You can edit or replace your goal at any time — even after reaching it.</p>
+  <div class="field">
+    <label>What are you saving for? <span style="color:#aaa;font-weight:400">(optional)</span></label>
+    <input id="sg-purpose" type="text" placeholder="e.g. Emergency fund, Car, School fees, Business" value="${currentUser.savings_goal_purpose||''}">
+  </div>
+  <div class="field">
+    <label>Target amount (₦)</label>
+    <input id="sg-amount" type="number" min="1" placeholder="e.g. 500000" value="${currentUser.savings_goal||''}">
+  </div>
+  ${currentUser.savings_goal?`
+  <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:8px;padding:10px 12px;font-size:12px;color:#065F46;margin-bottom:12px">
+    <i class="ti ti-info-circle"></i> You can increase your goal, change its purpose, or set a completely new target. Your savings progress is never lost.
+  </div>`:''}
   <div class="error" id="sg-err"></div>
   <div class="modal-footer">
-    ${currentUser.savings_goal?`<button class="btn btn-danger" onclick="clearSavingsGoal()">Remove goal</button>`:''}
+    ${currentUser.savings_goal?'<button class="btn btn-danger" onclick="clearSavingsGoal()">Remove goal</button>':''}
     <button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="sg-btn" onclick="saveSavingsGoal()"><i class="ti ti-target"></i> Save goal</button>
   </div>`);
@@ -3555,15 +3571,24 @@ function openSetSavingsGoal(){
 
 async function saveSavingsGoal(){
   const amount=parseFloat(document.getElementById('sg-amount').value);
+  const purpose=(document.getElementById('sg-purpose')?.value||'').trim();
   const err=document.getElementById('sg-err');
   const btn=document.getElementById('sg-btn');
   if(!amount||amount<=0){err.textContent='Please enter a valid target amount.';return;}
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
-    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({savings_goal:amount})});
+    const updateData={savings_goal:amount};
+    if(purpose!==undefined) updateData.savings_goal_purpose=purpose||null;
+    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify(updateData)});
     currentUser.savings_goal=amount;
+    currentUser.savings_goal_purpose=purpose||null;
     saveSession(currentUser);
     closeModal();
+    // Reset milestone notifications so new goal gets celebrated
+    if(amount!==(currentUser.savings_goal)){
+      ['25%','50%','75%','100%'].forEach(m=>localStorage.removeItem('fundova_goal_'+currentUser.id+'_'+m));
+    }
+    toast('<i class="ti ti-check"></i> Savings goal saved!');
     await renderContributor();
   }catch(e){err.textContent='Error saving goal.';btn.innerHTML='<i class="ti ti-target"></i> Save goal';btn.disabled=false;}
 }
@@ -5615,17 +5640,36 @@ function toggleAdminSidebar(){
   const main = document.getElementById('admin-main');
   const icon = document.getElementById('sidebar-toggle-icon');
   const labels = document.querySelectorAll('#admin-sidebar .sidebar-label');
+  const navItems = document.querySelectorAll('#admin-nav > div');
 
   if(adminSidebarCollapsed){
     sb.style.width = '56px';
-    main.style.marginLeft = '56px';
+    if(main) main.style.marginLeft = '56px';
     labels.forEach(l => l.style.display = 'none');
     if(icon) icon.className = 'ti ti-layout-sidebar-left-expand';
+    // Keep toggle button centered and visible
+    const toggleBtn = document.getElementById('sidebar-toggle-btn');
+    if(toggleBtn) toggleBtn.style.margin = '0 auto';
+    // Add tooltips and center icons
+    navItems.forEach(item => {
+      item.style.justifyContent = 'center';
+      item.style.padding = '12px 0';
+      const span = item.querySelector('span');
+      if(span) item.title = span.textContent.trim();
+    });
   } else {
     sb.style.width = '220px';
-    main.style.marginLeft = '220px';
+    if(main) main.style.marginLeft = '220px';
     labels.forEach(l => l.style.display = '');
     if(icon) icon.className = 'ti ti-layout-sidebar-left-collapse';
+    const toggleBtn2 = document.getElementById('sidebar-toggle-btn');
+    if(toggleBtn2) toggleBtn2.style.margin = '';
+    // Restore normal layout
+    navItems.forEach(item => {
+      item.style.justifyContent = '';
+      item.style.padding = '10px 1.25rem';
+      item.title = '';
+    });
   }
   localStorage.setItem('admin_sidebar_collapsed', adminSidebarCollapsed ? '1' : '0');
 }
@@ -5645,15 +5689,34 @@ function toggleContribSidebar(){
   const sb = document.getElementById('contrib-sidebar');
   const main = document.getElementById('contrib-main');
   const labels = document.querySelectorAll('#contrib-sidebar .sidebar-label');
+  const navItems = document.querySelectorAll('#contrib-sidebar > div:nth-child(2) > div');
+  const icon = sb ? sb.querySelector('.sidebar-toggle-icon') : null;
 
   if(contribSidebarCollapsed){
     sb.style.width = '56px';
     if(main) main.style.marginLeft = '56px';
     labels.forEach(l => l.style.display = 'none');
+    if(icon) icon.className = 'ti ti-layout-sidebar-left-expand sidebar-toggle-icon';
+    const ctBtn = document.getElementById('contrib-toggle-btn');
+    if(ctBtn) ctBtn.style.margin = '0 auto';
+    navItems.forEach(item => {
+      item.style.justifyContent = 'center';
+      item.style.padding = '12px 0';
+      const span = item.querySelector('span.sidebar-label');
+      if(span) item.title = span.textContent.trim();
+    });
   } else {
     sb.style.width = '220px';
     if(main) main.style.marginLeft = '220px';
     labels.forEach(l => l.style.display = '');
+    if(icon) icon.className = 'ti ti-layout-sidebar-left-collapse sidebar-toggle-icon';
+    const ctBtn2 = document.getElementById('contrib-toggle-btn');
+    if(ctBtn2) ctBtn2.style.margin = '';
+    navItems.forEach(item => {
+      item.style.justifyContent = '';
+      item.style.padding = '10px 1.25rem';
+      item.title = '';
+    });
   }
   localStorage.setItem('contrib_sidebar_collapsed', contribSidebarCollapsed ? '1' : '0');
 }
