@@ -797,7 +797,7 @@ async function renderAdmin(){
     const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
     const currentSavingsOnly=allPayments.filter(p=>!p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
-    setHTML(\`
+    setHTML(`
   <div style="display:flex;min-height:100vh;background:#F7F5F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 
     <!-- SIDEBAR -->
