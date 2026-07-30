@@ -1093,7 +1093,7 @@ async function renderAdmin(){
       </div>
     </div>
   </div>
-\`);
+`);
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);
 }}
 
@@ -1550,9 +1550,9 @@ async function renderContributor(){
           <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-bottom:12px">Quick actions</div>
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
             ${[
-              {icon:'ti-plus',label:'Contribute',action:'smoothScroll(\\'dash\\')'},
+              {icon:'ti-plus',label:'Contribute',action:'scrollToSection(\'dash\')'},
               {icon:'ti-cash',label:'Withdraw',action:'checkKycBeforeWithdrawal('+Math.round(totalPrincipal+totalInterest)+')'},
-              {icon:'ti-file-text',label:'Statement',action:'scrollToSection(\\'txn\\')'},
+              {icon:'ti-file-text',label:'Statement',action:'scrollToSection(\'txn\')'},
               {icon:'ti-users',label:'Invite',action:'copyReferralLink()'},
               {icon:'ti-target',label:'Goal',action:'openSetSavingsGoal()'},
             ].map(a=>`<div onclick="${a.action}" style="display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;padding:8px 4px;border-radius:10px;background:#f5f5f3" onmouseover="this.style.background='#E8F5EE'" onmouseout="this.style.background='#f5f5f3'">
