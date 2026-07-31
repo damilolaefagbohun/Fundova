@@ -798,6 +798,7 @@ async function renderAdmin(){
     const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
   const totalValue=totalPrincipal+totalInterest;
   checkMilestones(totalValue).catch(()=>{});
+  checkBirthday().catch(()=>{});
     const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
     const currentSavingsOnly=allPayments.filter(p=>!p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
@@ -6519,6 +6520,8 @@ async function sendPinResetCode(){
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15*60*1000).toISOString(); // 15 minutes
 
+    // Clean up old codes for this email first
+    await sb('password_resets?email=eq.'+email, {method:'DELETE'}).catch(()=>{});
     // Save reset code
     await sb('password_resets', {method:'POST', body:JSON.stringify({
       email, code, expires_at:expiresAt, used:false
@@ -6588,8 +6591,10 @@ async function confirmPinReset(email){
     }
 
     const reset = resets[0];
-    // Check expiry
-    if(new Date() > new Date(reset.expires_at)){
+    // Check expiry - compare UTC timestamps
+    const now = Date.now();
+    const expiry = new Date(reset.expires_at).getTime();
+    if(now > expiry + 60000){ // add 60s grace period for clock differences
       err.textContent = 'This code has expired. Please request a new one.';
       btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
       btn.disabled = false;
@@ -6620,6 +6625,47 @@ async function confirmPinReset(email){
     btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
     btn.disabled = false;
   }
+}
+
+
+// ─── BIRTHDAY WISHES ─────────────────────────────────────
+
+async function checkBirthday(){
+  try{
+    const kycArr = await sb('kyc_details?user_id=eq.'+currentUser.id+'&select=date_of_birth');
+    if(!kycArr||!kycArr.length||!kycArr[0].date_of_birth) return;
+
+    const dob = new Date(kycArr[0].date_of_birth);
+    const today = new Date();
+
+    // Check if today is their birthday (day and month match)
+    if(dob.getDate() !== today.getDate() || dob.getMonth() !== today.getMonth()) return;
+
+    // Check if we already wished them this year
+    const key = 'fundova_bday_'+currentUser.id+'_'+today.getFullYear();
+    if(localStorage.getItem(key)) return;
+
+    // Mark as done for this year
+    localStorage.setItem(key, '1');
+
+    // Send notification
+    await addNotification(currentUser.id,
+      '🎂 Happy Birthday, '+currentUser.name.split(' ')[0]+'! Wishing you a wonderful day filled with joy. From all of us at Fundova — thank you for being part of our community! 💚'
+    );
+
+    // Send birthday email
+    notify({
+      type:'birthday',
+      to:currentUser.email,
+      name:currentUser.name
+    }).catch(()=>{});
+
+    // Show birthday toast
+    setTimeout(()=>{
+      toast('🎂 Happy Birthday, '+currentUser.name.split(' ')[0]+'! 🎉');
+    }, 2000);
+
+  }catch(e){ console.error('Birthday check error:', e); }
 }
 
 // Load saved session on startup
