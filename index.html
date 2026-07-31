@@ -530,7 +530,10 @@ function renderLogin(){
           <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
           <div class="error" id="l-err" style="margin-bottom:10px"></div>
           <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
-          <p style="text-align:center;font-size:12px;color:#888;margin-top:14px">Not a member yet? <button onclick="renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
+          <div style="text-align:center;margin-top:12px">
+            <a onclick="openForgotPin()" style="font-size:12px;color:#1D9E75;cursor:pointer;text-decoration:underline">Forgot your PIN?</a>
+          </div>
+          <p style="text-align:center;font-size:12px;color:#888;margin-top:10px">Not a member yet? <button onclick="renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
         </div>
       </div>
     </section>
@@ -6467,6 +6470,156 @@ function uploadFoodPackageImage(pkgId){
     reader.readAsDataURL(file);
   };
   input.click();
+}
+
+
+// ─── FORGOT PIN / RESET PIN ──────────────────────────────
+
+function openForgotPin(){
+  openModal(`
+  <h3>Reset your PIN</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Enter your registered email address and we will send you a 6-digit reset code.</p>
+  <div class="field">
+    <label>Email address</label>
+    <input id="fp-email" type="email" placeholder="you@email.com" autocomplete="email">
+  </div>
+  <div class="error" id="fp-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="fp-btn" onclick="sendPinResetCode()">
+      <i class="ti ti-send"></i> Send reset code
+    </button>
+  </div>`);
+}
+
+async function sendPinResetCode(){
+  const email = document.getElementById('fp-email').value.trim().toLowerCase();
+  const err = document.getElementById('fp-err');
+  const btn = document.getElementById('fp-btn');
+
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    err.textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  btn.innerHTML = '<span class="spinner"></span> Sending…';
+  btn.disabled = true;
+
+  try{
+    // Check if email exists
+    const users = await sb('users?email=eq.'+email+'&select=id,name,email');
+    if(!users || !users.length){
+      err.textContent = 'No account found with this email address.';
+      btn.innerHTML = '<i class="ti ti-send"></i> Send reset code';
+      btn.disabled = false;
+      return;
+    }
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15*60*1000).toISOString(); // 15 minutes
+
+    // Save reset code
+    await sb('password_resets', {method:'POST', body:JSON.stringify({
+      email, code, expires_at:expiresAt, used:false
+    })});
+
+    // Send email with code
+    await notify({
+      type:'pin_reset',
+      to:email,
+      name:users[0].name,
+      code
+    });
+
+    // Show code entry form
+    openModal(`
+    <h3>Enter reset code</h3>
+    <p style="font-size:13px;color:#666;margin-top:-6px">We sent a 6-digit code to <strong>${email}</strong>. It expires in 15 minutes.</p>
+    <div class="field">
+      <label>Reset code</label>
+      <input id="pr-code" type="text" maxlength="6" placeholder="e.g. 482931" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center">
+    </div>
+    <div class="field">
+      <label>New PIN</label>
+      <input id="pr-pin" type="password" maxlength="6" placeholder="Choose a new PIN" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Confirm new PIN</label>
+      <input id="pr-pin2" type="password" maxlength="6" placeholder="Repeat your new PIN" autocomplete="new-password">
+    </div>
+    <div class="error" id="pr-err"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="openForgotPin()">← Back</button>
+      <button class="btn btn-primary" id="pr-btn" onclick="confirmPinReset('${email}')">
+        <i class="ti ti-lock"></i> Reset PIN
+      </button>
+    </div>`);
+
+  }catch(e){
+    err.textContent = 'Error sending code. Please try again.';
+    btn.innerHTML = '<i class="ti ti-send"></i> Send reset code';
+    btn.disabled = false;
+  }
+}
+
+async function confirmPinReset(email){
+  const code = document.getElementById('pr-code').value.trim();
+  const pin = document.getElementById('pr-pin').value.trim();
+  const pin2 = document.getElementById('pr-pin2').value.trim();
+  const err = document.getElementById('pr-err');
+  const btn = document.getElementById('pr-btn');
+
+  if(!code || code.length !== 6){ err.textContent = 'Please enter the 6-digit code from your email.'; return; }
+  if(!pin || pin.length < 4){ err.textContent = 'PIN must be at least 4 digits.'; return; }
+  if(pin !== pin2){ err.textContent = 'PINs do not match. Please try again.'; return; }
+
+  btn.innerHTML = '<span class="spinner"></span> Resetting…';
+  btn.disabled = true;
+
+  try{
+    // Verify code
+    const resets = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&used=eq.false&select=*');
+    if(!resets || !resets.length){
+      err.textContent = 'Invalid or expired code. Please request a new one.';
+      btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
+      btn.disabled = false;
+      return;
+    }
+
+    const reset = resets[0];
+    // Check expiry
+    if(new Date() > new Date(reset.expires_at)){
+      err.textContent = 'This code has expired. Please request a new one.';
+      btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
+      btn.disabled = false;
+      return;
+    }
+
+    // Update PIN
+    await sb('users?email=eq.'+email, {method:'PATCH', body:JSON.stringify({pin})});
+
+    // Mark reset code as used
+    await sb('password_resets?id=eq.'+reset.id, {method:'PATCH', body:JSON.stringify({used:true})});
+
+    // Send confirmation email
+    const users = await sb('users?email=eq.'+email+'&select=name');
+    if(users&&users[0]){
+      notify({
+        type:'pin_reset_confirm',
+        to:email,
+        name:users[0].name
+      }).catch(()=>{});
+    }
+
+    closeModal();
+    toast('<i class="ti ti-check"></i> PIN reset successfully! You can now sign in with your new PIN.');
+
+  }catch(e){
+    err.textContent = 'Error resetting PIN. Please try again.';
+    btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
+    btn.disabled = false;
+  }
 }
 
 // Load saved session on startup
