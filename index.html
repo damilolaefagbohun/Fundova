@@ -128,8 +128,6 @@ tr:hover td{background:#fafafa}
   #contrib-main{margin-left:0!important;max-width:100vw!important;padding:1rem!important;}
 }
 </style>
-<!-- Supabase JS for Realtime -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-KEFGZ3SSZT"></script>
 <script>
@@ -5925,52 +5923,47 @@ function adminNavHover(el, isOver){
 // ─── SUPABASE REALTIME ────────────────────────────────────
 
 let realtimeChannel = null;
-const SB_ANON_KEY = 'sb_publishable_nzUdamSIBzvGwFK0mERSdw_OUiG7Mf6WMEfQjJMDsP_5';
-
 function startAdminRealtime(){
-  // Clean up existing channel
-  if(realtimeChannel){
-    try{ realtimeChannel.unsubscribe(); }catch(e){}
-    realtimeChannel = null;
-  }
+  // Stop any existing polling
+  stopAdminRealtime();
 
-  try{
-    const supabaseClient = supabase.createClient(SB_URL, SB_ANON_KEY);
+  // Poll every 30 seconds for new notifications
+  // Much more responsive than the old 25-minute refresh
+  let lastCounts = {};
 
-    realtimeChannel = supabaseClient
-      .channel('admin-live-updates')
-      .on('postgres_changes', {event:'INSERT', schema:'public', table:'signup_requests'}, () => {
-        loadAdminNotifications().catch(()=>{});
-        showRealtimeToast('📋 New application received!');
-      })
-      .on('postgres_changes', {event:'INSERT', schema:'public', table:'withdrawal_requests'}, () => {
-        loadAdminNotifications().catch(()=>{});
-        showRealtimeToast('💸 New withdrawal request!');
-      })
-      .on('postgres_changes', {event:'INSERT', schema:'public', table:'payments'}, () => {
-        loadAdminNotifications().catch(()=>{});
-        showRealtimeToast('💰 New payment recorded!');
-      })
-      .on('postgres_changes', {event:'PATCH', schema:'public', table:'kyc_details'}, () => {
-        loadAdminNotifications().catch(()=>{});
-        showRealtimeToast('🔐 KYC details updated!');
-      })
-      .on('postgres_changes', {event:'INSERT', schema:'public', table:'investment_reservations'}, () => {
-        loadAdminNotifications().catch(()=>{});
-        showRealtimeToast('📊 New investment reservation!');
-      })
-      .subscribe((status) => {
-        console.log('Realtime status:', status);
-      });
-  }catch(e){
-    console.error('Realtime error:', e);
-    // Fallback to 25-minute refresh if Realtime fails
-    adminRefreshTimer = setInterval(()=>{
-      if(currentUser&&(currentUser.role==='admin'||currentUser.role==='admin_view')){
-        loadAdminNotifications().catch(()=>{});
+  async function pollForUpdates(){
+    if(!currentUser||(currentUser.role!=='admin'&&currentUser.role!=='admin_view'&&currentUser.role!=='super_admin')) return;
+    try{
+      const [signups, withdrawals, kyc, reservations] = await Promise.all([
+        sb('signup_requests?status=eq.pending&select=id'),
+        sb('withdrawal_requests?status=eq.pending&select=id'),
+        sb('kyc_details?kyc_verified=eq.false&select=id'),
+        sb('investment_reservations?status=eq.payment_made&select=id'),
+      ]);
+
+      const counts = {
+        signups: (signups||[]).length,
+        withdrawals: (withdrawals||[]).length,
+        kyc: (kyc||[]).length,
+        reservations: (reservations||[]).length,
+      };
+
+      // Show toast if any count increased since last poll
+      if(Object.keys(lastCounts).length){
+        if(counts.signups > lastCounts.signups) showRealtimeToast('📋 New application received!');
+        if(counts.withdrawals > lastCounts.withdrawals) showRealtimeToast('💸 New withdrawal request!');
+        if(counts.kyc > lastCounts.kyc) showRealtimeToast('🔐 KYC submitted — awaiting verification!');
+        if(counts.reservations > lastCounts.reservations) showRealtimeToast('📊 New investment payment!');
       }
-    }, 25*60*1000);
+
+      lastCounts = counts;
+      loadAdminNotifications().catch(()=>{});
+    }catch(e){}
   }
+
+  // Poll immediately then every 30 seconds
+  pollForUpdates();
+  adminRefreshTimer = setInterval(pollForUpdates, 30*1000);
 }
 
 function stopAdminRealtime(){
