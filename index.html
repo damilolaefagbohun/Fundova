@@ -774,7 +774,7 @@ async function renderAdmin(){
     const kycMap={};
     (kycAll||[]).forEach(k=>{ kycMap[k.user_id]=k.kyc_verified; });
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
-    const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments):
+    const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments,kycMap||{}):
       adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
       adminTab==='requests'?buildRequestsTab(requests,contributors):
       adminTab==='signups'?buildSignupsTab(signups):
@@ -1109,7 +1109,7 @@ async function renderAdmin(){
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);
 }}
 
-function buildContributorsTab(contributors,payments){
+function buildContributorsTab(contributors,payments,kycMap={}){
   if(!contributors.length)return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No contributors yet.<br><br><button class="btn btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add first contributor</button></div></div>`;
   // Search bar
   const searchBar=`<div style="margin-bottom:1rem;display:flex;gap:8px;align-items:center">
@@ -1126,6 +1126,10 @@ function buildContributorsTab(contributors,payments){
     const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
     return`<tr>
       <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div><div style="font-weight:500">${c.name}</div><div style="font-size:11px;color:#888">${c.email}</div></div></div></td>
+      <td>${kycMap[c.id]
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield-check\" style=\"font-size:12px\"></i> Verified</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#856404;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield\" style=\"font-size:12px\"></i> Pending</span>'
+      }</td>
       <td style="color:#888">${pays.length}</td>
       <td>${fmt(principal)}</td>
       <td class="green">${fmt(interest)}</td>
@@ -6584,24 +6588,24 @@ async function confirmPinReset(email){
   btn.disabled = true;
 
   try{
-    // Verify code - check code matches and not used
-    const resets = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&used=eq.false&select=*');
+    // Verify code - let the DATABASE check expiry to avoid browser timezone issues
+    // expires_at filter means Supabase compares server UTC time to stored UTC expires_at
+    const now = new Date().toISOString();
+    const resets = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&used=eq.false&expires_at=gt.'+now+'&select=*');
     if(!resets || !resets.length){
-      err.textContent = 'Invalid code. Please check your email or request a new code.';
+      // Check if code exists but expired vs wrong code
+      const anyCode = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&select=id');
+      if(anyCode && anyCode.length){
+        err.textContent = 'This code has expired. Please request a new one.';
+      } else {
+        err.textContent = 'Invalid code. Please check your email or request a new code.';
+      }
       btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
       btn.disabled = false;
       return;
     }
 
     const reset = resets[0];
-    // Check expiry — code valid for 20 minutes from created_at
-    const createdAt = new Date(reset.created_at).getTime();
-    if(Date.now() - createdAt > 20*60*1000){
-      err.textContent = 'This code has expired. Please request a new one.';
-      btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
-      btn.disabled = false;
-      return;
-    }
 
     // Update PIN
     await sb('users?email=eq.'+email, {method:'PATCH', body:JSON.stringify({pin})});
