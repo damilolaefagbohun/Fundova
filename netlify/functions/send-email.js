@@ -302,6 +302,36 @@ exports.handler = async (event) => {
         <p style="color:#aaa;font-size:12px;text-align:center">You received this because ${member_name} added you as their next of kin on Fundova. Contact us at fundovamultipurposecooperative@gmail.com to unsubscribe.</p>
       `);
 
+    // ── PIN RESET CODE ──
+    } else if (type === 'pin_reset') {
+      to = body.to; const name = body.name; const code = body.code;
+      subject = 'Your Fundova PIN reset code';
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">Reset your PIN</h2>
+        <p style="color:#555;line-height:1.7">Hi ${name}, we received a request to reset your Fundova PIN. Use the code below to set a new one.</p>
+        <div style="background:#0D3D2A;border-radius:12px;padding:1.5rem;text-align:center;margin:1.5rem 0">
+          <div style="font-size:11px;color:#aaa;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Your reset code</div>
+          <div style="font-size:40px;font-weight:800;color:#C9961A;letter-spacing:10px">${code}</div>
+          <div style="font-size:12px;color:#aaa;margin-top:8px">Expires in 15 minutes</div>
+        </div>
+        <p style="color:#555;line-height:1.7">If you did not request a PIN reset, please ignore this email. Your account remains secure.</p>
+        <p style="color:#888;font-size:12px">For security, never share this code with anyone — including Fundova staff.</p>
+        ${btn('Go to Fundova', SITE_URL)}
+      `);
+
+    // ── PIN RESET CONFIRMATION ──
+    } else if (type === 'pin_reset_confirm') {
+      to = body.to; const name = body.name;
+      subject = 'Your Fundova PIN has been reset';
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">PIN reset successful</h2>
+        <p style="color:#555;line-height:1.7">Hi ${name}, your Fundova PIN has been successfully reset. You can now sign in with your new PIN.</p>
+        <div style="background:#D1FAE5;border-radius:10px;padding:14px;margin:1rem 0;font-size:13px;color:#065F46">
+          <strong>✅ Your account is secure.</strong> If you did not make this change, please contact us immediately on WhatsApp: 08035257262.
+        </div>
+        ${btn('Sign in to Fundova', SITE_URL)}
+      `);
+
     } else {
       console.log('Unknown type:', type);
       return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type: ' + type }) };
