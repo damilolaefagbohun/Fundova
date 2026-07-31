@@ -6208,11 +6208,46 @@ async function buildFoodSchemeAdminTab(){
       </tr>`;
     }).join('');
 
-    return `<div class="card">
+    // Build package management cards
+    const pkgCards = (options||[]).map((pkg,i) => {
+      const emoji = ['🧺','🛒','🎁'][i]||'🎁';
+      const opted = (enrollments||[]).filter(e=>e.option_id===pkg.id).length;
+      return `<div style="background:#f9f9f7;border-radius:12px;padding:1rem;border:1px solid #e5e5e2">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          ${pkg.image_url
+            ? `<img src="${pkg.image_url}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`
+            : `<div style="width:60px;height:60px;border-radius:8px;background:#e5e5e2;display:flex;align-items:center;justify-content:center;font-size:28px">${emoji}</div>`}
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:#0D1F14">${pkg.name}</div>
+            <div style="font-size:13px;color:#0F6E56;font-weight:600">₦${Number(pkg.price).toLocaleString()}</div>
+            <div style="font-size:11px;color:#888">${opted} member${opted!==1?'s':''} opted in</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#666;margin-bottom:10px">${pkg.description||''}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="openEditFoodPackage('${pkg.id}')" style="flex:1"><i class="ti ti-pencil"></i> Edit</button>
+          <button class="btn btn-sm" onclick="uploadFoodPackageImage('${pkg.id}')" style="flex:1"><i class="ti ti-photo"></i> Upload image</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div>
+      <!-- Package Management -->
+      <div class="card" style="margin-bottom:1rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <h3 style="margin:0">Food Scheme Packages</h3>
+          <button class="btn btn-sm btn-primary" onclick="openAddFoodPackage()"><i class="ti ti-plus"></i> Add package</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+          ${pkgCards||'<div class="empty">No packages yet. Add one above.</div>'}
+        </div>
+      </div>
+
+      <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h3 style="margin:0">Food Scheme</h3>
+        <h3 style="margin:0">Enrollments & Deductions</h3>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-sm" onclick="openFoodSchemeSettings()"><i class="ti ti-settings"></i> Settings</button>
+          <button class="btn btn-sm" onclick="openFoodSchemeSettings()"><i class="ti ti-clock"></i> Set deadline</button>
           <button class="btn btn-sm btn-primary" onclick="triggerFoodSchemeDeduction(false)"><i class="ti ti-bolt"></i> Trigger deduction</button>
           ${totalSkipped>0?`<button class="btn btn-sm btn-warn" onclick="triggerFoodSchemeDeduction(true)"><i class="ti ti-refresh"></i> Retrigger skipped (${totalSkipped})</button>`:''}
         </div>
@@ -6227,6 +6262,7 @@ async function buildFoodSchemeAdminTab(){
         <tr><th>Contributor</th><th>Package</th><th>Cost</th><th>Current balance</th><th>Status</th></tr>
         ${rows}
       </table></div>`:'<div class="empty">No contributors have opted in yet.</div>'}
+    </div>
     </div>`;
   }catch(e){ return `<div class="card"><div class="empty">Error loading food scheme: ${e.message}</div></div>`; }
 }
@@ -6321,6 +6357,116 @@ async function triggerFoodSchemeDeduction(skippedOnly=false){
     alert('Done! Deducted: '+deducted+' members. Skipped: '+skipped+' (insufficient balance).');
     renderAdmin();
   }catch(e){ alert('Error: '+e.message); }
+}
+
+
+// ─── FOOD SCHEME PACKAGE MANAGEMENT ─────────────────────
+
+async function openEditFoodPackage(pkgId){
+  const opts = await sb('food_scheme_options?id=eq.'+pkgId+'&select=*');
+  const pkg = opts&&opts[0]?opts[0]:{};
+  openModal(`
+  <h3>Edit package</h3>
+  <div class="field"><label>Package name</label><input id="fp-name" value="${pkg.name||''}" placeholder="e.g. Basic Basket"></div>
+  <div class="field"><label>Price (₦)</label><input id="fp-price" type="number" value="${pkg.price||''}" placeholder="e.g. 15000"></div>
+  <div class="field"><label>Description</label><textarea id="fp-desc" rows="3" placeholder="Describe what's in this package">${pkg.description||''}</textarea></div>
+  <div class="field">
+    <label>Active</label>
+    <select id="fp-active" style="width:100%;padding:10px;border:1.5px solid #e5e5e2;border-radius:8px;font-size:14px">
+      <option value="true" ${pkg.active?'selected':''}>Active — visible to contributors</option>
+      <option value="false" ${!pkg.active?'selected':''}>Hidden — not visible</option>
+    </select>
+  </div>
+  <div class="error" id="fp-err"></div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" onclick="deleteFoodPackage('${pkgId}')">Delete</button>
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveFoodPackage('${pkgId}')"><i class="ti ti-device-floppy"></i> Save</button>
+  </div>`);
+}
+
+async function openAddFoodPackage(){
+  openModal(`
+  <h3>Add new package</h3>
+  <div class="field"><label>Package name</label><input id="fp-name" placeholder="e.g. Premium Basket"></div>
+  <div class="field"><label>Price (₦)</label><input id="fp-price" type="number" placeholder="e.g. 40000"></div>
+  <div class="field"><label>Description</label><textarea id="fp-desc" rows="3" placeholder="Describe what's in this package"></textarea></div>
+  <div class="error" id="fp-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveFoodPackage(null)"><i class="ti ti-plus"></i> Add package</button>
+  </div>`);
+}
+
+async function saveFoodPackage(pkgId){
+  const name = document.getElementById('fp-name').value.trim();
+  const price = parseFloat(document.getElementById('fp-price').value);
+  const desc = document.getElementById('fp-desc').value.trim();
+  const active = document.getElementById('fp-active')?.value !== 'false';
+  const err = document.getElementById('fp-err');
+
+  if(!name){err.textContent='Please enter a package name.';return;}
+  if(!price||price<=0){err.textContent='Please enter a valid price.';return;}
+
+  try{
+    if(pkgId){
+      await sb('food_scheme_options?id=eq.'+pkgId, {method:'PATCH', body:JSON.stringify({name,price,description:desc,active})});
+      toast('<i class="ti ti-check"></i> Package updated!');
+    } else {
+      await sb('food_scheme_options', {method:'POST', body:JSON.stringify({name,price,description:desc,active:true})});
+      toast('<i class="ti ti-check"></i> Package added!');
+    }
+    closeModal();
+    renderAdmin();
+  }catch(e){ err.textContent='Error saving: '+e.message; }
+}
+
+async function deleteFoodPackage(pkgId){
+  if(!confirm('Delete this package? This cannot be undone.')) return;
+  try{
+    await sb('food_scheme_options?id=eq.'+pkgId, {method:'DELETE'});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Package deleted.');
+    renderAdmin();
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+function uploadFoodPackageImage(pkgId){
+  // Create a hidden file input and trigger it
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(file.size > 2*1024*1024){ alert('Image must be under 2MB.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try{
+        // Upload to Supabase Storage
+        const fileName = 'food-scheme/'+pkgId+'-'+Date.now()+'.'+file.name.split('.').pop();
+        const res = await fetch(SB_URL+'/storage/v1/object/public/'+fileName, {
+          method:'POST',
+          headers:{'Content-Type':file.type, 'Authorization':'Bearer '+RA},
+          body:file
+        });
+
+        if(res.ok){
+          const imageUrl = SB_URL+'/storage/v1/object/public/'+fileName;
+          await sb('food_scheme_options?id=eq.'+pkgId, {method:'PATCH', body:JSON.stringify({image_url:imageUrl})});
+          toast('<i class="ti ti-check"></i> Image uploaded!');
+          renderAdmin();
+        } else {
+          // If storage fails, use base64 preview stored differently
+          // Fall back to just showing a success toast and note
+          alert('Image upload requires Supabase Storage to be configured. Contact your developer to set up the storage bucket.');
+        }
+      }catch(err){ alert('Error uploading: '+err.message); }
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
 
 // Load saved session on startup
