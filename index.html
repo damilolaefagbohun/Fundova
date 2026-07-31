@@ -6581,20 +6581,20 @@ async function confirmPinReset(email){
   btn.disabled = true;
 
   try{
-    // Verify code
+    // Verify code - check code matches and not used
     const resets = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&used=eq.false&select=*');
     if(!resets || !resets.length){
-      err.textContent = 'Invalid or expired code. Please request a new one.';
+      err.textContent = 'Invalid code. Please check your email or request a new code.';
       btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
       btn.disabled = false;
       return;
     }
 
     const reset = resets[0];
-    // Check expiry - compare UTC timestamps
-    const now = Date.now();
-    const expiry = new Date(reset.expires_at).getTime();
-    if(now > expiry + 60000){ // add 60s grace period for clock differences
+    // Check expiry using created_at + 20 minutes (generous window, avoids timezone issues)
+    const createdAt = new Date(reset.created_at).getTime();
+    const twentyMinutes = 20 * 60 * 1000;
+    if(Date.now() - createdAt > twentyMinutes){
       err.textContent = 'This code has expired. Please request a new one.';
       btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
       btn.disabled = false;
