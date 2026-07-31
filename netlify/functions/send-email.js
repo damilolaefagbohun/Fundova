@@ -332,6 +332,24 @@ exports.handler = async (event) => {
         ${btn('Sign in to Fundova', SITE_URL)}
       `);
 
+    // ── BIRTHDAY ──
+    } else if (type === 'birthday') {
+      to = body.to; const name = body.name;
+      subject = '🎂 Happy Birthday from Fundova!';
+      html = wrap(`
+        <div style="text-align:center;padding:1rem 0">
+          <div style="font-size:56px;margin-bottom:8px">🎂</div>
+          <h2 style="color:#0D3D2A;margin-bottom:4px">Happy Birthday, ${name.split(' ')[0]}!</h2>
+          <p style="color:#888;font-size:13px">From all of us at Fundova</p>
+        </div>
+        <div style="background:#F7F5F0;border-radius:12px;padding:1.25rem;margin:1rem 0;text-align:center">
+          <p style="color:#555;line-height:1.8;margin:0">Today is your special day and we wanted to take a moment to celebrate you. Thank you for being part of the Fundova community and for choosing to build your wealth with us.</p>
+        </div>
+        <p style="color:#555;line-height:1.8">We hope this year brings you great joy, good health and financial growth. Keep saving, keep growing — and know that your Fundova savings are working hard for you every weekday! 💚</p>
+        <p style="color:#555;line-height:1.8">With warm wishes,<br><strong>The Fundova Team</strong></p>
+        ${btn('View my dashboard', SITE_URL)}
+      `);
+
     } else {
       console.log('Unknown type:', type);
       return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type: ' + type }) };
