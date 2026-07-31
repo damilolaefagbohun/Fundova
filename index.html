@@ -128,6 +128,8 @@ tr:hover td{background:#fafafa}
   #contrib-main{margin-left:0!important;max-width:100vw!important;padding:1rem!important;}
 }
 </style>
+<!-- Supabase JS for Realtime -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-KEFGZ3SSZT"></script>
 <script>
@@ -753,12 +755,8 @@ let adminRefreshTimer=null;
 async function renderAdmin(){
   // Clear any existing refresh timer
   if(adminRefreshTimer)clearInterval(adminRefreshTimer);
-  // Set auto-refresh every 25 minutes
-  adminRefreshTimer=setInterval(()=>{
-    if(currentUser&&(currentUser.role==='admin'||currentUser.role==='admin_view')){
-      renderAdmin();
-    }
-  },25*60*1000);
+  // Start Realtime subscriptions instead of polling
+  startAdminRealtime();
   if(!document.querySelector('.header'))setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
     const [contributors,payments,allPayments,requests,signups,investments,deals,kycAll]=await Promise.all([
@@ -785,6 +783,7 @@ async function renderAdmin(){
       adminTab==='webinars'?await buildWebinarsAdminTab():
       adminTab==='coordinators'?await buildCoordinatorApplicationsTab():
       adminTab==='analytics'?await buildAnalyticsTab():
+      adminTab==='food_scheme'?await buildFoodSchemeAdminTab():
       await buildInvestmentsAdminTab(investments,contributors);
     // Load admin notifications
   loadAdminNotifications().catch(()=>{});
@@ -857,6 +856,7 @@ async function renderAdmin(){
     {icon:'ti-chart-bar',label:'Analytics',tab:'analytics'},
     {icon:'ti-users-group',label:'Ajo Groups',tab:'coordinators'},
     {icon:'ti-settings',label:'Settings',tab:'profile_requests'},
+    {icon:'ti-basket',label:'Food Scheme',tab:'food_scheme'},
   ];
 
   const navEl = sidebar.querySelector('#admin-nav');
@@ -1258,7 +1258,10 @@ async function approveSignup(id,name,email,bankName,accountName,accountNumber,ph
   btn.innerHTML='<span class="spinner"></span> Approving…';btn.disabled=true;
   try{
     // Create user account
-    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor',phone:phone||null,whatsapp:whatsapp||null})});
+    // Get referred_by from signup request
+    const signupReq = await sb(`signup_requests?id=eq.${id}&select=referred_by`);
+    const referredBy = signupReq&&signupReq[0]?signupReq[0].referred_by:null;
+    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor',phone:phone||null,whatsapp:whatsapp||null,referred_by:referredBy||null})});
     const newUser=newUsers&&newUsers[0];
     // Save bank details
     if(newUser){
@@ -1469,6 +1472,7 @@ async function renderContributor(){
           {icon:'ti-tag',label:'Deals',id:'deals'},
           {icon:'ti-users',label:'Group Savings',id:'groups'},
           {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
+          {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
         ].map(n=>`<div onclick="scrollToSection('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
           <i class="ti ${n.icon}" style="font-size:18px;width:20px"></i><span class="sidebar-label">${n.label}</span>
         </div>`).join('')}
@@ -1602,9 +1606,10 @@ async function renderContributor(){
             const interest=calcAccruedInterest(p.amount,p.date);
             return`<tr>
               <td style="font-weight:500">${fmtDate(p.date)}</td>
-              <td style="color:#0F6E56;font-weight:600">${fmt(p.amount)}</td>
+              <td style="color:${Number(p.amount)<0?'#A32D2D':'#0F6E56'};font-weight:600">${Number(p.amount)<0?'-':'+'}${fmt(Math.abs(p.amount))}</td>
+              <td style="font-size:12px;color:#888">${p.purpose||'Savings contribution'}</td>
               <td>${wd} days</td>
-              <td style="color:#C9961A">${fmt(interest)}</td>
+              <td style="color:#C9961A">${Number(p.amount)>0?fmt(interest):'—'}</td>
             </tr>`;
           }).join('')}
         </table></div>`:`<div class="empty">No payments recorded yet.</div>`}
@@ -1667,6 +1672,18 @@ async function renderContributor(){
         <button class="btn btn-sm btn-primary" onclick="openApplyCoordinator()"><i class="ti ti-users"></i> Apply</button>
       </div>`:''}
 
+      <!-- FOOD SCHEME SECTION -->
+      <div id="food-scheme" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:#0D1F14">🧺 Food Scheme</div>
+            <div style="font-size:12px;color:#888;margin-top:2px">Optional — choose a food package and save towards it</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="openFoodScheme()"><i class="ti ti-basket"></i> View packages</button>
+        </div>
+        <div id="food-scheme-status"></div>
+      </div>
+
       <!-- KYC SECTION -->
       <div id="kyc" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -1705,6 +1722,30 @@ async function renderContributor(){
       const kycData=kyc&&kyc.length?{...kyc[0],...(bank&&bank.length?{bank_name:bank[0].bank_name}:{})}:{};
       const el=document.getElementById('profile-completion-bar');
       if(el)el.innerHTML=await renderProfileCompletion(kycData);
+    }catch(e){}
+  })();
+  // Load food scheme status
+  (async()=>{
+    try{
+      const [enr, opts] = await Promise.all([
+        sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=*'),
+        sb('food_scheme_options?active=eq.true&select=*&order=price.asc')
+      ]);
+      const el = document.getElementById('food-scheme-status');
+      if(!el) return;
+      const e = enr&&enr.length?enr[0]:null;
+      const optMap = {};
+      (opts||[]).forEach(o=>{ optMap[o.id]=o; });
+      if(!e){
+        el.innerHTML = '<div style="font-size:12px;color:#888">You have not opted in yet. Click "View packages" to choose your package.</div>';
+      } else {
+        const opt = optMap[e.option_id]||{name:'Package',price:0};
+        const localPkg = opts?['🧺','🛒','🎁'][opts.indexOf(opts.find(o=>o.id===e.option_id))]||'🧺':'🧺';
+        const statusColor = e.status==='deducted'?'#065F46':e.status==='skipped'?'#A32D2D':'#856404';
+        const statusBg = e.status==='deducted'?'#D1FAE5':e.status==='skipped'?'#FEE2E2':'#FEF3C7';
+        const statusLabel = e.status==='deducted'?'Payment processed':e.status==='skipped'?'Skipped — top up to qualify':'Opted in';
+        el.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+localPkg+'</span><div><div style="font-size:13px;font-weight:600;color:#0D1F14">'+opt.name+'</div><div style="font-size:12px;color:#666">₦'+Number(opt.price).toLocaleString()+'</div></div><span style="margin-left:auto;background:'+statusBg+';color:'+statusColor+';font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px">'+statusLabel+'</span></div>';
+      }
     }catch(e){}
   })();
   // Start tour for new users
@@ -1830,6 +1871,12 @@ async function savePayment(userId){
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
     await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount,date,withdrawn:false})});
+    // Check if this is first payment and process referral bonus
+    const prevPayments = await sb('payments?user_id=eq.'+userId+'&select=id');
+    if(prevPayments && prevPayments.length === 1){
+      // This was the first payment - process referral bonus
+      processReferralBonus(userId).catch(()=>{});
+    }
     // Send payment notification email
     try{
       const contribs=await sb('users?id=eq.'+userId+'&select=name,email');
@@ -5872,6 +5919,415 @@ function adminNavHover(el, isOver){
   if(tab !== adminTab){
     el.style.background = isOver ? 'rgba(255,255,255,.06)' : '';
   }
+}
+
+
+// ─── SUPABASE REALTIME ────────────────────────────────────
+
+let realtimeChannel = null;
+const SB_ANON_KEY = 'sb_publishable_nzUdamSIBzvGwFK0mERSdw_OUiG7Mf6WMEfQjJMDsP_5';
+
+function startAdminRealtime(){
+  // Clean up existing channel
+  if(realtimeChannel){
+    try{ realtimeChannel.unsubscribe(); }catch(e){}
+    realtimeChannel = null;
+  }
+
+  try{
+    const supabaseClient = supabase.createClient(SB_URL, SB_ANON_KEY);
+
+    realtimeChannel = supabaseClient
+      .channel('admin-live-updates')
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'signup_requests'}, () => {
+        loadAdminNotifications().catch(()=>{});
+        showRealtimeToast('📋 New application received!');
+      })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'withdrawal_requests'}, () => {
+        loadAdminNotifications().catch(()=>{});
+        showRealtimeToast('💸 New withdrawal request!');
+      })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'payments'}, () => {
+        loadAdminNotifications().catch(()=>{});
+        showRealtimeToast('💰 New payment recorded!');
+      })
+      .on('postgres_changes', {event:'PATCH', schema:'public', table:'kyc_details'}, () => {
+        loadAdminNotifications().catch(()=>{});
+        showRealtimeToast('🔐 KYC details updated!');
+      })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'investment_reservations'}, () => {
+        loadAdminNotifications().catch(()=>{});
+        showRealtimeToast('📊 New investment reservation!');
+      })
+      .subscribe((status) => {
+        console.log('Realtime status:', status);
+      });
+  }catch(e){
+    console.error('Realtime error:', e);
+    // Fallback to 25-minute refresh if Realtime fails
+    adminRefreshTimer = setInterval(()=>{
+      if(currentUser&&(currentUser.role==='admin'||currentUser.role==='admin_view')){
+        loadAdminNotifications().catch(()=>{});
+      }
+    }, 25*60*1000);
+  }
+}
+
+function stopAdminRealtime(){
+  if(realtimeChannel){
+    try{ realtimeChannel.unsubscribe(); }catch(e){}
+    realtimeChannel = null;
+  }
+  if(adminRefreshTimer){ clearInterval(adminRefreshTimer); adminRefreshTimer=null; }
+}
+
+function showRealtimeToast(msg){
+  // Show a subtle top notification for admin
+  const existing = document.getElementById('rt-toast');
+  if(existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'rt-toast';
+  el.style.cssText = 'position:fixed;top:72px;right:1.5rem;background:#0D3D2A;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;align-items:center;gap:8px;border-left:3px solid #C9961A';
+  el.innerHTML = msg + ' <span style="font-size:11px;color:#aaa;margin-left:4px">just now</span>';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// Stop Realtime when admin logs out
+const _origLogout = doLogout;
+
+
+// ─── REFERRAL BONUS ──────────────────────────────────────
+
+async function processReferralBonus(newUserId){
+  try{
+    // Get the new user's referred_by code
+    const userArr = await sb(`users?id=eq.${newUserId}&select=referred_by,referral_bonus_paid,name`);
+    if(!userArr||!userArr.length) return;
+    const user = userArr[0];
+    if(!user.referred_by || user.referral_bonus_paid) return;
+
+    // Find the referrer by matching their generated referral code
+    // Code = first 4 chars of name + first 4 chars of id (no hyphens), uppercase
+    const allUsers = await sb('users?role=eq.contributor&select=id,name');
+    const referrer = (allUsers||[]).find(u => {
+      const code = generateReferralCode(u.name, u.id);
+      return code === user.referred_by.toUpperCase();
+    });
+
+    if(!referrer) return;
+
+    // Credit ₦500 to referrer as cooperative bonus
+    await sb('cooperative_bonuses', {method:'POST', body:JSON.stringify({
+      user_id: referrer.id,
+      amount: 500,
+      purpose: 'Referral bonus — '+user.name+' joined via your referral link',
+      status: 'pending'
+    })});
+
+    // Mark referral bonus as paid on new user
+    await sb(`users?id=eq.${newUserId}`, {method:'PATCH', body:JSON.stringify({referral_bonus_paid:true})});
+
+    // Notify referrer
+    const referrerFull = await sb(`users?id=eq.${referrer.id}&select=name,email`);
+    if(referrerFull&&referrerFull[0]){
+      await addNotification(referrer.id, '🎉 You earned a ₦500 referral bonus! '+user.name+' just made their first contribution via your referral link.');
+      notify({
+        type:'broadcast',
+        to:referrerFull[0].email,
+        name:referrerFull[0].name,
+        subject:'You earned a ₦500 referral bonus! 🎉',
+        body:'Great news! '+user.name+' just made their first contribution on Fundova via your referral link. Your ₦500 referral bonus has been credited to your account and is already earning interest. Keep sharing your link to earn more! Fundova Limited'
+      }).catch(()=>{});
+    }
+  }catch(e){ console.error('Referral bonus error:', e); }
+}
+
+
+// ─── FOOD SCHEME ─────────────────────────────────────────
+
+let foodCarouselIndex = 0;
+const FOOD_PACKAGES = [
+  {name:'Basic Basket', emoji:'🧺', color:'#1D9E75', bg:'#E8F5EE', desc:'Essential everyday food items — grains, oils, seasonings and staples for individuals or couples.'},
+  {name:'Family Basket', emoji:'🛒', color:'#C9961A', bg:'#FEF9EC', desc:'A wholesome selection designed for families — covers a wider range of everyday food needs.'},
+  {name:'Premium Basket', emoji:'🎁', color:'#185FA5', bg:'#EEF2FF', desc:'A premium selection of quality food items — includes extras and variety for the discerning household.'},
+];
+
+async function openFoodScheme(){
+  // Load options and current enrollment
+  let options = []; let enrollment = null; let settings = null;
+  try{
+    [options, enrollment, settings] = await Promise.all([
+      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
+      sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=*'),
+      sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
+    ]);
+    enrollment = enrollment&&enrollment.length?enrollment[0]:null;
+    settings = settings&&settings.length?settings[0]:null;
+  }catch(e){}
+
+  const deadline = settings&&settings.opt_in_deadline?new Date(settings.opt_in_deadline):null;
+  const isPastDeadline = deadline && new Date() > deadline;
+  const isDeducted = enrollment && enrollment.status === 'deducted';
+
+  const buildCarousel = (idx, opts, enr) => {
+    if(!opts||!opts.length) return '<div class="empty">No food scheme packages available yet. Check back soon!</div>';
+    const pkg = opts[idx];
+    const localPkg = FOOD_PACKAGES[idx] || FOOD_PACKAGES[0];
+    const isSelected = enr && enr.option_id === pkg.id;
+    return `
+    <div style="background:${localPkg.bg};border-radius:16px;padding:1.25rem;border:2px solid ${isSelected?localPkg.color:'transparent'};transition:border .3s">
+      <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px">
+        <span style="font-size:48px">${localPkg.emoji}</span>
+        <span style="font-size:11px;color:#888">Image coming soon</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:16px;font-weight:700;color:#0D1F14">${pkg.name}</div>
+        <div style="font-size:18px;font-weight:800;color:${localPkg.color}">₦${Number(pkg.price).toLocaleString()}</div>
+      </div>
+      <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:14px">${pkg.description||localPkg.desc}</div>
+      ${isDeducted?
+        `<div style="background:#D1FAE5;border-radius:8px;padding:8px 12px;font-size:12px;color:#065F46;text-align:center"><i class="ti ti-check"></i> Deducted — you are part of this scheme</div>`:
+        isSelected?
+          `<div style="background:${localPkg.bg};border:1px solid ${localPkg.color};border-radius:8px;padding:8px 12px;font-size:12px;color:${localPkg.color};text-align:center;margin-bottom:8px"><i class="ti ti-check"></i> Selected</div>
+           ${!isPastDeadline?`<div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="optOutFoodScheme()" style="flex:1">Opt out</button><button class="btn btn-sm btn-primary" onclick="changeFoodPackage('${pkg.id}')" style="flex:1">Change</button></div>`:'<div style="font-size:11px;color:#888;text-align:center">Opt-in deadline has passed</div>'}`:
+          isPastDeadline?
+            `<div style="font-size:11px;color:#aaa;text-align:center">Opt-in deadline has passed</div>`:
+            `<div style="font-size:11px;color:#888;margin-bottom:8px;background:#fff;border-radius:6px;padding:8px"><i class="ti ti-info-circle"></i> Cost deducted from your savings balance. This reduces your principal and interest going forward.</div>
+             <button class="btn btn-primary" onclick="optInFoodScheme('${pkg.id}','${pkg.name}')" style="width:100%"><i class="ti ti-basket"></i> Select this package</button>`
+      }
+    </div>`;
+  };
+
+  openModal(`
+  <h3>Food Scheme</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Optional — choose a package and the cost will be deducted from your savings when admin processes the scheme.</p>
+  ${deadline?`<div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12px;color:#856404;margin-bottom:12px"><i class="ti ti-clock"></i> Opt-in deadline: <strong>${deadline.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</strong></div>`:''}
+  <div id="food-carousel" style="position:relative">
+    ${buildCarousel(foodCarouselIndex, options, enrollment)}
+    ${options.length>1?`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+      <button onclick="foodCarouselNav(-1)" class="btn btn-sm" ${foodCarouselIndex===0?'disabled':''}><i class="ti ti-chevron-left"></i> Prev</button>
+      <div style="display:flex;gap:6px">
+        ${(options||[]).map((_,i)=>`<div style="width:8px;height:8px;border-radius:50%;background:${i===foodCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}
+      </div>
+      <button onclick="foodCarouselNav(1)" class="btn btn-sm" ${foodCarouselIndex===options.length-1?'disabled':''}> Next <i class="ti ti-chevron-right"></i></button>
+    </div>`:''}
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Close</button>
+  </div>`);
+
+  // Store options for carousel navigation
+  window._foodOptions = options;
+  window._foodEnrollment = enrollment;
+}
+
+function foodCarouselNav(dir){
+  const opts = window._foodOptions||[];
+  foodCarouselIndex = Math.max(0, Math.min(opts.length-1, foodCarouselIndex+dir));
+  // Rebuild just the carousel content
+  openFoodScheme();
+}
+
+async function optInFoodScheme(optionId, packageName){
+  try{
+    const existing = await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=id');
+    if(existing&&existing.length){
+      await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'PATCH', body:JSON.stringify({option_id:optionId, status:'opted_in', enrolled_at:new Date().toISOString()})});
+    } else {
+      await sb('food_scheme_enrollments', {method:'POST', body:JSON.stringify({user_id:currentUser.id, option_id:optionId, status:'opted_in'})});
+    }
+    await addNotification(currentUser.id, '🧺 You have opted in to the Fundova Food Scheme — '+packageName+'. The cost will be deducted from your savings when the scheme is processed.');
+    notify({type:'broadcast', to:currentUser.email, name:currentUser.name,
+      subject:'Food Scheme — You are in! 🧺',
+      body:'You have successfully opted in to the Fundova Food Scheme ('+packageName+'). The cost will be deducted from your savings balance when admin processes the scheme. You can change your package or opt out before the deadline. Fundova Limited'
+    }).catch(()=>{});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Opted in to '+packageName+'!');
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+async function optOutFoodScheme(){
+  if(!confirm('Are you sure you want to opt out of the food scheme?')) return;
+  try{
+    await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'DELETE'});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Opted out of food scheme.');
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+async function changeFoodPackage(newOptionId){
+  try{
+    await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'PATCH', body:JSON.stringify({option_id:newOptionId})});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Package updated!');
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+// ─── FOOD SCHEME ADMIN ────────────────────────────────────
+
+async function buildFoodSchemeAdminTab(){
+  try{
+    const [options, enrollments, settings] = await Promise.all([
+      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
+      sb('food_scheme_enrollments?select=*'),
+      sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
+    ]);
+
+    // Get contributor details and balances
+    const userIds = (enrollments||[]).map(e=>e.user_id);
+    let users = []; let payments = [];
+    if(userIds.length){
+      [users, payments] = await Promise.all([
+        sb('users?id=in.('+userIds.join(',')+')'+'&select=id,name,email'),
+        sb('payments?withdrawn=eq.false&select=user_id,amount')
+      ]);
+    }
+
+    const balanceMap = {};
+    (payments||[]).forEach(p=>{ balanceMap[p.user_id]=(balanceMap[p.user_id]||0)+Number(p.amount); });
+    const userMap = {};
+    (users||[]).forEach(u=>{ userMap[u.id]=u; });
+    const optionMap = {};
+    (options||[]).forEach(o=>{ optionMap[o.id]=o; });
+
+    const settings0 = settings&&settings.length?settings[0]:null;
+    const deadline = settings0&&settings0.opt_in_deadline?new Date(settings0.opt_in_deadline):null;
+    const totalOpted = (enrollments||[]).filter(e=>e.status==='opted_in'||e.status==='skipped').length;
+    const totalDeducted = (enrollments||[]).filter(e=>e.status==='deducted').length;
+    const totalSkipped = (enrollments||[]).filter(e=>e.status==='skipped').length;
+
+    const rows = (enrollments||[]).map(e=>{
+      const u = userMap[e.user_id]||{name:'Unknown',email:''};
+      const opt = optionMap[e.option_id]||{name:'Unknown',price:0};
+      const bal = balanceMap[e.user_id]||0;
+      const sufficient = bal >= opt.price;
+      const statusPill = e.status==='deducted'?'<span class="status-pill pill-approved">Deducted</span>':
+        e.status==='skipped'?'<span class="status-pill pill-rejected">Skipped</span>':
+        '<span class="status-pill pill-pending">Opted in</span>';
+      return `<tr>
+        <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#aaa">${u.email}</div></td>
+        <td>${opt.name}</td>
+        <td style="font-weight:600">₦${Number(opt.price).toLocaleString()}</td>
+        <td style="color:${sufficient?'#0F6E56':'#A32D2D'};font-weight:600">₦${bal.toLocaleString()} ${sufficient?'<i class="ti ti-check" style="color:#0F6E56"></i>':'<i class="ti ti-alert-triangle" style="color:#A32D2D"></i>'}</td>
+        <td>${statusPill}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="margin:0">Food Scheme</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="openFoodSchemeSettings()"><i class="ti ti-settings"></i> Settings</button>
+          <button class="btn btn-sm btn-primary" onclick="triggerFoodSchemeDeduction(false)"><i class="ti ti-bolt"></i> Trigger deduction</button>
+          ${totalSkipped>0?`<button class="btn btn-sm btn-warn" onclick="triggerFoodSchemeDeduction(true)"><i class="ti ti-refresh"></i> Retrigger skipped (${totalSkipped})</button>`:''}
+        </div>
+      </div>
+      ${deadline?`<div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12px;color:#856404;margin-bottom:12px"><i class="ti ti-clock"></i> Opt-in deadline: <strong>${deadline.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</strong></div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem">
+        <div style="background:#E8F5EE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#065F46">${totalOpted}</div><div style="font-size:12px;color:#065F46">Opted in</div></div>
+        <div style="background:#D1FAE5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#0F6E56">${totalDeducted}</div><div style="font-size:12px;color:#0F6E56">Deducted</div></div>
+        <div style="background:#FEE2E2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#A32D2D">${totalSkipped}</div><div style="font-size:12px;color:#A32D2D">Skipped</div></div>
+      </div>
+      ${rows?`<div class="table-wrap"><table>
+        <tr><th>Contributor</th><th>Package</th><th>Cost</th><th>Current balance</th><th>Status</th></tr>
+        ${rows}
+      </table></div>`:'<div class="empty">No contributors have opted in yet.</div>'}
+    </div>`;
+  }catch(e){ return `<div class="card"><div class="empty">Error loading food scheme: ${e.message}</div></div>`; }
+}
+
+async function openFoodSchemeSettings(){
+  const settings = await sb('food_scheme_settings?select=*&order=created_at.desc&limit=1');
+  const s = settings&&settings.length?settings[0]:null;
+  const current = s&&s.opt_in_deadline?s.opt_in_deadline.substring(0,16):'';
+  openModal(`
+  <h3>Food Scheme Settings</h3>
+  <div class="field">
+    <label>Opt-in deadline</label>
+    <input id="fs-deadline" type="datetime-local" value="${current}">
+    <div style="font-size:11px;color:#888;margin-top:4px">After this date, contributors cannot opt in or change their package.</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveFoodSchemeSettings()"><i class="ti ti-device-floppy"></i> Save settings</button>
+  </div>`);
+}
+
+async function saveFoodSchemeSettings(){
+  const deadline = document.getElementById('fs-deadline').value;
+  try{
+    const existing = await sb('food_scheme_settings?select=id');
+    if(existing&&existing.length){
+      await sb('food_scheme_settings?id=eq.'+existing[0].id, {method:'PATCH', body:JSON.stringify({opt_in_deadline:deadline||null})});
+    } else {
+      await sb('food_scheme_settings', {method:'POST', body:JSON.stringify({opt_in_deadline:deadline||null})});
+    }
+    closeModal();
+    toast('<i class="ti ti-check"></i> Settings saved!');
+    renderAdmin();
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+async function triggerFoodSchemeDeduction(skippedOnly=false){
+  const label = skippedOnly ? 'skipped members' : 'all opted-in members';
+  if(!confirm('Trigger food scheme deduction for '+label+'? This cannot be undone.')) return;
+
+  try{
+    const query = skippedOnly
+      ? 'food_scheme_enrollments?status=eq.skipped&select=*'
+      : 'food_scheme_enrollments?status=in.(opted_in,skipped)&select=*';
+
+    const enrollments = await sb(query);
+    const options = await sb('food_scheme_options?select=*');
+    const optionMap = {};
+    (options||[]).forEach(o=>{ optionMap[o.id]=o; });
+
+    let deducted=0, skipped=0;
+    const today = new Date().toISOString().split('T')[0];
+
+    for(const e of (enrollments||[])){
+      const opt = optionMap[e.option_id];
+      if(!opt) continue;
+      // Check balance
+      const pArr = await sb('payments?user_id=eq.'+e.user_id+'&withdrawn=eq.false&select=amount');
+      const balance = (pArr||[]).reduce((a,p)=>a+Number(p.amount),0);
+
+      if(balance >= opt.price){
+        // Deduct from savings as a withdrawal-type payment (negative)
+        await sb('payments', {method:'POST', body:JSON.stringify({
+          user_id:e.user_id, amount:-opt.price, date:today, withdrawn:false,
+          purpose:'Food Scheme deduction — '+opt.name
+        })});
+        await sb('food_scheme_enrollments?id=eq.'+e.id, {method:'PATCH', body:JSON.stringify({status:'deducted', deducted_at:new Date().toISOString()})});
+        // Notify contributor
+        const uArr = await sb('users?id=eq.'+e.user_id+'&select=name,email');
+        if(uArr&&uArr[0]){
+          await addNotification(e.user_id, '🧺 Your food scheme payment of ₦'+Number(opt.price).toLocaleString()+' ('+opt.name+') has been deducted from your savings. Admin will be in touch with pickup details.');
+          notify({type:'broadcast', to:uArr[0].email, name:uArr[0].name,
+            subject:'Food Scheme — Payment processed 🧺',
+            body:'Your food scheme payment of ₦'+Number(opt.price).toLocaleString()+' for the '+opt.name+' has been successfully deducted from your savings balance. Our team will contact you separately with pickup details. Thank you for participating in the Fundova Food Scheme! Fundova Limited'
+          }).catch(()=>{});
+        }
+        deducted++;
+      } else {
+        await sb('food_scheme_enrollments?id=eq.'+e.id, {method:'PATCH', body:JSON.stringify({status:'skipped'})});
+        // Notify contributor they were skipped
+        const uArr = await sb('users?id=eq.'+e.user_id+'&select=name,email');
+        if(uArr&&uArr[0]){
+          await addNotification(e.user_id, '⚠️ Your food scheme deduction could not be processed — your savings balance of ₦'+balance.toLocaleString()+' is insufficient for the '+opt.name+' (₦'+Number(opt.price).toLocaleString()+'). Please top up your savings to qualify.');
+          notify({type:'broadcast', to:uArr[0].email, name:uArr[0].name,
+            subject:'Food Scheme — Action needed ⚠️',
+            body:'Unfortunately your food scheme payment could not be processed. Your current savings balance of ₦'+balance.toLocaleString()+' is insufficient to cover the cost of the '+opt.name+' (₦'+Number(opt.price).toLocaleString()+'). Please top up your Fundova savings as soon as possible. Once your balance is sufficient, the admin can retrigger the deduction for you. Fundova Limited'
+          }).catch(()=>{});
+        }
+        skipped++;
+      }
+    }
+    alert('Done! Deducted: '+deducted+' members. Skipped: '+skipped+' (insufficient balance).');
+    renderAdmin();
+  }catch(e){ alert('Error: '+e.message); }
 }
 
 // Load saved session on startup
