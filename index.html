@@ -788,10 +788,6 @@ async function renderAdmin(){
       await buildInvestmentsAdminTab(investments,contributors);
     // Load admin notifications
   loadAdminNotifications().catch(()=>{});
-  // Load analytics sub-sections if on analytics tab
-  if(adminTab==='analytics'){
-    setTimeout(()=>loadAnalyticsSections().catch(()=>{}), 300);
-  }
   // Init sidebar state and render chart
   setTimeout(()=>{
     initAdminSidebar();
@@ -1110,6 +1106,9 @@ async function renderAdmin(){
 
   const app = document.getElementById('app');
   if(app){ app.innerHTML=''; app.appendChild(adminEl); }
+  if(adminTab==='analytics'){
+    setTimeout(()=>loadAnalyticsSections().catch(()=>{}), 300);
+  }
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);
 }}
 
@@ -3698,7 +3697,6 @@ async function buildCoordinatorApplicationsTab(){
 
   const rows=apps.map(a=>{
     const u=usersMap[a.user_id]||{name:'Unknown',email:''};
-    const members=[];
     const pill=a.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
       a.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':
       '<span class="status-pill pill-rejected">Rejected</span>';
@@ -3709,7 +3707,6 @@ async function buildCoordinatorApplicationsTab(){
     return`<tr>
       <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
       <td style="font-size:12px;color:#666">${a.reason||'—'}</td>
-      <td style="font-size:12px">${members.map(m=>`<div>${m.name} · ${m.whatsapp||m.email||''}</div>`).join('')}</td>
       <td>${fmtDate(a.created_at)}</td>
       <td>${pill}</td>
       <td><div style="display:flex;gap:4px">${actions}</div></td>
@@ -3719,7 +3716,7 @@ async function buildCoordinatorApplicationsTab(){
   return`<div class="card">
     <h3>Coordinator applications</h3>
     <div class="table-wrap"><table>
-      <tr><th>Applicant</th><th>Reason</th><th>Founding members</th><th>Date</th><th>Status</th><th></th></tr>
+      <tr><th>Applicant</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
@@ -3749,16 +3746,155 @@ async function updateCoordinatorApp(appId,status){
 function openApplyCoordinator(){
   openModal(`
   <h3>Apply to be a group coordinator</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">As a coordinator you can create and manage Ajo savings groups on Fundova. All funds are held by Fundova and disbursed on your instruction.</p>
+  <p style="font-size:13px;color:#666;margin-top:-6px">As a coordinator you can create and manage savings groups on Fundova. All funds are held by Fundova and disbursed on your instruction.</p>
   <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#065F46">
     <i class="ti ti-info-circle"></i> Once approved, you can add your group members directly from your Ajo dashboard.
   </div>
-  <div class="field"><label>Why do you want to be a coordinator?</label><textarea id="ca-reason" rows="4" placeholder="Tell us about your group and why you want to run it on Fundova"></textarea></div>
+  <div class="field"><label>Why do you want to be a coordinator?</label><textarea id="ca-reason" placeholder="Tell us about your group and why you want to run it on Fundova"></textarea></div>
   <div class="error" id="ca-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="ca-btn" onclick="submitCoordinatorApp()"><i class="ti ti-send"></i> Submit application</button>
   </div>`);
+}
+
+async function submitCoordinatorApp(){
+  const reason=document.getElementById('ca-reason').value.trim();
+  const err=document.getElementById('ca-err');
+  const btn=document.getElementById('ca-btn');
+  if(!reason){err.textContent='Please tell us why you want to be a coordinator.';return;}
+  btn.innerHTML='<span class="spinner"></span> Submitting…';btn.disabled=true;
+  try{
+    await sb('coordinator_applications',{method:'POST',body:JSON.stringify({
+      user_id:currentUser.id,reason,status:'pending'
+    })});
+    closeModal();
+    toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
+    // Notify admin of new application
+    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:currentUser.name,applicant_email:currentUser.email}).catch(()=>{});
+  }catch(e){err.textContent='Error submitting.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
+}
+
+// ── Coordinator dashboard ──
+async function renderCoordinatorDashboard(){
+  try{
+    const groups=await sb(`savings_groups?coordinator_id=eq.${currentUser.id}&select=*&order=created_at.desc`);
+    if(!groups||!groups.length){
+      return`<div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <h3 style="margin:0">My savings groups</h3>
+          <button class="btn btn-primary btn-sm" onclick="openCreateGroup()"><i class="ti ti-plus"></i> Create group</button>
+        </div>
+        <div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No groups yet. Create your first savings group!</div>
+      </div>`;
+    }
+
+    const groupIds=groups.map(g=>g.id);
+    const [allMembers,allContribs,allPayouts]=await Promise.all([
+      sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`),
+      sb(`group_contributions?group_id=in.(${groupIds.join(',')})&select=*&order=created_at.desc`),
+      sb(`group_payouts?group_id=in.(${groupIds.join(',')})&select=*&order=created_at.desc`)
+    ]);
+
+    // Get member user details
+    const memberUserIds=[...new Set((allMembers||[]).map(m=>m.user_id))];
+    let membersMap={};
+    if(memberUserIds.length){
+      const users=await sb(`users?id=in.(${memberUserIds.join(',')})&select=id,name,email,phone,whatsapp`);
+      users.forEach(u=>{membersMap[u.id]=u;});
+    }
+
+    const cards=groups.map(g=>{
+      const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id).sort((a,b)=>a.payout_order-b.payout_order);
+      const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+      const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+      const totalExpected=gMembers.reduce((a,m)=>a+Number(m.contribution_amount),0);
+      const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+
+      const memberRows=gMembers.map(m=>{
+        const u=membersMap[m.user_id]||{name:'Unknown'};
+        const hasPaidOut=completedPayoutIds.has(m.id);
+        // Check contributions for current cycle
+        const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+        const hasPaid=gContribs.some(c=>c.status==='paid');
+        return`<tr style="${hasPaidOut?'opacity:0.5':''}">
+          <td>
+            <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}</div>
+            <div style="font-size:11px;color:#888">${u.phone||u.email||''}</div>
+          </td>
+          <td style="font-weight:500">${fmt(m.contribution_amount)}</td>
+          <td>${m.payout_order||'—'}</td>
+          <td>${hasPaid
+            ?'<span class="status-pill pill-approved">Paid</span>'
+            :'<span class="status-pill pill-pending">Pending</span>'}</td>
+          <td><div style="display:flex;gap:4px">
+            ${!hasPaid?`<button class="btn btn-sm btn-primary" onclick="recordGroupContribution('${m.id}','${g.id}',${m.contribution_amount},${currentCycle})"><i class="ti ti-plus"></i> Record</button>`:''}
+            ${!hasPaidOut?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Pay out</button>`:''}
+          </div></td>
+        </tr>`;
+      }).join('');
+
+      const totalSaved=(allContribs||[]).filter(c=>c.group_id===g.id&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+      const goalPct=g.savings_goal?Math.min(100,Math.round((totalSaved/g.savings_goal)*100)):null;
+
+      return`<div class="card" style="margin-bottom:1rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <h3 style="font-size:15px;margin-bottom:4px">${g.name}</h3>
+            <div style="font-size:12px;color:#888">${g.description||''}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
+            <button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+          <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600">${gMembers.length}/${g.max_members}</div></div>
+          <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+          <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
+          <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
+        </div>
+        ${goalPct!==null?`
+        <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
+          <div style="height:100%;background:#1D9E75;width:${goalPct}%"></div>
+        </div>
+        <div style="font-size:11px;color:#888;margin-bottom:12px">${goalPct}% of group goal ${fmt(g.savings_goal)}</div>`:''}
+        ${gMembers.length?`<div class="table-wrap"><table>
+          <tr><th>Member</th><th>Contribution</th><th>Payout order</th><th>This cycle</th><th></th></tr>
+          ${memberRows}
+        </table></div>`:'<div class="empty" style="padding:1rem">No members yet. Add your founding members!</div>'}
+        ${gPayouts.length?`
+        <div style="margin-top:12px">
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:8px">Payout history</div>
+          <div class="table-wrap"><table>
+            <tr><th>Recipient</th><th>Amount</th><th>Cycle</th><th>Status</th><th>Date</th></tr>
+            ${gPayouts.map(p=>{
+              const m=gMembers.find(gm=>gm.id===p.recipient_id);
+              const u=m?membersMap[m.user_id]:{name:'Unknown'};
+              return`<tr style="${p.status==='completed'?'opacity:0.6':''}">
+                <td style="font-weight:500">${u.name} ${p.status==='completed'?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Done</span>':''}</td>
+                <td>${fmt(p.amount)}</td>
+                <td>Cycle ${p.cycle}</td>
+                <td>${p.status==='completed'?'<span class="status-pill pill-approved">Completed</span>':'<span class="status-pill pill-pending">Pending</span>'}</td>
+                <td>${p.processed_at?fmtDate(p.processed_at):'—'}</td>
+              </tr>`;
+            }).join('')}
+          </table></div>
+        </div>`:''}
+      </div>`;
+    }).join('');
+
+    const earningsHtml = await renderCoordinatorEarnings();
+
+    return`<div>
+      ${earningsHtml}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="margin:0">My savings groups</h3>
+        <button class="btn btn-primary btn-sm" onclick="openCreateGroup()"><i class="ti ti-plus"></i> Create group</button>
+      </div>
+      ${cards}
+    </div>`;
+  }catch(e){return`<div class="card"><div class="empty">Error loading groups: ${e.message}</div></div>`;}
 }
 
 function openCreateGroup(){
@@ -4757,7 +4893,6 @@ async function buildAnalyticsTab(){
         </div>
       </div>
 
-
       <!-- TOTAL MEMBER VALUE -->
       <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-top:1.25rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -4767,7 +4902,7 @@ async function buildAnalyticsTab(){
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
           <div style="background:#E8F5EE;border-radius:12px;padding:1rem">
             <div style="font-size:11px;color:#065F46;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Current savings (principal)</div>
-            <div style="font-size:22px;font-weight:800;color:#065F46">${fmt(currentSavings)}</div>
+            <div style="font-size:22px;font-weight:800;color:#065F46">${fmt(totalSavings)}</div>
             <div style="font-size:11px;color:#888;margin-top:4px">Actual cash held</div>
           </div>
           <div style="background:#FEF3C7;border-radius:12px;padding:1rem">
@@ -4777,7 +4912,7 @@ async function buildAnalyticsTab(){
           </div>
           <div style="background:#0D3D2A;border-radius:12px;padding:1rem">
             <div style="font-size:11px;color:#C9961A;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Total member value</div>
-            <div style="font-size:22px;font-weight:800;color:#C9961A">${fmt(currentSavings + totalInterest)}</div>
+            <div style="font-size:22px;font-weight:800;color:#C9961A">${fmt(totalSavings + totalInterest)}</div>
             <div style="font-size:11px;color:#aaa;margin-top:4px">Full payout obligation</div>
           </div>
         </div>
@@ -4793,12 +4928,12 @@ async function buildAnalyticsTab(){
       <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-top:1.25rem" id="food-analytics"></div>
 
       <!-- COOPERATIVE HEALTH -->
-      <div style="background:#0D3D2A;border-radius:16px;padding:1.25rem;margin-top:1.25rem" id="coop-health"></div>    </div>`;
+      <div style="background:#0D3D2A;border-radius:16px;padding:1.25rem;margin-top:1.25rem" id="coop-health"></div>
+    </div>`;
   }catch(e){return`<div class="card"><div class="empty">Error loading analytics: ${e.message}</div></div>`;}
 }
 
-// ─── ANALYTICS SECTION LOADERS ────────────────────────────
-
+// ─── ANALYTICS SECTION LOADERS (investment / Ajo / food scheme / cooperative health) ──
 async function loadAnalyticsSections(){
   try{
     const [invReservations, invIncome, groups, groupContribs, groupPayouts, coordEarnings, foodEnrollments, foodOptions, kyc, allPay, contributors] = await Promise.all([
@@ -4836,7 +4971,6 @@ async function loadAnalyticsSections(){
     const ajoEl = document.getElementById('ajo-analytics');
     if(ajoEl){
       const activeGroups = (groups||[]).filter(g=>g.status==='active').length;
-      const totalMembers = (groupContribs||[]).length;
       const totalAjoFunds = (groupContribs||[]).reduce((a,c)=>a+Number(c.amount||0),0);
       const totalAjoPayouts = (groupPayouts||[]).reduce((a,p)=>a+Number(p.amount||0),0);
       const totalCoordEarnings = (coordEarnings||[]).reduce((a,e)=>a+Number(e.amount||0),0);
@@ -4899,8 +5033,6 @@ async function loadAnalyticsSections(){
     }
   }catch(e){ console.error('Analytics sections error:', e); }
 }
-
-
 
 // ─── INVESTMENT AUTO-REFUND ────────────────────────────────
 
