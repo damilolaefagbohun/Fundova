@@ -1500,10 +1500,10 @@ async function renderContributor(){
           {icon:'ti-cash',label:'Withdrawals',id:'wdw'},
           {icon:'ti-building-bank',label:'Investments',id:'inv'},
           {icon:'ti-tag',label:'Deals',id:'deals'},
-          {icon:'ti-users',label:'Group Savings',id:'groups'},
+          {icon:'ti-users',label:'Group Savings',id:'groups',href:'/ajo'},
           {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
           {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
-        ].map(n=>`<div onclick="scrollToSection('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
+        ].map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`}" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
           <i class="ti ${n.icon}" style="font-size:18px;width:20px"></i><span class="sidebar-label">${n.label}</span>
         </div>`).join('')}
       </div>
