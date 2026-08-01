@@ -6514,8 +6514,9 @@ async function processReferralBonus(newUserId){
     await sb('cooperative_bonuses', {method:'POST', body:JSON.stringify({
       user_id: referrer.id,
       amount: 500,
-      purpose: 'Referral bonus — '+user.name+' joined via your referral link',
-      status: 'pending'
+      description: 'Referral bonus — '+user.name+' joined via your referral link',
+      date: new Date().toISOString().split('T')[0],
+      status: 'available'
     })});
 
     // Mark referral bonus as paid on new user
