@@ -124,9 +124,16 @@ tr:hover td{background:#fafafa}
   #cooperative>div{grid-template-columns:1fr!important;}
   nav>div:nth-child(2){display:none!important;}
   footer>div>div:first-child>div{grid-template-columns:1fr 1fr!important;}
-  #contrib-sidebar{display:none!important;}
+  #contrib-sidebar{transform:translateX(-100%);transition:transform .25s ease;width:250px!important;box-shadow:0 0 40px rgba(0,0,0,.35);z-index:150!important}
+  #contrib-sidebar.mobile-open{transform:translateX(0)}
+  #contrib-sidebar .sidebar-label{display:inline!important}
   #contrib-main{margin-left:0!important;max-width:100vw!important;padding:1rem!important;}
+  #contrib-toggle-btn{display:none!important;}
+  #contrib-hamburger{display:flex!important;}
 }
+#contrib-sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:149}
+#contrib-sidebar-backdrop.open{display:block}
+#contrib-hamburger{display:none;background:#fff;border:1px solid #e5e5e2;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;cursor:pointer;font-size:17px;color:#0D3D2A;flex-shrink:0}
 </style>
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-KEFGZ3SSZT"></script>
@@ -1479,6 +1486,8 @@ async function renderContributor(){
     setHTML(`
   <div style="display:flex;min-height:100vh;background:#F7F5F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 
+    <div id="contrib-sidebar-backdrop" onclick="closeContribSidebarMobile()"></div>
+
     <!-- SIDEBAR -->
     <div style="width:220px;background:#0D3D2A;display:flex;flex-direction:column;padding:1.5rem 0;position:fixed;top:0;bottom:0;left:0;z-index:50" id="contrib-sidebar">
       <div style="padding:0 1.25rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.1)">
@@ -1503,7 +1512,7 @@ async function renderContributor(){
           {icon:'ti-users',label:'Group Savings',id:'groups',href:'/ajo'},
           {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
           {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
-        ].map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`}" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
+        ].map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`};closeContribSidebarMobile()" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
           <i class="ti ${n.icon}" style="font-size:18px;width:20px"></i><span class="sidebar-label">${n.label}</span>
         </div>`).join('')}
       </div>
@@ -1523,10 +1532,13 @@ async function renderContributor(){
     <div style="margin-left:220px;flex:1;padding:2rem;max-width:calc(100vw - 220px)" id="contrib-main">
 
       <!-- TOP BAR -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
-        <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <button id="contrib-hamburger" onclick="toggleContribSidebarMobile()" title="Menu"><i class="ti ti-menu-2"></i></button>
+          <div style="min-width:0">
           <h1 style="font-size:22px;font-weight:700;color:#0D1F14;margin-bottom:2px">Good ${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, ${currentUser.name.split(' ')[0]} 👋</h1>
           ${currentUser.savings_goal?`<p style="font-size:13px;color:#888;margin:0">You are ${Math.min(100,Math.round((totalPrincipal+totalInterest)/currentUser.savings_goal*100))}% of the way to your ₦${Number(currentUser.savings_goal).toLocaleString()} goal</p>`:`<p style="font-size:13px;color:#888;margin:0">Welcome to Fundova — your money is growing every weekday</p>`}
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="position:relative">
@@ -1685,22 +1697,14 @@ async function renderContributor(){
         <div style="font-size:12px;color:#888">Your referral code: <strong style="color:#0F6E56;font-family:monospace">${generateReferralCode(currentUser.name,currentUser.id)}</strong></div>
       </div>
 
-      <!-- COORDINATOR SECTION -->
-      ${currentUser.is_coordinator?`
-      <div id="coordinator-section" style="margin-bottom:1.25rem">
-        <div style="font-size:15px;font-weight:600;color:#0D1F14;margin-bottom:12px"><i class="ti ti-users" style="color:#1D9E75"></i> My savings groups</div>
-        <div id="coordinator-content"><div style="background:#fff;border-radius:16px;padding:1.5rem;border:1px solid #e5e5e2;text-align:center;color:#888">Loading groups…</div></div>
-      </div>`:''}
-
-      <!-- APPLY COORDINATOR -->
-      ${!currentUser.is_coordinator?`
-      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-size:14px;font-weight:600;color:#0D1F14">Become a group coordinator</div>
-          <div style="font-size:12px;color:#888;margin-top:2px">Create and manage savings groups (ajo) on Fundova</div>
+      <!-- AJO / GROUP SAVINGS SECTION -->
+      <div id="ajo-section" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:15px;font-weight:600;color:#0D1F14"><i class="ti ti-users" style="color:#1D9E75"></i> Group Savings (Ajo)</div>
+          <button class="btn btn-sm btn-primary" onclick="window.location.href='/ajo'"><i class="ti ti-arrow-right"></i> Open Ajo dashboard</button>
         </div>
-        <button class="btn btn-sm btn-primary" onclick="openApplyCoordinator()"><i class="ti ti-users"></i> Apply</button>
-      </div>`:''}
+        <div id="ajo-preview-content"><div style="font-size:12px;color:#888">Loading…</div></div>
+      </div>
 
       <!-- FOOD SCHEME SECTION -->
       <div id="food-scheme" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
@@ -1711,7 +1715,8 @@ async function renderContributor(){
           </div>
           <button class="btn btn-sm btn-primary" onclick="openFoodScheme()"><i class="ti ti-basket"></i> View packages</button>
         </div>
-        <div id="food-scheme-status"></div>
+        <div id="food-scheme-status" style="margin-bottom:10px"></div>
+        <div id="dash-food-carousel"><div style="font-size:12px;color:#888">Loading packages…</div></div>
       </div>
 
       <!-- KYC SECTION -->
@@ -1731,13 +1736,10 @@ async function renderContributor(){
     const el=document.getElementById('inv-content');
     if(el)el.innerHTML=html;
   });
-  // Load coordinator groups if applicable
-  if(currentUser.is_coordinator){
-    renderCoordinatorDashboard().then(html=>{
-      const el=document.getElementById('coordinator-content');
-      if(el)el.innerHTML=html;
-    });
-  }
+  // Load Ajo groups preview (coordinator and/or member) — full management lives at /ajo
+  loadAjoDashboardPreview();
+  // Load food scheme carousel (visible before opening the modal)
+  loadDashFoodCarousel();
   // Load cooperative bonuses
   loadCooperativeBonuses();
   // Load notifications
@@ -3862,6 +3864,68 @@ async function submitCoordinatorApp(){
 }
 
 // ── Coordinator dashboard ──
+// Compact Ajo preview shown on the main dashboard (coordinator status + membership status),
+// with a button to the full /ajo dashboard for management/detail.
+async function loadAjoDashboardPreview(){
+  const el = document.getElementById('ajo-preview-content');
+  if(!el) return;
+  try{
+    const isCoordinator = !!currentUser.is_coordinator;
+    const [coordGroups, myMemberships] = await Promise.all([
+      isCoordinator ? sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=*`) : Promise.resolve([]),
+      sb(`group_members?user_id=eq.${currentUser.id}&select=*`)
+    ]);
+    const activeMemberships = (myMemberships||[]).filter(m=>m.status!=='removed');
+
+    if((!coordGroups||!coordGroups.length) && !activeMemberships.length){
+      el.innerHTML = `<div style="font-size:12px;color:#888;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span>You're not part of any Ajo group yet.</span>
+        <button class="btn btn-sm" onclick="openApplyCoordinator()"><i class="ti ti-send"></i> Apply to become a coordinator</button>
+      </div>`;
+      return;
+    }
+
+    let html = '';
+
+    if(coordGroups && coordGroups.length){
+      const groupIds = coordGroups.map(g=>g.id);
+      const allMembers = await sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`);
+      const totalMembers = (allMembers||[]).filter(m=>m.status!=='removed').length;
+      html += `<div style="display:flex;align-items:center;gap:10px;background:#F0FDF8;border-radius:10px;padding:10px 12px;margin-bottom:${activeMemberships.length?'10px':'0'}">
+        <i class="ti ti-crown" style="color:#C9961A;font-size:18px;flex-shrink:0"></i>
+        <div style="font-size:12px;color:#065F46"><strong>Coordinating ${coordGroups.length} group${coordGroups.length!==1?'s':''}</strong> · ${totalMembers} member${totalMembers!==1?'s':''} total</div>
+      </div>`;
+    }
+
+    if(activeMemberships.length){
+      const groupIds = [...new Set(activeMemberships.map(m=>m.group_id))];
+      const [groups, allMembers, allPayouts] = await Promise.all([
+        sb(`savings_groups?id=in.(${groupIds.join(',')})&select=*`),
+        sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`),
+        sb(`group_payouts?group_id=in.(${groupIds.join(',')})&select=*`)
+      ]);
+      const groupsMap = {}; (groups||[]).forEach(g=>{groupsMap[g.id]=g;});
+      html += activeMemberships.map(m=>{
+        const g = groupsMap[m.group_id];
+        if(!g) return '';
+        const gMembers = (allMembers||[]).filter(mm=>mm.group_id===g.id&&mm.status!=='removed').sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+        const gPayouts = (allPayouts||[]).filter(p=>p.group_id===g.id);
+        const completedIds = new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+        const unpaid = gMembers.filter(mm=>!completedIds.has(mm.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+        const rank = unpaid.findIndex(mm=>mm.id===m.id);
+        const isNext = rank===0;
+        const hasPaidOut = completedIds.has(m.id);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #f0f0ee">
+          <div><div style="font-size:13px;font-weight:600;color:#0D1F14">${g.name}</div><div style="font-size:11px;color:#888">Position ${m.payout_order||'—'} · ${fmt(m.contribution_amount)}/cycle</div></div>
+          ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:10px;font-weight:600">Paid out</span>':isNext?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:2px 8px;border-radius:10px;font-weight:600">Next in line</span>':'<span style="font-size:10px;color:#aaa">In rotation</span>'}
+        </div>`;
+      }).join('');
+    }
+
+    el.innerHTML = html;
+  }catch(e){ /* leave the loading state minimal on failure */ }
+}
+
 async function renderCoordinatorDashboard(){
   try{
     const groups=await sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=*&order=created_at.asc`);
@@ -5390,7 +5454,7 @@ const TOUR_STEPS = [
   { id:'bonus-section', title:'Cooperative bonuses', body:'Any surplus distributed by Fundova appears here. You can add it to your savings or request a withdrawal.' },
   { id:'inv-content', title:'Group investments', body:'Pool funds with other members to purchase real assets like vehicles or property and earn monthly income from them.' },
   { id:'deals-content', title:'Deals marketplace', body:'Exclusive offers from fellow Fundova members. Contact sellers directly via WhatsApp — no middleman.' },
-  { id:'coordinator-section', title:'Group savings (Ajo)', body:'Apply to become a coordinator and run your own rotating savings group on Fundova. Earn bonuses while helping others save.' },
+  { id:'ajo-section', title:'Group savings (Ajo)', body:'Apply to become a coordinator and run your own rotating savings group on Fundova. Earn bonuses while helping others save.' },
 ];
 
 let tourStep = 0;
@@ -6217,6 +6281,21 @@ function initContribSidebar(){
   }
 }
 
+// Mobile: open/close the sidebar as an overlay drawer (desktop collapse above is separate)
+function toggleContribSidebarMobile(){
+  const sb = document.getElementById('contrib-sidebar');
+  const bd = document.getElementById('contrib-sidebar-backdrop');
+  if(!sb)return;
+  sb.classList.toggle('mobile-open');
+  if(bd) bd.classList.toggle('open');
+}
+function closeContribSidebarMobile(){
+  const sb = document.getElementById('contrib-sidebar');
+  const bd = document.getElementById('contrib-sidebar-backdrop');
+  if(sb) sb.classList.remove('mobile-open');
+  if(bd) bd.classList.remove('open');
+}
+
 // ─── ADMIN CHART ──────────────────────────────────────────
 
 function renderAdminChart(allPayments){
@@ -6467,29 +6546,13 @@ const FOOD_PACKAGES = [
   {name:'Premium Basket', emoji:'🎁', color:'#185FA5', bg:'#EEF2FF', desc:'A premium selection of quality food items — includes extras and variety for the discerning household.'},
 ];
 
-async function openFoodScheme(){
-  // Load options and current enrollment
-  let options = []; let enrollment = null; let settings = null;
-  try{
-    [options, enrollment, settings] = await Promise.all([
-      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
-      sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=*'),
-      sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
-    ]);
-    enrollment = enrollment&&enrollment.length?enrollment[0]:null;
-    settings = settings&&settings.length?settings[0]:null;
-  }catch(e){}
-
-  const deadline = settings&&settings.opt_in_deadline?new Date(settings.opt_in_deadline):null;
-  const isPastDeadline = deadline && new Date() > deadline;
-  const isDeducted = enrollment && enrollment.status === 'deducted';
-
-  const buildCarousel = (idx, opts, enr) => {
-    if(!opts||!opts.length) return '<div class="empty">No food scheme packages available yet. Check back soon!</div>';
-    const pkg = opts[idx];
-    const localPkg = FOOD_PACKAGES[idx] || FOOD_PACKAGES[0];
-    const isSelected = enr && enr.option_id === pkg.id;
-    return `
+// Standalone card renderer — used by both the food-scheme modal and the dashboard preview carousel
+function buildFoodPackageCard(idx, opts, enrollment, isPastDeadline, isDeducted){
+  if(!opts||!opts.length) return '<div class="empty">No food scheme packages available yet. Check back soon!</div>';
+  const pkg = opts[idx];
+  const localPkg = FOOD_PACKAGES[idx] || FOOD_PACKAGES[0];
+  const isSelected = enrollment && enrollment.option_id === pkg.id;
+  return `
     <div style="background:${localPkg.bg};border-radius:16px;padding:1.25rem;border:2px solid ${isSelected?localPkg.color:'transparent'};transition:border .3s">
       <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px">
         <span style="font-size:48px">${localPkg.emoji}</span>
@@ -6511,7 +6574,26 @@ async function openFoodScheme(){
              <button class="btn btn-primary" onclick="optInFoodScheme('${pkg.id}','${pkg.name}')" style="width:100%"><i class="ti ti-basket"></i> Select this package</button>`
       }
     </div>`;
-  };
+}
+
+async function openFoodScheme(){
+  // Load options and current enrollment
+  let options = []; let enrollment = null; let settings = null;
+  try{
+    [options, enrollment, settings] = await Promise.all([
+      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
+      sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=*'),
+      sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
+    ]);
+    enrollment = enrollment&&enrollment.length?enrollment[0]:null;
+    settings = settings&&settings.length?settings[0]:null;
+  }catch(e){}
+
+  const deadline = settings&&settings.opt_in_deadline?new Date(settings.opt_in_deadline):null;
+  const isPastDeadline = deadline && new Date() > deadline;
+  const isDeducted = enrollment && enrollment.status === 'deducted';
+
+  const buildCarousel = (idx, opts, enr) => buildFoodPackageCard(idx, opts, enr, isPastDeadline, isDeducted);
 
   openModal(`
   <h3>Food Scheme</h3>
@@ -6542,6 +6624,50 @@ function foodCarouselNav(dir){
   foodCarouselIndex = Math.max(0, Math.min(opts.length-1, foodCarouselIndex+dir));
   // Rebuild just the carousel content
   openFoodScheme();
+}
+
+// ─── DASHBOARD FOOD CAROUSEL (visible before opening the modal) ──
+let dashFoodCarouselIndex = 0;
+async function loadDashFoodCarousel(){
+  const el = document.getElementById('dash-food-carousel');
+  if(!el) return;
+  try{
+    const [options, enrollment, settings] = await Promise.all([
+      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
+      sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=*'),
+      sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
+    ]);
+    window._dashFoodOptions = options||[];
+    window._dashFoodEnrollment = enrollment&&enrollment.length?enrollment[0]:null;
+    window._dashFoodSettings = settings&&settings.length?settings[0]:null;
+    renderDashFoodCarousel();
+  }catch(e){ el.innerHTML=''; }
+}
+function renderDashFoodCarousel(){
+  const el = document.getElementById('dash-food-carousel');
+  if(!el) return;
+  const options = window._dashFoodOptions||[];
+  const enrollment = window._dashFoodEnrollment;
+  const settings = window._dashFoodSettings;
+  const deadline = settings&&settings.opt_in_deadline?new Date(settings.opt_in_deadline):null;
+  const isPastDeadline = deadline && new Date() > deadline;
+  const isDeducted = enrollment && enrollment.status === 'deducted';
+  if(!options.length){ el.innerHTML=''; return; }
+  el.innerHTML = `
+    ${buildFoodPackageCard(dashFoodCarouselIndex, options, enrollment, isPastDeadline, isDeducted)}
+    ${options.length>1?`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+      <button onclick="dashFoodCarouselNav(-1)" class="btn btn-sm" ${dashFoodCarouselIndex===0?'disabled':''}><i class="ti ti-chevron-left"></i></button>
+      <div style="display:flex;gap:6px">
+        ${options.map((_,i)=>`<div style="width:7px;height:7px;border-radius:50%;background:${i===dashFoodCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}
+      </div>
+      <button onclick="dashFoodCarouselNav(1)" class="btn btn-sm" ${dashFoodCarouselIndex===options.length-1?'disabled':''}><i class="ti ti-chevron-right"></i></button>
+    </div>`:''}`;
+}
+function dashFoodCarouselNav(dir){
+  const opts = window._dashFoodOptions||[];
+  dashFoodCarouselIndex = Math.max(0, Math.min(opts.length-1, dashFoodCarouselIndex+dir));
+  renderDashFoodCarousel();
 }
 
 async function optInFoodScheme(optionId, packageName){
