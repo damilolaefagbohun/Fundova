@@ -6555,9 +6555,10 @@ function buildFoodPackageCard(idx, opts, enrollment, isPastDeadline, isDeducted)
   const isSelected = enrollment && enrollment.option_id === pkg.id;
   return `
     <div style="background:${localPkg.bg};border-radius:16px;padding:1.25rem;border:2px solid ${isSelected?localPkg.color:'transparent'};transition:border .3s">
-      <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px">
-        <span style="font-size:48px">${localPkg.emoji}</span>
-        <span style="font-size:11px;color:#888">Image coming soon</span>
+      <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px;overflow:hidden">
+        ${pkg.image_url
+          ? `<img src="${pkg.image_url}" alt="${pkg.name}" style="width:100%;height:100%;object-fit:cover">`
+          : `<span style="font-size:48px">${localPkg.emoji}</span><span style="font-size:11px;color:#888">Image coming soon</span>`}
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:16px;font-weight:700;color:#0D1F14">${pkg.name}</div>
