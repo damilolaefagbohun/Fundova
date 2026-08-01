@@ -244,9 +244,30 @@ async function render(){
   if(window.location.pathname==='/faq'){renderFaqPage();return;}
   if(window.location.pathname==='/learn'){renderLearnPage();return;}
   if(!currentUser){renderLogin();return;}
+  if(window.location.pathname==='/ajo'){
+    if(currentUser.role==='admin'||currentUser.role==='admin_view'){window.location.href='/';return;}
+    if(currentUser.role==='pending'){renderPendingScreen();return;}
+    await renderAjoPage();return;
+  }
   if(currentUser.role==='admin'||currentUser.role==='admin_view')await renderAdmin();
   else if(currentUser.role==='pending')renderPendingScreen();
   else await renderContributor();
+}
+
+// ─── PENDING APPROVAL SCREEN ───────────────────────────────
+// Shown to contributors whose signup application hasn't been approved by admin yet.
+// (Was called from render() in two places but never defined — fixed here.)
+function renderPendingScreen(){
+  setHTML(`
+  <div class="pending-screen">
+    <div class="pending-icon"><i class="ti ti-clock-hour-4"></i></div>
+    <h2 style="font-size:19px;font-weight:600">Your application is under review</h2>
+    <p style="font-size:13px;color:#666;max-width:360px">Thanks for applying to join Fundova! Our team is reviewing your details and will approve your account shortly — you'll get an email as soon as you're in.</p>
+    <div style="display:flex;gap:8px;margin-top:.5rem">
+      <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+      <button class="btn btn-primary" onclick="render()"><i class="ti ti-refresh"></i> Check again</button>
+    </div>
+  </div>`);
 }
 
 // ─── LOGIN ───────────────────────────────────────────────
@@ -3691,35 +3712,100 @@ async function buildCoordinatorApplicationsTab(){
     users.forEach(u=>{usersMap[u.id]=u;});
   }
 
-  if(!apps||!apps.length){
-    return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No coordinator applications yet.</div></div>`;
+  const appsHtml=(!apps||!apps.length)
+    ?`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No coordinator applications yet.</div></div>`
+    :(()=>{
+      const rows=apps.map(a=>{
+        const u=usersMap[a.user_id]||{name:'Unknown',email:''};
+        const pill=a.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
+          a.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':
+          '<span class="status-pill pill-rejected">Rejected</span>';
+        const actions=a.status==='pending'?`
+          <button class="btn btn-sm btn-primary" onclick="approveCoordinatorApp('${a.id}','${a.user_id}')"><i class="ti ti-check"></i> Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="updateCoordinatorApp('${a.id}','rejected')"><i class="ti ti-x"></i></button>`
+          :'<span style="color:#aaa;font-size:12px">—</span>';
+        return`<tr>
+          <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
+          <td style="font-size:12px;color:#666">${a.reason||'—'}</td>
+          <td>${fmtDate(a.created_at)}</td>
+          <td>${pill}</td>
+          <td><div style="display:flex;gap:4px">${actions}</div></td>
+        </tr>`;
+      }).join('');
+      return`<div class="card">
+        <h3>Coordinator applications</h3>
+        <div class="table-wrap"><table>
+          <tr><th>Applicant</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr>
+          ${rows}
+        </table></div>
+      </div>`;
+    })();
+
+  const groupsHtml=await buildAdminAjoGroupsSection();
+  return groupsHtml+appsHtml;
+}
+
+// Admin-only: record Ajo contributions (coordinators and members can no longer self-record)
+async function buildAdminAjoGroupsSection(){
+  const groups=await sb('savings_groups?status=eq.active&select=*&order=created_at.asc');
+  if(!groups||!groups.length){
+    return`<div class="card"><h3>Ajo groups — record contributions</h3><div class="empty">No active Ajo groups yet.</div></div>`;
+  }
+  const groupIds=groups.map(g=>g.id);
+  const [allMembers,allContribs,allPayouts,coords]=await Promise.all([
+    sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`),
+    sb(`group_contributions?group_id=in.(${groupIds.join(',')})&select=*`),
+    sb(`group_payouts?group_id=in.(${groupIds.join(',')})&select=*`),
+    sb(`users?id=in.(${[...new Set(groups.map(g=>g.coordinator_id))].join(',')})&select=id,name`)
+  ]);
+  const coordMap={};(coords||[]).forEach(c=>{coordMap[c.id]=c.name;});
+  const memberUserIds=[...new Set((allMembers||[]).map(m=>m.user_id))];
+  let usersMap={};
+  if(memberUserIds.length){
+    const users=await sb(`users?id=in.(${memberUserIds.join(',')})&select=id,name,email`);
+    users.forEach(u=>{usersMap[u.id]=u;});
   }
 
-  const rows=apps.map(a=>{
-    const u=usersMap[a.user_id]||{name:'Unknown',email:''};
-    const pill=a.status==='pending'?'<span class="status-pill pill-pending">Pending</span>':
-      a.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':
-      '<span class="status-pill pill-rejected">Rejected</span>';
-    const actions=a.status==='pending'?`
-      <button class="btn btn-sm btn-primary" onclick="approveCoordinatorApp('${a.id}','${a.user_id}')"><i class="ti ti-check"></i> Approve</button>
-      <button class="btn btn-sm btn-danger" onclick="updateCoordinatorApp('${a.id}','rejected')"><i class="ti ti-x"></i></button>`
-      :'<span style="color:#aaa;font-size:12px">—</span>';
-    return`<tr>
-      <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></td>
-      <td style="font-size:12px;color:#666">${a.reason||'—'}</td>
-      <td>${fmtDate(a.created_at)}</td>
-      <td>${pill}</td>
-      <td><div style="display:flex;gap:4px">${actions}</div></td>
-    </tr>`;
+  const groupBlocks=groups.map(g=>{
+    const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id&&m.status!=='removed').sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+    if(!gMembers.length)return'';
+    const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+    const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+    const rows=gMembers.map(m=>{
+      const u=usersMap[m.user_id]||{name:'Unknown'};
+      const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+      const hasPaid=gContribs.some(c=>c.status==='paid');
+      return`<tr>
+        <td style="font-weight:500">${u.name}</td>
+        <td>${fmt(m.contribution_amount)}</td>
+        <td>${hasPaid?'<span class="status-pill pill-approved">Recorded</span>':'<span class="status-pill pill-pending">Not yet</span>'}</td>
+        <td>${!hasPaid?`<button class="btn btn-sm btn-primary" onclick="adminRecordGroupContribution('${m.id}','${g.id}',${m.contribution_amount},${currentCycle})"><i class="ti ti-plus"></i> Record</button>`:'<span style="color:#aaa;font-size:12px">—</span>'}</td>
+      </tr>`;
+    }).join('');
+    return`<div style="margin-bottom:1.25rem">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${g.name} <span style="font-weight:400;color:#888;font-size:12px">· Coordinator: ${coordMap[g.coordinator_id]||'—'} · Cycle ${currentCycle}</span></div>
+      <div class="table-wrap"><table>
+        <tr><th>Member</th><th>Expected</th><th>This cycle</th><th></th></tr>
+        ${rows}
+      </table></div>
+    </div>`;
   }).join('');
 
   return`<div class="card">
-    <h3>Coordinator applications</h3>
-    <div class="table-wrap"><table>
-      <tr><th>Applicant</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr>
-      ${rows}
-    </table></div>
+    <h3>Ajo groups — record contributions</h3>
+    <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:1rem">Only admin records member contributions. Coordinators handle payouts from their <code>/ajo</code> dashboard.</p>
+    ${groupBlocks||'<div class="empty">No active group members yet.</div>'}
   </div>`;
+}
+
+async function adminRecordGroupContribution(memberId,groupId,amount,cycle){
+  if(!confirm(`Record payment of ${fmt(amount)} for this member?`))return;
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    await sb('group_contributions',{method:'POST',body:JSON.stringify({group_id:groupId,member_id:memberId,amount,cycle,status:'paid',date:today})});
+    toast('<i class="ti ti-check"></i> Contribution recorded!');
+    await renderAdmin();
+  }catch(e){alert('Error recording contribution: '+e.message);}
 }
 
 async function approveCoordinatorApp(appId,userId){
@@ -3778,7 +3864,7 @@ async function submitCoordinatorApp(){
 // ── Coordinator dashboard ──
 async function renderCoordinatorDashboard(){
   try{
-    const groups=await sb(`savings_groups?coordinator_id=eq.${currentUser.id}&select=*&order=created_at.desc`);
+    const groups=await sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=*&order=created_at.asc`);
     if(!groups||!groups.length){
       return`<div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -3804,85 +3890,7 @@ async function renderCoordinatorDashboard(){
       users.forEach(u=>{membersMap[u.id]=u;});
     }
 
-    const cards=groups.map(g=>{
-      const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id).sort((a,b)=>a.payout_order-b.payout_order);
-      const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
-      const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
-      const totalExpected=gMembers.reduce((a,m)=>a+Number(m.contribution_amount),0);
-      const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
-
-      const memberRows=gMembers.map(m=>{
-        const u=membersMap[m.user_id]||{name:'Unknown'};
-        const hasPaidOut=completedPayoutIds.has(m.id);
-        // Check contributions for current cycle
-        const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
-        const hasPaid=gContribs.some(c=>c.status==='paid');
-        return`<tr style="${hasPaidOut?'opacity:0.5':''}">
-          <td>
-            <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}</div>
-            <div style="font-size:11px;color:#888">${u.phone||u.email||''}</div>
-          </td>
-          <td style="font-weight:500">${fmt(m.contribution_amount)}</td>
-          <td>${m.payout_order||'—'}</td>
-          <td>${hasPaid
-            ?'<span class="status-pill pill-approved">Paid</span>'
-            :'<span class="status-pill pill-pending">Pending</span>'}</td>
-          <td><div style="display:flex;gap:4px">
-            ${!hasPaid?`<button class="btn btn-sm btn-primary" onclick="recordGroupContribution('${m.id}','${g.id}',${m.contribution_amount},${currentCycle})"><i class="ti ti-plus"></i> Record</button>`:''}
-            ${!hasPaidOut?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Pay out</button>`:''}
-          </div></td>
-        </tr>`;
-      }).join('');
-
-      const totalSaved=(allContribs||[]).filter(c=>c.group_id===g.id&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
-      const goalPct=g.savings_goal?Math.min(100,Math.round((totalSaved/g.savings_goal)*100)):null;
-
-      return`<div class="card" style="margin-bottom:1rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div>
-            <h3 style="font-size:15px;margin-bottom:4px">${g.name}</h3>
-            <div style="font-size:12px;color:#888">${g.description||''}</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
-            <button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
-          <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600">${gMembers.length}/${g.max_members}</div></div>
-          <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
-          <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
-          <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
-        </div>
-        ${goalPct!==null?`
-        <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
-          <div style="height:100%;background:#1D9E75;width:${goalPct}%"></div>
-        </div>
-        <div style="font-size:11px;color:#888;margin-bottom:12px">${goalPct}% of group goal ${fmt(g.savings_goal)}</div>`:''}
-        ${gMembers.length?`<div class="table-wrap"><table>
-          <tr><th>Member</th><th>Contribution</th><th>Payout order</th><th>This cycle</th><th></th></tr>
-          ${memberRows}
-        </table></div>`:'<div class="empty" style="padding:1rem">No members yet. Add your founding members!</div>'}
-        ${gPayouts.length?`
-        <div style="margin-top:12px">
-          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:8px">Payout history</div>
-          <div class="table-wrap"><table>
-            <tr><th>Recipient</th><th>Amount</th><th>Cycle</th><th>Status</th><th>Date</th></tr>
-            ${gPayouts.map(p=>{
-              const m=gMembers.find(gm=>gm.id===p.recipient_id);
-              const u=m?membersMap[m.user_id]:{name:'Unknown'};
-              return`<tr style="${p.status==='completed'?'opacity:0.6':''}">
-                <td style="font-weight:500">${u.name} ${p.status==='completed'?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Done</span>':''}</td>
-                <td>${fmt(p.amount)}</td>
-                <td>Cycle ${p.cycle}</td>
-                <td>${p.status==='completed'?'<span class="status-pill pill-approved">Completed</span>':'<span class="status-pill pill-pending">Pending</span>'}</td>
-                <td>${p.processed_at?fmtDate(p.processed_at):'—'}</td>
-              </tr>`;
-            }).join('')}
-          </table></div>
-        </div>`:''}
-      </div>`;
-    }).join('');
+    const cards=groups.map(g=>buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap)).join('');
 
     const earningsHtml = await renderCoordinatorEarnings();
 
@@ -3895,6 +3903,266 @@ async function renderCoordinatorDashboard(){
       ${cards}
     </div>`;
   }catch(e){return`<div class="card"><div class="empty">Error loading groups: ${e.message}</div></div>`;}
+}
+
+// Shared coordinator-facing group card — used by the embedded dashboard section and the dedicated /ajo page
+function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
+  const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id&&m.status!=='removed').sort((a,b)=>a.payout_order-b.payout_order);
+  const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+  const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+  const totalExpected=gMembers.reduce((a,m)=>a+Number(m.contribution_amount),0);
+  const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+  const unpaidMembers=gMembers.filter(m=>!completedPayoutIds.has(m.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+  const nextPayoutMemberId=unpaidMembers.length?unpaidMembers[0].id:null;
+
+  const memberRows=gMembers.map(m=>{
+    const u=membersMap[m.user_id]||{name:'Unknown'};
+    const hasPaidOut=completedPayoutIds.has(m.id);
+    const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+    const hasPaid=gContribs.some(c=>c.status==='paid');
+    const isNextInLine=!hasPaidOut&&m.id===nextPayoutMemberId;
+    return`<tr style="${hasPaidOut?'opacity:0.5':''}">
+      <td>
+        <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}${isNextInLine?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Next in line</span>':''}</div>
+        <div style="font-size:11px;color:#888">${u.phone||u.email||''}</div>
+      </td>
+      <td style="font-weight:500">${fmt(m.contribution_amount)}</td>
+      <td>${m.payout_order||'—'}</td>
+      <td>${hasPaid
+        ?'<span class="status-pill pill-approved">Paid</span>'
+        :'<span class="status-pill pill-pending">Pending</span>'}</td>
+      <td><div style="display:flex;gap:4px;justify-content:flex-end">
+        ${!hasPaidOut&&isNextInLine?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Pay out</button>`:''}
+        ${!hasPaidOut&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Pay out</button><button class="btn btn-sm" title="Coordinator override: pay out of turn" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
+        ${!hasPaidOut?`<button class="btn btn-sm btn-danger" title="Remove member" onclick="removeGroupMember('${m.id}','${g.id}')"><i class="ti ti-user-x"></i></button>`:''}
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  const totalSaved=(allContribs||[]).filter(c=>c.group_id===g.id&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+  const goalPct=g.savings_goal?Math.min(100,Math.round((totalSaved/g.savings_goal)*100)):null;
+
+  return`<div class="card" style="margin-bottom:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <h3 style="font-size:15px;margin-bottom:4px">${g.name}</h3>
+        <div style="font-size:12px;color:#888">${g.description||''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
+        <button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>
+        ${unpaidMembers.length===0&&gMembers.length?`<button class="btn btn-sm" title="All members paid out — start a new cycle" onclick="resetGroupCycle('${g.id}')"><i class="ti ti-refresh"></i> Reset for new cycle</button>`:''}
+        <button class="btn btn-sm btn-danger" title="Close group" onclick="closeAjoGroup('${g.id}')"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600">${gMembers.length}/${g.max_members}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
+    </div>
+    ${goalPct!==null?`
+    <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
+      <div style="height:100%;background:#1D9E75;width:${goalPct}%"></div>
+    </div>
+    <div style="font-size:11px;color:#888;margin-bottom:12px">${goalPct}% of group goal ${fmt(g.savings_goal)}</div>`:''}
+    ${gMembers.length?`<div class="table-wrap"><table>
+      <tr><th>Member</th><th>Contribution</th><th>Payout order</th><th>This cycle</th><th></th></tr>
+      ${memberRows}
+    </table></div>`:'<div class="empty" style="padding:1rem">No members yet. Invite your first members!</div>'}
+    ${gPayouts.length?`
+    <div style="margin-top:12px">
+      <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:8px">Payout history</div>
+      <div class="table-wrap"><table>
+        <tr><th>Recipient</th><th>Amount</th><th>Cycle</th><th>Status</th><th>Date</th></tr>
+        ${gPayouts.map(p=>{
+          const m=gMembers.find(gm=>gm.id===p.recipient_id);
+          const u=m?membersMap[m.user_id]:{name:'Unknown'};
+          return`<tr style="${p.status==='completed'?'opacity:0.6':''}">
+            <td style="font-weight:500">${u.name} ${p.status==='completed'?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Done</span>':''}</td>
+            <td>${fmt(p.amount)}</td>
+            <td>Cycle ${p.cycle}</td>
+            <td>${p.status==='completed'?'<span class="status-pill pill-approved">Completed</span>':'<span class="status-pill pill-pending">Pending</span>'}</td>
+            <td>${p.processed_at?fmtDate(p.processed_at):'—'}</td>
+          </tr>`;
+        }).join('')}
+      </table></div>
+    </div>`:''}
+  </div>`;
+}
+
+// ─── DEDICATED /ajo DASHBOARD ──────────────────────────────
+async function renderAjoPage(){
+  try{
+    const isCoordinator=!!currentUser.is_coordinator;
+    const [coordGroups,myMemberships]=await Promise.all([
+      isCoordinator?sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=*&order=created_at.asc`):Promise.resolve([]),
+      sb(`group_members?user_id=eq.${currentUser.id}&select=*`)
+    ]);
+    const activeMemberships=(myMemberships||[]).filter(m=>m.status!=='removed');
+
+    let coordSectionHtml='';
+    let memberSectionHtml='';
+
+    if(isCoordinator){
+      if(!coordGroups||!coordGroups.length){
+        coordSectionHtml=`<div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            <h3 style="margin:0">My savings groups</h3>
+            <button class="btn btn-primary btn-sm" onclick="openCreateGroup()"><i class="ti ti-plus"></i> Create group</button>
+          </div>
+          <div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No groups yet. Create your first savings group!</div>
+        </div>`;
+      } else {
+        const groupIds=coordGroups.map(g=>g.id);
+        const [allMembers,allContribs,allPayouts]=await Promise.all([
+          sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`),
+          sb(`group_contributions?group_id=in.(${groupIds.join(',')})&select=*&order=created_at.desc`),
+          sb(`group_payouts?group_id=in.(${groupIds.join(',')})&select=*&order=created_at.desc`)
+        ]);
+        const memberUserIds=[...new Set((allMembers||[]).map(m=>m.user_id))];
+        let membersMap={};
+        if(memberUserIds.length){
+          const users=await sb(`users?id=in.(${memberUserIds.join(',')})&select=id,name,email,phone,whatsapp`);
+          users.forEach(u=>{membersMap[u.id]=u;});
+        }
+        const totalMembersAcross=(allMembers||[]).filter(m=>m.status!=='removed').length;
+        const totalFundsHeld=Math.max(0,(allContribs||[]).filter(c=>c.status==='paid').reduce((a,c)=>a+Number(c.amount),0)-(allPayouts||[]).filter(p=>p.status==='completed').reduce((a,p)=>a+Number(p.amount),0));
+        const overviewCards=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem">
+          <div class="stat"><div class="stat-label">Groups you run</div><div class="stat-val">${coordGroups.length}</div></div>
+          <div class="stat"><div class="stat-label">Total members</div><div class="stat-val">${totalMembersAcross}</div></div>
+          <div class="stat"><div class="stat-label">Funds currently held</div><div class="stat-val green">${fmt(totalFundsHeld)}</div></div>
+        </div>`;
+        const cards=coordGroups.map(g=>buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap)).join('');
+        const earningsHtml=await renderCoordinatorEarnings();
+        coordSectionHtml=`<div>
+          ${overviewCards}
+          ${earningsHtml}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            <h3 style="margin:0">My savings groups</h3>
+            <button class="btn btn-primary btn-sm" onclick="openCreateGroup()"><i class="ti ti-plus"></i> Create group</button>
+          </div>
+          ${cards}
+        </div>`;
+      }
+    }
+
+    if(activeMemberships.length){
+      memberSectionHtml=await buildAjoMemberView(activeMemberships);
+    }
+
+    const showCoordinator=isCoordinator;
+    const showMember=activeMemberships.length>0;
+    let bodyHtml='';
+    if(!showCoordinator&&!showMember){
+      bodyHtml=`<div class="card">
+        <div class="empty">
+          <i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>
+          You're not part of any Ajo group yet.<br><br>
+          <button class="btn btn-primary" onclick="openApplyCoordinator()"><i class="ti ti-send"></i> Apply to become a coordinator</button>
+        </div>
+      </div>`;
+    } else if(showCoordinator&&showMember){
+      bodyHtml=`
+        <div style="display:flex;gap:6px;margin-bottom:1.25rem;background:#ece9e6;padding:3px;border-radius:9px;width:fit-content" id="ajo-tabs">
+          <button class="tab active" id="ajo-tab-coord" onclick="switchAjoTab('coord')">My groups (coordinator)</button>
+          <button class="tab" id="ajo-tab-member" onclick="switchAjoTab('member')">Groups I'm in</button>
+        </div>
+        <div id="ajo-panel-coord">${coordSectionHtml}</div>
+        <div id="ajo-panel-member" style="display:none">${memberSectionHtml}</div>
+      `;
+    } else if(showCoordinator){
+      bodyHtml=coordSectionHtml;
+    } else {
+      bodyHtml=memberSectionHtml;
+    }
+
+    setHTML(`
+    <div style="max-width:920px;margin:0 auto;padding:1.5rem 1rem 3rem">
+      <div class="header">
+        <div class="header-left">
+          <img src="/logo.png" alt="Fundova" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+          <span style="font-weight:600;font-size:16px">Ajo Groups</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-sm" onclick="window.location.href='/'"><i class="ti ti-arrow-left"></i> Main dashboard</button>
+          <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+        </div>
+      </div>
+      ${bodyHtml}
+    </div>`);
+  }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load Ajo dashboard: ${e.message}</div>`);}
+}
+
+function switchAjoTab(which){
+  document.getElementById('ajo-tab-coord').classList.toggle('active',which==='coord');
+  document.getElementById('ajo-tab-member').classList.toggle('active',which==='member');
+  document.getElementById('ajo-panel-coord').style.display=which==='coord'?'':'none';
+  document.getElementById('ajo-panel-member').style.display=which==='member'?'':'none';
+}
+
+// Member-facing view: position, this-cycle contribution status, next expected payout, per group
+async function buildAjoMemberView(activeMemberships){
+  const groupIds=[...new Set(activeMemberships.map(m=>m.group_id))];
+  const [groups,allMembers,allContribs,allPayouts]=await Promise.all([
+    sb(`savings_groups?id=in.(${groupIds.join(',')})&select=*`),
+    sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`),
+    sb(`group_contributions?group_id=in.(${groupIds.join(',')})&select=*`),
+    sb(`group_payouts?group_id=in.(${groupIds.join(',')})&select=*`)
+  ]);
+  const groupsMap={};(groups||[]).forEach(g=>{groupsMap[g.id]=g;});
+  const coordIds=[...new Set((groups||[]).map(g=>g.coordinator_id).filter(Boolean))];
+  let coordMap={};
+  if(coordIds.length){
+    const coords=await sb(`users?id=in.(${coordIds.join(',')})&select=id,name`);
+    (coords||[]).forEach(c=>{coordMap[c.id]=c.name;});
+  }
+
+  const cards=activeMemberships.map(m=>{
+    const g=groupsMap[m.group_id];
+    if(!g)return'';
+    const gMembers=(allMembers||[]).filter(mm=>mm.group_id===g.id&&mm.status!=='removed').sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+    const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+    const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+    const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+    const unpaidMembers=gMembers.filter(mm=>!completedPayoutIds.has(mm.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+    const myUnpaidRank=unpaidMembers.findIndex(mm=>mm.id===m.id);
+    const hasPaidOut=completedPayoutIds.has(m.id);
+    const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+    const hasPaidThisCycle=gContribs.some(c=>c.status==='paid');
+
+    let payoutStatusHtml;
+    if(hasPaidOut){
+      payoutStatusHtml=`<div style="background:#D1FAE5;color:#065F46;border-radius:8px;padding:10px 12px;font-size:13px"><i class="ti ti-check"></i> You've received your payout for this rotation.</div>`;
+    } else if(myUnpaidRank===0){
+      payoutStatusHtml=`<div style="background:#FEF3C7;color:#856404;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:600"><i class="ti ti-star"></i> You're next in line for payout!</div>`;
+    } else if(myUnpaidRank>0){
+      payoutStatusHtml=`<div style="background:#f5f5f3;color:#555;border-radius:8px;padding:10px 12px;font-size:13px">${myUnpaidRank} member${myUnpaidRank!==1?'s':''} ahead of you before your payout.</div>`;
+    } else {
+      payoutStatusHtml=`<div style="background:#f5f5f3;color:#555;border-radius:8px;padding:10px 12px;font-size:13px">Waiting on this group's payout order.</div>`;
+    }
+
+    return`<div class="card" style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <h3 style="font-size:15px;margin-bottom:2px">${g.name}</h3>
+          <div style="font-size:12px;color:#888">Coordinated by ${coordMap[g.coordinator_id]||'—'}</div>
+        </div>
+        <span class="status-pill ${hasPaidThisCycle?'pill-approved':'pill-pending'}">${hasPaidThisCycle?'Paid this cycle':'Pending'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px">
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Your position</div><div style="font-size:15px;font-weight:600">${m.payout_order||'—'}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Your contribution</div><div style="font-size:15px;font-weight:600">${fmt(m.contribution_amount)}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+      </div>
+      ${payoutStatusHtml}
+    </div>`;
+  }).join('');
+
+  return`<div>
+    <div class="info-box" style="margin-bottom:1.25rem"><i class="ti ti-info-circle"></i> Contributions are recorded by Fundova admin after payment is confirmed — please allow up to 24 hours for a payment to show as "Paid" here.</div>
+    ${cards}
+  </div>`;
 }
 
 function openCreateGroup(){
@@ -3980,24 +4248,32 @@ async function addGroupMember(groupId){
   }catch(e){err.textContent='Error adding member.';btn.innerHTML='<i class="ti ti-user-plus"></i> Add member';btn.disabled=false;}
 }
 
-async function recordGroupContribution(memberId,groupId,amount,cycle){
-  if(!confirm(`Record payment of ${fmt(amount)} for this member?`))return;
+async function removeGroupMember(memberId,groupId){
+  if(!confirm('Remove this member from the group? Their contribution and payout history will be kept for records, but they will no longer be part of future cycles.'))return;
   try{
-    const today=new Date().toISOString().split('T')[0];
-    await sb('group_contributions',{method:'POST',body:JSON.stringify({group_id:groupId,member_id:memberId,amount,cycle,status:'paid',date:today})});
-    toast('<i class="ti ti-check"></i> Contribution recorded!');
-    await renderContributor();
-  }catch(e){alert('Error recording contribution: '+e.message);}
+    await sb(`group_members?id=eq.${memberId}`,{method:'PATCH',body:JSON.stringify({status:'removed'})});
+    toast('<i class="ti ti-check"></i> Member removed from group.');
+    if(window.location.pathname==='/ajo')await renderAjoPage();else await renderContributor();
+  }catch(e){alert('Error removing member: '+e.message);}
 }
 
-async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle){
-  if(!confirm(`Initiate payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle}?`))return;
+async function resetGroupCycle(groupId){
+  if(!confirm('Reset this group for a new cycle? All contribution and payout history for this group will be cleared and the cycle count will restart at 1. Members stay in the group. This cannot be undone.'))return;
   try{
-    const today=new Date().toISOString().split('T')[0];
-    await sb('group_payouts',{method:'POST',body:JSON.stringify({group_id:groupId,recipient_id:memberId,amount,cycle,status:'completed',initiated_at:today,processed_at:today})});
-    toast('<i class="ti ti-check"></i> Payout recorded for '+memberName+'. Please process the bank transfer manually.');
-    await renderContributor();
-  }catch(e){alert('Error initiating payout: '+e.message);}
+    await sb(`group_contributions?group_id=eq.${groupId}`,{method:'DELETE'});
+    await sb(`group_payouts?group_id=eq.${groupId}`,{method:'DELETE'});
+    toast('<i class="ti ti-check"></i> Group reset — ready for a new cycle.');
+    if(window.location.pathname==='/ajo')await renderAjoPage();else await renderContributor();
+  }catch(e){alert('Error resetting group: '+e.message);}
+}
+
+async function closeAjoGroup(groupId){
+  if(!confirm('Close this group? It will be hidden from active views but its history will be preserved. This cannot be undone from here.'))return;
+  try{
+    await sb(`savings_groups?id=eq.${groupId}`,{method:'PATCH',body:JSON.stringify({status:'closed'})});
+    toast('<i class="ti ti-check"></i> Group closed.');
+    if(window.location.pathname==='/ajo')await renderAjoPage();else await renderContributor();
+  }catch(e){alert('Error closing group: '+e.message);}
 }
 
 // ── Delete investment ──
@@ -4384,8 +4660,11 @@ async function calculateAndCreditCoordinatorBonus(groupId, coordinatorId, payout
 }
 
 // Update initiateGroupPayout to calculate and credit bonus
-async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle){
-  if(!confirm(`Initiate payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle}?`))return;
+async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle,override){
+  const confirmMsg=override
+    ?`This member is not next in the payout order. Override and pay ${fmt(amount)} to ${memberName} out of turn for Cycle ${cycle}?`
+    :`Initiate payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle}?`;
+  if(!confirm(confirmMsg))return;
   try{
     const today = new Date().toISOString().split('T')[0];
 
