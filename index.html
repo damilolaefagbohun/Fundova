@@ -234,6 +234,21 @@ function fmtDate(d){if(!d)return'&mdash;';return new Date(d).toLocaleDateString(
 function initials(name){return(name||'?').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();}
 function setHTML(html){document.getElementById('app').innerHTML=html;}
 function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-bg').classList.add('open');}
+
+// Full-size image lightbox — click a thumbnail/card image to see the original upload
+function openImageViewer(url,title){
+  const wasModalOpen = document.getElementById('modal-bg').classList.contains('open');
+  window._prevModalHtml = wasModalOpen ? document.getElementById('modal-content').innerHTML : null;
+  openModal(`
+  <div style="text-align:center">
+    <img src="${url}" alt="${title||''}" style="max-width:100%;max-height:75vh;border-radius:10px;object-fit:contain">
+    ${title?`<div style="margin-top:12px;font-size:14px;font-weight:600;color:#0D1F14">${title}</div>`:''}
+  </div>
+  <div class="modal-footer">
+    ${wasModalOpen?`<button class="btn" onclick="document.getElementById('modal-content').innerHTML=window._prevModalHtml"><i class="ti ti-arrow-left"></i> Back</button>`:''}
+    <button class="btn btn-primary" onclick="closeModal()">Close</button>
+  </div>`);
+}
 function closeModal(){document.getElementById('modal-bg').classList.remove('open');}
 document.getElementById('modal-bg').addEventListener('click',function(e){if(e.target===this)closeModal();});
 function toast(msg,color='#1D9E75'){
@@ -883,10 +898,12 @@ async function renderAdmin(){
     {icon:'ti-cash',label:'Withdrawals',tab:'requests'},
     {icon:'ti-building-bank',label:'Investments',tab:'investments'},
     {icon:'ti-checks',label:'Approvals',tab:'signups',badge:pendingSignups},
-    {icon:'ti-speakerphone',label:'Communications',tab:'credentials'},
+    {icon:'ti-speakerphone',label:'Credentials',tab:'credentials'},
+    {icon:'ti-video',label:'Webinars',tab:'webinars'},
+    {icon:'ti-tag',label:'Deals',tab:'deals'},
     {icon:'ti-chart-bar',label:'Analytics',tab:'analytics'},
     {icon:'ti-users-group',label:'Ajo Groups',tab:'coordinators'},
-    {icon:'ti-settings',label:'Settings',tab:'profile_requests'},
+    {icon:'ti-settings',label:'Profile Requests',tab:'profile_requests'},
     {icon:'ti-basket',label:'Food Scheme',tab:'food_scheme'},
   ];
 
@@ -2919,7 +2936,7 @@ function buildDealsSection(deals,isHomepage){
   const cards=featured.map(d=>{
     const discountedPrice=d.discount?+(d.price*(1-d.discount/100)).toFixed(2):null;
     return`<div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;position:relative">
-      ${d.image_url?`<img src="${d.image_url}" alt="${d.title}" style="width:100%;height:160px;object-fit:cover">`:''}
+      ${d.image_url?`<img src="${d.image_url}" alt="${d.title}" style="width:100%;height:160px;object-fit:cover;cursor:pointer" onclick="openImageViewer('${d.image_url}','${(d.title||'').replace(/'/g,"\\'")}')">`:''}
       <div style="padding:1.25rem;display:flex;flex-direction:column;gap:8px;flex:1;position:relative">
       ${d.discount?`<div style="position:absolute;top:12px;right:12px;background:#1D9E75;color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">-${d.discount}% OFF</div>`:''}
       <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">${d.category}</div>
@@ -3323,7 +3340,7 @@ async function renderWebinar(){
           <i class="ti ti-book"></i> Fundova Learn &mdash; Webinar Series
         </div>
 
-        ${w.flyer_url?`<img src="${w.flyer_url}" alt="Webinar flyer" style="width:100%;border-radius:14px;margin-bottom:1.5rem;object-fit:cover">`:''}
+        ${w.flyer_url?`<img src="${w.flyer_url}" alt="Webinar flyer" style="width:100%;border-radius:14px;margin-bottom:1.5rem;object-fit:cover;cursor:pointer" onclick="openImageViewer('${w.flyer_url}','${(w.title||'Webinar flyer').replace(/'/g,"\\'")}')">`:''}
 
         <h1 style="font-size:clamp(22px,4vw,32px);font-weight:800;color:#1a1a1a;line-height:1.25;margin-bottom:12px">${w.title}</h1>
         ${w.subtitle?`<p style="font-size:16px;font-weight:500;color:#0F6E56;margin-bottom:16px">${w.subtitle}</p>`:''}
@@ -6555,9 +6572,10 @@ function buildFoodPackageCard(idx, opts, enrollment, isPastDeadline, isDeducted)
   const isSelected = enrollment && enrollment.option_id === pkg.id;
   return `
     <div style="background:${localPkg.bg};border-radius:16px;padding:1.25rem;border:2px solid ${isSelected?localPkg.color:'transparent'};transition:border .3s">
-      <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px;overflow:hidden">
+      <div style="background:#e5e5e2;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-direction:column;gap:8px;overflow:hidden;position:relative;${pkg.image_url?'cursor:pointer':''}" ${pkg.image_url?`onclick="openImageViewer('${pkg.image_url}','${pkg.name.replace(/'/g,"\\'")}')"`:''}>
         ${pkg.image_url
-          ? `<img src="${pkg.image_url}" alt="${pkg.name}" style="width:100%;height:100%;object-fit:cover">`
+          ? `<img src="${pkg.image_url}" alt="${pkg.name}" style="width:100%;height:100%;object-fit:cover">
+             <div style="position:absolute;bottom:6px;right:6px;background:rgba(13,61,42,.75);color:#fff;font-size:10px;padding:3px 8px;border-radius:20px;display:flex;align-items:center;gap:4px"><i class="ti ti-zoom-in" style="font-size:12px"></i> View full image</div>`
           : `<span style="font-size:48px">${localPkg.emoji}</span><span style="font-size:11px;color:#888">Image coming soon</span>`}
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
