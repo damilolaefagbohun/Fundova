@@ -3486,7 +3486,7 @@ async function uploadSpeakerPhoto(input,speakerNum){
     const ext=file.name.split('.').pop();
     const path='speakers/'+Date.now()+'-'+speakerNum+'.'+ext;
     const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
-      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
+      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
     });
     if(!res.ok)throw new Error('Upload failed');
     const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
@@ -3505,7 +3505,7 @@ async function uploadWebinarFlyer(input){
     const ext=file.name.split('.').pop();
     const path='flyers/'+Date.now()+'.'+ext;
     const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
-      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
+      method:'POST',headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},body:file
     });
     if(!res.ok)throw new Error('Upload failed');
     const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
@@ -4362,7 +4362,7 @@ async function uploadDealImage(input){
     const path='deals/'+Date.now()+'.'+ext;
     const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
       method:'POST',
-      headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
+      headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
       body:file
     });
     if(!res.ok)throw new Error('Upload failed');
@@ -6995,7 +6995,7 @@ function uploadFoodPackageImage(pkgId){
         const fileName = 'food-scheme/'+pkgId+'-'+Date.now()+'.'+file.name.split('.').pop();
         const res = await fetch(SB_URL+'/storage/v1/object/fundova-media/'+fileName, {
           method:'POST',
-          headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
+          headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
           body:file
         });
 
