@@ -150,6 +150,7 @@ tr:hover td{background:#fafafa}
 <div class="modal-bg" id="modal-bg"><div class="modal" id="modal-content"></div></div>
 <script>
 const SB_URL='https://btcpkjlyifwvsybscpxz.supabase.co'; // kept for storage uploads only
+const SB_KEY='sb_publishable_nzUdamSIBzvGwFK0mERSdw_OUiG7Mf6WMEfQjJMDsP_5'; // publishable/anon key — safe for client-side storage uploads
 const RESEND_KEY='re_6PaHpCMk_F9WEsuSJKdg4FZhZWouLNTDj';
 const SITE_URL='https://www.fundova.africa';
 const RATE=0.10;
@@ -4260,7 +4261,7 @@ async function saveGroup(id){
     }
     closeModal();
     toast('<i class="ti ti-check"></i> Group '+(id?'updated':'created')+'!');
-    await renderContributor();
+    await (window.location.pathname==='/ajo'?renderAjoPage():renderContributor());
   }catch(e){err.textContent='Error saving group.';btn.innerHTML='<i class="ti ti-device-floppy"></i> '+(id?'Save':'Create group');btn.disabled=false;}
 }
 
@@ -4308,7 +4309,7 @@ async function addGroupMember(groupId){
     await sb('group_members',{method:'POST',body:JSON.stringify({group_id:groupId,user_id:users[0].id,contribution_amount,payout_order,status:'active'})});
     closeModal();
     toast('<i class="ti ti-check"></i> Member added to group!');
-    await renderContributor();
+    if(window.location.pathname==='/ajo')await renderAjoPage();else await renderContributor();
   }catch(e){err.textContent='Error adding member.';btn.innerHTML='<i class="ti ti-user-plus"></i> Add member';btn.disabled=false;}
 }
 
@@ -4754,7 +4755,7 @@ async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle,over
     }
 
     toast('<i class="ti ti-check"></i> Payout recorded for '+memberName+'. Please process the bank transfer manually.');
-    await renderContributor();
+    await (window.location.pathname==='/ajo'?renderAjoPage():renderContributor());
   }catch(e){alert('Error initiating payout: '+e.message);}
 }
 
@@ -4880,14 +4881,13 @@ async function inviteGroupMember(groupId){
       closeModal();
       toast('<i class="ti ti-check"></i> Invitation sent to '+name+'! They will receive an email to sign up on Fundova.');
     }
-    await renderContributor();
+    await (window.location.pathname==='/ajo'?renderAjoPage():renderContributor());
   }catch(e){
     err.textContent='Error: '+e.message;
     btn.innerHTML='<i class="ti ti-send"></i> Send invitation';
     btn.disabled=false;
   }
 }
-
 
 // ─── LEGAL & INFO PAGES ───────────────────────────────────
 
@@ -6993,14 +6993,14 @@ function uploadFoodPackageImage(pkgId){
       try{
         // Upload to Supabase Storage
         const fileName = 'food-scheme/'+pkgId+'-'+Date.now()+'.'+file.name.split('.').pop();
-        const res = await fetch(SB_URL+'/storage/v1/object/public/'+fileName, {
+        const res = await fetch(SB_URL+'/storage/v1/object/fundova-media/'+fileName, {
           method:'POST',
-          headers:{'Content-Type':file.type, 'Authorization':'Bearer '+RA},
+          headers:{'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
           body:file
         });
 
         if(res.ok){
-          const imageUrl = SB_URL+'/storage/v1/object/public/'+fileName;
+          const imageUrl = SB_URL+'/storage/v1/object/public/fundova-media/'+fileName;
           await sb('food_scheme_options?id=eq.'+pkgId, {method:'PATCH', body:JSON.stringify({image_url:imageUrl})});
           toast('<i class="ti ti-check"></i> Image uploaded!');
           renderAdmin();
