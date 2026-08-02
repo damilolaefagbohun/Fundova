@@ -6334,8 +6334,10 @@ function renderAdminChart(allPayments){
     return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short'});
   });
 
-  // Cumulative values
-  let running = 0;
+  // Cumulative values — seed with everything before the displayed window so the
+  // running total reflects true all-time value, not just the last 6 months
+  const priorMonths = sorted.slice(0, -6);
+  let running = priorMonths.reduce((sum,k)=>sum+months[k], 0);
   const vals = last6.map(k=>{ running += months[k]; return running; });
 
   const ctx = canvas.getContext('2d');
