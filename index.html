@@ -177,9 +177,11 @@ function clearSession(){
   try{localStorage.removeItem('fundova_session');}catch(e){}
 }
 
-async function sb(path, opts={}){
+async function sb(path, opts={}, _retryCount=0){
+  const method = opts.method||'GET';
+  const isReadOnly = method==='GET';
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),10000);
+  const timeout=setTimeout(()=>controller.abort(),20000); // 20s — was 10s, too aggressive on slow connections
   try{
     const res=await fetch('/.netlify/functions/db',{
       method:'POST',
@@ -187,7 +189,7 @@ async function sb(path, opts={}){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         path,
-        method:opts.method||'GET',
+        method,
         body:opts.body?JSON.parse(opts.body):null
       })
     });
@@ -198,7 +200,15 @@ async function sb(path, opts={}){
     return result.data;
   }catch(e){
     clearTimeout(timeout);
-    if(e.name==='AbortError')throw new Error('Request timed out. Please check your internet connection.');
+    const isNetworkFailure = e.name==='AbortError' || e.name==='TypeError';
+    // Only auto-retry read-only requests on genuine network/timeout failures — retrying a
+    // write (POST/PATCH/DELETE) blindly risks duplicating something that actually went through
+    // (e.g. recording a payment twice) even though the response never came back in time.
+    if(isReadOnly && isNetworkFailure && _retryCount<2){
+      await new Promise(r=>setTimeout(r,800*(_retryCount+1)));
+      return sb(path,opts,_retryCount+1);
+    }
+    if(e.name==='AbortError')throw new Error('Request timed out. Please check your internet connection and try again — if this was meant to save something, please verify it went through before retrying.');
     throw e;
   }
 }
@@ -787,7 +797,7 @@ async function submitSignup(){
       name:window._sName,email:window._sEmail,phone:window._sPhone,
       whatsapp:window._sWhatsapp,referred_by,status:'pending'
     })});
-    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:window._sName,applicant_email:window._sEmail}).catch(()=>{});
+    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:window._sName,applicant_email:window._sEmail}).catch(e=>logSystemError('notify:new_signup',e));
     btn.innerHTML='<i class="ti ti-check"></i> Submitted!';
     setTimeout(()=>{
       closeModal();
@@ -1228,8 +1238,11 @@ function buildPaymentsTab(payments,contributors){
     </tr>`;
   }).join('');
   return`<div class="card">
-    <h3>All payments <span style="font-size:12px;color:#888;font-weight:400">&mdash; interest accrued to today</span></h3>
-    <div class="table-wrap"><table>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <h3 style="margin:0">All payments <span style="font-size:12px;color:#888;font-weight:400">&mdash; interest accrued to today</span></h3>
+      <div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="payments-search" type="text" placeholder="Search by name..." oninput="filterTableRows('payments-search','payments-table')" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:200px"></div>
+    </div>
+    <div class="table-wrap"><table id="payments-table">
       <tr><th>Contributor</th><th>Payment date</th><th>Amount</th><th>Weekdays elapsed</th><th>Interest accrued</th><th>Current total</th><th></th></tr>
       ${rows}
     </table></div>
@@ -1254,8 +1267,11 @@ function buildRequestsTab(requests,contributors){
     </tr>`;
   }).join('');
   return`<div class="card">
-    <h3>Withdrawal requests</h3>
-    <div class="table-wrap"><table>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <h3 style="margin:0">Withdrawal requests</h3>
+      <div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="requests-search" type="text" placeholder="Search by name..." oninput="filterTableRows('requests-search','requests-table')" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:200px"></div>
+    </div>
+    <div class="table-wrap"><table id="requests-table">
       <tr><th>Contributor</th><th>Amount</th><th>Note</th><th>Date</th><th>Status</th><th>Action</th></tr>
       ${rows}
     </table></div>
@@ -1359,11 +1375,14 @@ function buildCredentialsTab(contributors){
               <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-shield-check"></i></button>></i></button></div></td>
   </tr>`).join('');
   return`<div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
       <h3 style="margin:0">Contributor credentials</h3>
-      <span style="font-size:12px;color:#888"><i class="ti ti-lock"></i> Keep this confidential</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:12px;color:#888"><i class="ti ti-lock"></i> Keep this confidential</span>
+        <div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="credentials-search" type="text" placeholder="Search by name..." oninput="filterTableRows('credentials-search','credentials-table')" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:200px"></div>
+      </div>
     </div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap"><table id="credentials-table">
       <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>PIN</th><th></th></tr>
       ${rows}
     </table></div>
@@ -1850,6 +1869,7 @@ async function saveWithdrawRequest(currentTotal){
   btn.innerHTML='<span class="spinner" style="border-top-color:#856404"></span> Submitting…';btn.disabled=true;
   try{
     await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount,note,status:'pending'})});
+    notify({type:'admin_withdrawal_request',name:currentUser.name,amount,note}).catch(e=>logSystemError('notify:withdrawal_request',e));
     closeModal();await renderContributor();
   }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-cash"></i> Submit request';btn.disabled=false;}
 }
@@ -1925,7 +1945,7 @@ async function savePayment(userId){
     const prevPayments = await sb('payments?user_id=eq.'+userId+'&select=id');
     if(prevPayments && prevPayments.length === 1){
       // This was the first payment - process referral bonus
-      processReferralBonus(userId).catch(()=>{});
+      processReferralBonus(userId).catch(e=>logSystemError('processReferralBonus',e));
     }
     // Send payment notification email
     try{
@@ -2320,8 +2340,11 @@ async function openInvestmentDetail(id){
     <p style="font-size:13px;color:#666;margin-top:-6px">${inv.description||''}</p>
     <hr class="divider">
 
-    <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Unit reservations</div>
-    ${reservations.length?`<div class="table-wrap"><table>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">Unit reservations</div>
+      ${reservations.length?`<div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="reservations-search" type="text" placeholder="Search by name..." oninput="filterTableRows('reservations-search','reservations-table')" style="padding:6px 10px 6px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:180px"></div>`:''}
+    </div>
+    ${reservations.length?`<div class="table-wrap"><table id="reservations-table">
       <tr><th>Contributor</th><th>Units</th><th>Value</th><th>Payment</th><th>Status</th><th></th></tr>
       ${resRows}
     </table></div>`:`<div class="empty" style="padding:1rem">No reservations yet.</div>`}
@@ -2775,7 +2798,7 @@ function openReserveUnits(invId,invTitle,unitPrice,totalUnits){
   <div class="error" id="ru-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="ru-btn" onclick="saveReservation('${invId}')"><i class="ti ti-send"></i> Submit reservation</button>
+    <button class="btn btn-primary" id="ru-btn" onclick="saveReservation('${invId}','${invTitle.replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> Submit reservation</button>
   </div>`);
 }
 
@@ -2789,7 +2812,7 @@ function previewReservation(unitPrice){
   }
 }
 
-async function saveReservation(invId){
+async function saveReservation(invId,invTitle){
   const units=parseInt(document.getElementById('ru-units').value);
   const payment_method=document.getElementById('ru-method').value;
   const err=document.getElementById('ru-err');
@@ -2800,6 +2823,7 @@ async function saveReservation(invId){
     await sb('investment_reservations',{method:'POST',body:JSON.stringify({
       investment_id:invId,user_id:currentUser.id,units,payment_method,status:'pending'
     })});
+    notify({type:'admin_investment_reservation',name:currentUser.name,investment_title:invTitle||'an investment',units}).catch(e=>logSystemError('notify:investment_reservation',e));
     closeModal();
     toast('<i class="ti ti-check"></i> Reservation submitted! Admin will review shortly.');
     await renderContributor();
@@ -3014,6 +3038,7 @@ async function saveDealsSubmission(){
     await sb('deals',{method:'POST',body:JSON.stringify({
       user_id:currentUser.id,title,category,description,price,discount,whatsapp,expires_at,image_url,status:'pending'
     })});
+    notify({type:'admin_deal_submission',name:currentUser.name,deal_title:title}).catch(e=>logSystemError('notify:deal_submission',e));
     closeModal();
     toast('<i class="ti ti-check"></i> Deal submitted! Admin will review it shortly.');
   }catch(e){err.textContent='Error submitting deal.';btn.innerHTML='<i class="ti ti-send"></i> Submit deal';btn.disabled=false;}
@@ -3085,6 +3110,7 @@ async function saveProfileUpdateRequest(){
       reason,
       status:'pending'
     })});
+    notify({type:'admin_profile_update_request',name:currentUser.name,bank_changed:!!bankChanging}).catch(e=>logSystemError('notify:profile_update_request',e));
     closeModal();
     toast('<i class="ti ti-check"></i> Profile update request submitted. Admin will review shortly.');
   }catch(e){err.textContent='Error submitting request.';btn.innerHTML='<i class="ti ti-send"></i> Submit request';btn.disabled=false;}
@@ -3143,6 +3169,23 @@ async function approveProfileRequest(reqId,userId){
   try{
     const reqArr=await sb(`profile_update_requests?id=eq.${reqId}&select=*`);
     const req=reqArr[0];
+
+    // Snapshot current values before they get overwritten, for the audit trail
+    const [currentUserArr,currentBankArr]=await Promise.all([
+      sb(`users?id=eq.${userId}&select=name,email,phone,whatsapp`),
+      sb(`bank_details?user_id=eq.${userId}&select=bank_name,account_number,account_name`)
+    ]);
+    const prevUser=currentUserArr&&currentUserArr.length?currentUserArr[0]:{};
+    const prevBank=currentBankArr&&currentBankArr.length?currentBankArr[0]:{};
+    const oldValues={},newValues={};
+    if(req.requested_name&&req.requested_name!==prevUser.name){oldValues.name=prevUser.name||null;newValues.name=req.requested_name;}
+    if(req.requested_email&&req.requested_email!==prevUser.email){oldValues.email=prevUser.email||null;newValues.email=req.requested_email;}
+    if(req.requested_phone&&req.requested_phone!==prevUser.phone){oldValues.phone=prevUser.phone||null;newValues.phone=req.requested_phone;}
+    if(req.requested_whatsapp&&req.requested_whatsapp!==prevUser.whatsapp){oldValues.whatsapp=prevUser.whatsapp||null;newValues.whatsapp=req.requested_whatsapp;}
+    if(req.requested_bank_name&&req.requested_bank_name!==prevBank.bank_name){oldValues.bank_name=prevBank.bank_name||null;newValues.bank_name=req.requested_bank_name;}
+    if(req.requested_account_number&&req.requested_account_number!==prevBank.account_number){oldValues.account_number=prevBank.account_number||null;newValues.account_number=req.requested_account_number;}
+    if(req.requested_account_name&&req.requested_account_name!==prevBank.account_name){oldValues.account_name=prevBank.account_name||null;newValues.account_name=req.requested_account_name;}
+
     // Update user record
     const userUpdate={name:req.requested_name,email:req.requested_email};
     if(req.requested_phone)userUpdate.phone=req.requested_phone;
@@ -3158,7 +3201,7 @@ async function approveProfileRequest(reqId,userId){
         await sb('bank_details',{method:'POST',body:JSON.stringify({user_id:userId,...bankData})});
       }
     }
-    await updateProfileRequest(reqId,'approved');
+    await updateProfileRequest(reqId,'approved',oldValues,newValues);
     // Notify contributor
     try{
       const userArr=await sb(`users?id=eq.${userId}&select=name,email`);
@@ -3168,9 +3211,12 @@ async function approveProfileRequest(reqId,userId){
   }catch(e){alert('Error approving request: '+e.message);}
 }
 
-async function updateProfileRequest(reqId,status){
+async function updateProfileRequest(reqId,status,oldValues,newValues){
   try{
-    await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify({status})});
+    const body={status};
+    if(oldValues)body.previous_values=JSON.stringify(oldValues);
+    if(newValues)body.approved_values=JSON.stringify(newValues);
+    await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify(body)});
     await renderAdmin();
   }catch(e){alert('Error updating request.');}
 }
@@ -3877,7 +3923,7 @@ async function submitCoordinatorApp(){
     closeModal();
     toast('<i class="ti ti-check"></i> Application submitted! Admin will review shortly.');
     // Notify admin of new application
-    notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',name:currentUser.name,applicant_email:currentUser.email}).catch(()=>{});
+    notify({type:'admin_coordinator_application',to:'fundovamultipurposecooperative@gmail.com',name:currentUser.name,applicant_email:currentUser.email}).catch(e=>logSystemError('notify:coordinator_application',e));
   }catch(e){err.textContent='Error submitting.';btn.innerHTML='<i class="ti ti-send"></i> Submit application';btn.disabled=false;}
 }
 
@@ -4399,6 +4445,7 @@ function openBroadcastEmail(){
   <p style="font-size:13px;color:#666;margin-top:-6px">This will send an email to every active contributor on Fundova.</p>
   <div class="field"><label>Subject</label><input id="be-subject" placeholder="e.g. December payout update"></div>
   <div class="field"><label>Message</label><textarea id="be-body" rows="8" placeholder="Write your announcement here..."></textarea></div>
+  <div class="field"><label>Image <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="be-image" type="file" accept="image/*" onchange="uploadBroadcastImage(this)"><div id="be-image-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
   <div class="warn-box" style="margin-bottom:4px"><i class="ti ti-alert-triangle" style="flex-shrink:0;margin-top:1px"></i><div>This will send to ALL contributors. Review carefully before sending.</div></div>
   <div class="error" id="be-err"></div>
   <div style="font-size:12px;color:#888;margin-bottom:8px" id="be-count">Loading recipient count...</div>
@@ -4414,9 +4461,33 @@ function openBroadcastEmail(){
   }).catch(()=>{});
 }
 
+// ── Broadcast email image upload ──
+async function uploadBroadcastImage(input){
+  const file=input.files[0];
+  if(!file)return;
+  const urlEl=document.getElementById('be-image-url');
+  urlEl.textContent='Uploading…';
+  urlEl.style.color='#888';
+  try{
+    const ext=file.name.split('.').pop();
+    const path='broadcasts/'+Date.now()+'.'+ext;
+    const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
+      body:file
+    });
+    if(!res.ok)throw new Error('Upload failed');
+    const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
+    input.dataset.url=url;
+    urlEl.textContent='Uploaded!';
+    urlEl.style.color='#0F6E56';
+  }catch(e){urlEl.textContent='Upload failed: '+e.message;urlEl.style.color='#A32D2D';}
+}
+
 async function sendBroadcastEmail(){
   const subject=document.getElementById('be-subject').value.trim();
   const body=document.getElementById('be-body').value.trim();
+  const image_url=document.getElementById('be-image')?.dataset?.url||null;
   const err=document.getElementById('be-err');
   const btn=document.getElementById('be-btn');
 
@@ -4437,7 +4508,7 @@ async function sendBroadcastEmail(){
         await fetch('/.netlify/functions/send-email',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({type:'broadcast',to:u.email,name:u.name,subject,body})
+          body:JSON.stringify({type:'broadcast',to:u.email,name:u.name,subject,body,image_url})
         });
         sent++;
       }catch(e){failed++;}
@@ -4465,6 +4536,21 @@ async function notify(payload){
       body:JSON.stringify(payload)
     });
   }catch(e){console.error('Notification error:',e);}
+}
+
+// Logs a background/silent failure somewhere admin can actually review it, instead of it
+// vanishing with only a console.error that nobody will ever see. Used for operations that
+// run automatically (referral bonuses, notifications, etc.) where failures were previously
+// invisible unless someone happened to have DevTools open at the exact right moment.
+async function logSystemError(context, error){
+  try{
+    await sb('system_errors',{method:'POST',body:JSON.stringify({
+      context,
+      message: (error&&error.message)||String(error),
+      user_id: currentUser?currentUser.id:null,
+      created_at: new Date().toISOString()
+    })});
+  }catch(e){ console.error('Failed to log system error:',context,error); }
 }
 
 
@@ -4690,12 +4776,46 @@ async function rollBonusToSavings(){
 }
 
 async function withdrawBonus(){
-  if(!confirm('Request withdrawal of your cooperative bonus? Admin will process the transfer.'))return;
   try{
     const bonuses = await sb(`cooperative_bonuses?user_id=eq.${currentUser.id}&status=eq.available&select=*`);
     const total = (bonuses||[]).reduce((a,b)=>a+Number(b.amount),0);
+    if(total<5000){alert(`Minimum withdrawal amount is ₦5,000. Your available bonus total is currently ${fmt(total)}.`);return;}
+
+    // Same KYC-completeness gate as a regular withdrawal — bonuses shouldn't bypass this
+    const [kyc,bank]=await Promise.all([
+      sb('kyc_details?user_id=eq.'+currentUser.id+'&select=*'),
+      sb('bank_details?user_id=eq.'+currentUser.id+'&select=*')
+    ]);
+    const k=kyc&&kyc.length?kyc[0]:{};
+    const b=bank&&bank.length?bank[0]:{};
+    const complete=!!(b.bank_name&&k.date_of_birth&&k.home_address&&k.bvn&&k.nin&&k.id_type);
+    if(!complete){
+      openModal(`
+      <h3>Complete your KYC first</h3>
+      <p style="font-size:13px;color:#666;margin-top:-6px">You need to complete your profile and KYC before requesting a withdrawal — including a bonus withdrawal.</p>
+      <div style="display:grid;gap:8px;margin:1rem 0">
+        ${[
+          {label:'Bank details',done:!!(b.bank_name)},
+          {label:'Date of birth',done:!!(k.date_of_birth)},
+          {label:'Home address',done:!!(k.home_address)},
+          {label:'BVN',done:!!(k.bvn)},
+          {label:'NIN',done:!!(k.nin)},
+          {label:'Government ID',done:!!(k.id_type)},
+        ].map(f=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:${f.done?'#065F46':'#888'}">
+          <span>${f.done?'✅':'⬜'}</span>${f.label}
+        </div>`).join('')}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="closeModal();openKycForm()"><i class="ti ti-edit"></i> Complete KYC now</button>
+      </div>`);
+      return;
+    }
+
+    if(!confirm('Request withdrawal of your cooperative bonus? Admin will process the transfer.'))return;
     // Create withdrawal request
     await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:total,note:'Cooperative bonus withdrawal',status:'pending'})});
+    notify({type:'admin_withdrawal_request',name:currentUser.name,amount:total,note:'Cooperative bonus withdrawal'}).catch(e=>logSystemError('notify:bonus_withdrawal_request',e));
     // Mark bonuses as pending withdrawal
     for(const b of bonuses){
       await sb(`cooperative_bonuses?id=eq.${b.id}`,{method:'PATCH',body:JSON.stringify({status:'withdrawal_requested'})});
@@ -5442,6 +5562,24 @@ function copyReferralLink(){
 
 // ─── CONTRIBUTOR SEARCH ───────────────────────────────────
 
+// Generic search — filters any table's rows by matching text in the first column.
+// Reused across Transactions, Withdrawals, Credentials, Investments, etc.
+function filterTableRows(searchInputId, tableId, countElId){
+  const query = document.getElementById(searchInputId)?.value?.toLowerCase().trim() || '';
+  const table = document.getElementById(tableId);
+  if(!table)return;
+  const rows = table.querySelectorAll('tr:not(:first-child)');
+  let visible = 0;
+  rows.forEach(row => {
+    const name = row.querySelector('td')?.textContent?.toLowerCase() || '';
+    const show = !query || name.includes(query);
+    row.style.display = show ? '' : 'none';
+    if(show) visible++;
+  });
+  const countEl = countElId ? document.getElementById(countElId) : null;
+  if(countEl) countEl.textContent = query ? `${visible} of ${rows.length}` : `${rows.length}`;
+}
+
 function filterContributors(){
   const query = document.getElementById('contrib-search')?.value?.toLowerCase().trim() || '';
   const table = document.getElementById('contrib-table');
@@ -5622,6 +5760,14 @@ async function openKycForm(){
   </div>
   <hr class="divider">
   <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Optional</div>
+  <div class="field"><label>Gender <span style="color:#aaa;font-weight:400">(optional — never affects withdrawals)</span></label>
+    <select id="kyc-gender" style="width:100%;padding:10px;border:1.5px solid #e5e5e2;border-radius:8px;font-size:14px">
+      <option value="">Prefer not to select</option>
+      <option value="male" ${kyc.gender==='male'?'selected':''}>Male</option>
+      <option value="female" ${kyc.gender==='female'?'selected':''}>Female</option>
+      <option value="prefer_not_to_say" ${kyc.gender==='prefer_not_to_say'?'selected':''}>Prefer not to say</option>
+    </select>
+  </div>
   <div class="field"><label>Upload ID document <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="kyc-doc" type="file" accept="image/*,.pdf"></div>
 
   <div class="error" id="kyc-err"></div>
@@ -5846,9 +5992,20 @@ async function openContributorKyc(userId, userName){
     ${logs.length?`
     <div style="margin-bottom:14px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:8px">Edit history</div>
-      ${logs.map(l=>`<div style="font-size:11px;color:#888;padding:6px 10px;background:#f5f5f3;border-radius:6px;margin-bottom:4px">
-        ${fmtDate(l.changed_at)} — ${l.changed_fields||'Details updated'}
-      </div>`).join('')}
+      ${logs.map(l=>{
+        let detail = l.changed_fields||'Details updated';
+        try{
+          if(l.old_values||l.new_values){
+            const ov = JSON.parse(l.old_values||'{}');
+            const nv = JSON.parse(l.new_values||'{}');
+            const parts = Object.keys(nv).map(k=>`${k.replace(/_/g,' ')}: "${ov[k]||'—'}" → "${nv[k]}"`);
+            if(parts.length) detail = parts.join('<br>');
+          }
+        }catch(e){}
+        return `<div style="font-size:11px;color:#888;padding:6px 10px;background:#f5f5f3;border-radius:6px;margin-bottom:4px">
+        <div style="color:#aaa;margin-bottom:2px">${fmtDate(l.changed_at)}</div>${detail}
+      </div>`;
+      }).join('')}
     </div>`:''}
 
     <div class="modal-footer">
@@ -5911,19 +6068,23 @@ async function saveKycWithAudit(){
     const nokWhatsapp = document.getElementById('kyc-nok-whatsapp')?.value?.trim()||'';
     const nokEmail = document.getElementById('kyc-nok-email')?.value?.trim()||'';
     const nokMailingList = document.getElementById('kyc-nok-mailinglist')?.checked||false;
+    const gender = document.getElementById('kyc-gender')?.value || '';
 
     // Get existing KYC to detect changes
     const existingKyc = await sb(`kyc_details?user_id=eq.${currentUser.id}&select=*`);
     const existing = existingKyc&&existingKyc.length?existingKyc[0]:{};
 
-    // Detect which fields changed
+    // Detect which fields changed — gender is intentionally excluded: it never affects
+    // withdrawal eligibility or verification status
     const changedFields = [];
-    if(dateOfBirth && dateOfBirth !== existing.date_of_birth) changedFields.push('Date of birth');
-    if(homeAddress && homeAddress !== existing.home_address) changedFields.push('Home address');
-    if(bvn && bvn !== existing.bvn) changedFields.push('BVN');
-    if(nin && nin !== existing.nin) changedFields.push('NIN');
-    if(idType && idType !== existing.id_type) changedFields.push('ID type');
-    if(idNumber && idNumber !== existing.id_number) changedFields.push('ID number');
+    const oldValues = {};
+    const newValues = {};
+    if(dateOfBirth && dateOfBirth !== existing.date_of_birth){ changedFields.push('Date of birth'); oldValues.date_of_birth=existing.date_of_birth||null; newValues.date_of_birth=dateOfBirth; }
+    if(homeAddress && homeAddress !== existing.home_address){ changedFields.push('Home address'); oldValues.home_address=existing.home_address||null; newValues.home_address=homeAddress; }
+    if(bvn && bvn !== existing.bvn){ changedFields.push('BVN'); oldValues.bvn=existing.bvn||null; newValues.bvn=bvn; }
+    if(nin && nin !== existing.nin){ changedFields.push('NIN'); oldValues.nin=existing.nin||null; newValues.nin=nin; }
+    if(idType && idType !== existing.id_type){ changedFields.push('ID type'); oldValues.id_type=existing.id_type||null; newValues.id_type=idType; }
+    if(idNumber && idNumber !== existing.id_number){ changedFields.push('ID number'); oldValues.id_number=existing.id_number||null; newValues.id_number=idNumber; }
 
     // Save bank details
     if(bankName||accountNumber||accountName){
@@ -5944,6 +6105,7 @@ async function saveKycWithAudit(){
       nin:nin||existing.nin||null,
       id_type:idType||existing.id_type||null,
       id_number:idNumber||existing.id_number||null,
+      gender:gender||existing.gender||null,
       kyc_verified: changedFields.length>0 ? false : (existing.kyc_verified||false),
       updated_at: new Date().toISOString()
     };
@@ -5959,18 +6121,19 @@ async function saveKycWithAudit(){
       await sb('kyc_audit_log',{method:'POST',body:JSON.stringify({
         user_id:currentUser.id,
         changed_fields:changedFields.join(', '),
+        old_values:JSON.stringify(oldValues),
+        new_values:JSON.stringify(newValues),
         changed_at:new Date().toISOString()
       })}).catch(()=>{});
       // Send welcome email to next of kin if opted in
     if(nokMailingList && nokEmail){
-      notify({type:'nok_welcome',to:nokEmail,name:nokName,member_name:currentUser.name}).catch(()=>{});
+      notify({type:'nok_welcome',to:nokEmail,name:nokName,member_name:currentUser.name}).catch(e=>logSystemError('notify:nok_welcome',e));
     }
     // Notify admin of KYC update
-      notify({type:'admin_new_signup',to:'fundovamultipurposecooperative@gmail.com',
-        name:'KYC Update',
-        applicant_email:currentUser.email,
-        applicant_name:currentUser.name
-      }).catch(()=>{});
+      notify({type:'admin_kyc_update',to:'fundovamultipurposecooperative@gmail.com',
+        name:currentUser.name,
+        applicant_email:currentUser.email
+      }).catch(e=>logSystemError('notify:kyc_update',e));
     }
 
     closeModal();
