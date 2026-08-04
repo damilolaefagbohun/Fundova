@@ -256,13 +256,94 @@ exports.handler = async (event) => {
         ${btn('Review application', SITE_URL)}
       `);
 
+    // ── ADMIN: WITHDRAWAL REQUEST ──
+    } else if (type === 'admin_withdrawal_request') {
+      to = ADMIN_EMAIL;
+      const member_name = body.name; const amount = body.amount; const note = body.note;
+      subject = `Withdrawal request — ₦${Number(amount).toLocaleString('en-NG')} from ${member_name}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">New withdrawal request ${pill('Pending', 'yellow')}</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has requested a withdrawal:</p>
+        <div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:20px;text-align:center;margin:16px 0">
+          <div style="font-size:12px;color:#856404;font-weight:600;text-transform:uppercase;margin-bottom:6px">Amount requested</div>
+          <div style="font-size:32px;font-weight:700;color:#856404">&#x20A6;${Number(amount).toLocaleString('en-NG', {minimumFractionDigits:2})}</div>
+        </div>
+        ${note ? `<p style="color:#666;font-size:13px"><strong>Note:</strong> ${note}</p>` : ''}
+        ${btn('Review in admin dashboard', SITE_URL)}
+      `);
+
+    // ── ADMIN: PROFILE UPDATE REQUEST ──
+    } else if (type === 'admin_profile_update_request') {
+      to = ADMIN_EMAIL;
+      const member_name = body.name; const bank_changed = body.bank_changed;
+      subject = bank_changed ? `⚠️ Bank details change requested — ${member_name}` : `Profile update requested — ${member_name}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">Profile update request ${bank_changed?pill('Includes bank change', 'red'):pill('Pending', 'yellow')}</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has requested a profile update${bank_changed?', <strong>including a change to their bank details</strong>':''}.</p>
+        ${bank_changed ? `<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:14px;margin:16px 0;font-size:13px;color:#991B1B">Bank detail changes affect where withdrawal funds go — please verify this request carefully before approving.</div>` : ''}
+        ${btn('Review in admin dashboard', SITE_URL)}
+      `);
+
+    // ── ADMIN: INVESTMENT RESERVATION ──
+    } else if (type === 'admin_investment_reservation') {
+      to = ADMIN_EMAIL;
+      const member_name = body.name; const investment_title = body.investment_title; const units = body.units;
+      subject = `New investment reservation — ${investment_title}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">New investment reservation ${pill('Pending', 'yellow')}</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has reserved <strong>${units} unit${units!=1?'s':''}</strong> of <strong>${investment_title}</strong>.</p>
+        ${btn('Review in admin dashboard', SITE_URL)}
+      `);
+
+    // ── ADMIN: DEAL SUBMISSION ──
+    } else if (type === 'admin_deal_submission') {
+      to = ADMIN_EMAIL;
+      const member_name = body.name; const deal_title = body.deal_title;
+      subject = `New deal submitted — ${deal_title}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">New deal submission ${pill('Pending', 'yellow')}</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has submitted a new deal for the marketplace: <strong>${deal_title}</strong>.</p>
+        ${btn('Review in admin dashboard', SITE_URL)}
+      `);
+
+    // ── ADMIN: KYC UPDATE ──
+    } else if (type === 'admin_kyc_update') {
+      to = ADMIN_EMAIL;
+      const member_name = body.name; const member_email = body.applicant_email;
+      subject = `KYC details updated — ${member_name}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">KYC details updated</h2>
+        <p style="color:#555;line-height:1.7">${member_name} has updated their KYC information. Their verification status has been reset and needs re-review.</p>
+        <div style="background:#f5f5f3;border-radius:10px;padding:14px;margin:16px 0;font-size:14px;line-height:1.8">
+          <strong>Name:</strong> ${member_name}<br>
+          <strong>Email:</strong> ${member_email}
+        </div>
+        ${btn('Review KYC', SITE_URL)}
+      `);
+
+    // ── ADMIN: COORDINATOR APPLICATION ──
+    } else if (type === 'admin_coordinator_application') {
+      to = ADMIN_EMAIL;
+      const applicant_name = body.name; const applicant_email = body.applicant_email;
+      subject = `New coordinator application — ${applicant_name}`;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">New coordinator application ${pill('Pending', 'yellow')}</h2>
+        <p style="color:#555;line-height:1.7">A new application to become a group coordinator has been submitted:</p>
+        <div style="background:#f5f5f3;border-radius:10px;padding:14px;margin:16px 0;font-size:14px;line-height:1.8">
+          <strong>Name:</strong> ${applicant_name}<br>
+          <strong>Email:</strong> ${applicant_email}
+        </div>
+        ${btn('Review application', SITE_URL)}
+      `);
+
     // ── BROADCAST ──
     } else if (type === 'broadcast') {
-      to = body.to; const name = body.name; const subj = body.subject; const msg = body.body;
+      to = body.to; const name = body.name; const subj = body.subject; const msg = body.body; const image_url = body.image_url;
       if (!to || !subj || !msg) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
       subject = subj;
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">${subj}</h2>
+        ${image_url ? `<img src="${image_url}" alt="" style="width:100%;border-radius:10px;margin-bottom:16px;display:block">` : ''}
         <p style="color:#555;font-size:14px;margin-bottom:8px">Dear ${name},</p>
         <div style="color:#444;font-size:14px;line-height:1.8;white-space:pre-wrap;margin-bottom:16px">${msg}</div>
         ${btn('Visit Fundova', SITE_URL)}
