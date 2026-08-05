@@ -2726,6 +2726,7 @@ async function renderContributorInvestments(){
           +'<div style="height:100%;background:#1D9E75;width:'+pct+'%"></div></div>'
           +'<div style="font-size:11px;color:#888;margin-bottom:12px">'+pct+'% funded &middot; '+confirmedRes.length+' investor'+(confirmedRes.length!==1?'s':'')+' so far</div>'
           +'<button class="btnbtn-primary" data-inv-id="'+inv.id+'" data-inv-title="'+inv.title.replace(/"/g,'&quot;')+'" data-unit-price="'+inv.unit_price+'" data-units="'+unitsAvailable+'" onclick="openReserveUnitsFromBtn(this)" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>'
+          +'<button class="btn btn-sm" data-share-type="investment" data-share-title="'+inv.title.replace(/"/g,'&quot;')+'" onclick="openShareCardFromBtn(this)" style="width:100%;margin-top:8px"><i class="ti ti-share-2"></i> Share</button>'
           +'</div>';
       });
     }
@@ -3009,6 +3010,7 @@ function buildDealCard(d){
       `<span style="font-size:18px;font-weight:700;color:#1a1a1a">${fmt(d.price)}</span>`}
     </div>
     <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}?text=${encodeURIComponent(`Hi, I'm interested in "${d.title}" I saw on Fundova`)}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
+    <button class="btn btn-sm" data-share-type="deal" data-share-title="${(d.title||'').replace(/"/g,'&quot;')}" data-share-discount="${d.discount||''}" data-share-image="${d.image_url||''}" onclick="openShareCardFromBtn(this)" style="margin-top:6px"><i class="ti ti-share-2"></i> Share</button>
     ${d.expires_at?`<div style="font-size:11px;color:#aaa">Offer expires ${fmtDate(d.expires_at)}</div>`:''}
   </div></div>`;
 }
@@ -4042,9 +4044,12 @@ async function loadAjoDashboardPreview(){
       const groupIds = coordGroups.map(g=>g.id);
       const allMembers = await sb(`group_members?group_id=in.(${groupIds.join(',')})&select=*`);
       const totalMembers = (allMembers||[]).filter(m=>m.status!=='removed').length;
-      html += `<div style="display:flex;align-items:center;gap:10px;background:#F0FDF8;border-radius:10px;padding:10px 12px;margin-bottom:${activeMemberships.length?'10px':'0'}">
-        <i class="ti ti-crown" style="color:#C9961A;font-size:18px;flex-shrink:0"></i>
-        <div style="font-size:12px;color:#065F46"><strong>Coordinating ${coordGroups.length} group${coordGroups.length!==1?'s':''}</strong> · ${totalMembers} member${totalMembers!==1?'s':''} total</div>
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#F0FDF8;border-radius:10px;padding:10px 12px;margin-bottom:${activeMemberships.length?'10px':'0'}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-crown" style="color:#C9961A;font-size:18px;flex-shrink:0"></i>
+          <div style="font-size:12px;color:#065F46"><strong>Coordinating ${coordGroups.length} group${coordGroups.length!==1?'s':''}</strong> · ${totalMembers} member${totalMembers!==1?'s':''} total</div>
+        </div>
+        <button class="btn btn-sm" data-share-type="ajo" onclick="openShareCardFromBtn(this)"><i class="ti ti-share-2"></i> Share</button>
       </div>`;
     }
 
@@ -5644,6 +5649,208 @@ function copyReferralLink(){
     const el = document.getElementById('referral-link-text');
     if(el){const range=document.createRange();range.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(range);}
   });
+}
+
+
+// ─── SOCIAL SHARE CARDS ───────────────────────────────────
+// Generates a branded, downloadable/shareable image for deals, investment
+// opportunities, and Ajo group savings — content is deliberately generic
+// (no confidential numbers, no group/member data) and always carries the
+// sharer's own referral link, so sharing doubles as a tracked growth channel.
+
+function openShareCardFromBtn(btn){
+  openShareCard(btn.dataset.shareType, {
+    title: btn.dataset.shareTitle||'',
+    discount: btn.dataset.shareDiscount||'',
+    image_url: btn.dataset.shareImage||''
+  });
+}
+
+async function openShareCard(type, data){
+  const referralCode = generateReferralCode(currentUser.name, currentUser.id);
+  const referralLink = 'https://www.fundova.africa/?ref=' + referralCode;
+
+  openModal(`
+  <h3>Share to social</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Generating your shareable card…</p>
+  <div id="share-preview" style="text-align:center;margin:1rem 0;min-height:200px;display:flex;align-items:center;justify-content:center"><span class="spinner"></span></div>
+  <div class="modal-footer" id="share-actions" style="display:none">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="share-go-btn"><i class="ti ti-share-2"></i> Share</button>
+  </div>`);
+
+  try{
+    const {blob,dataUrl} = await buildShareImage(type,data,referralLink);
+    const previewEl = document.getElementById('share-preview');
+    if(previewEl)previewEl.innerHTML = `<img src="${dataUrl}" style="max-width:100%;max-height:340px;border-radius:12px;object-fit:contain">`;
+    const actionsEl = document.getElementById('share-actions');
+    if(actionsEl)actionsEl.style.display='flex';
+
+    const caption = buildShareCaption(type,data,referralLink);
+    const shareBtn = document.getElementById('share-go-btn');
+    if(shareBtn){
+      shareBtn.onclick = async () => {
+        try{
+          const file = new File([blob],'fundova-share.png',{type:'image/png'});
+          if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+            await navigator.share({files:[file],text:caption});
+            closeModal();
+            return;
+          }
+        }catch(e){ /* user cancelled share sheet, or unsupported — fall through */ }
+        // Desktop / unsupported fallback: download the image, copy the caption
+        const a=document.createElement('a'); a.href=dataUrl; a.download='fundova-share.png'; a.click();
+        try{ await navigator.clipboard.writeText(caption); }catch(e){}
+        closeModal();
+        toast('<i class="ti ti-check"></i> Image downloaded and caption copied — paste into your story!');
+      };
+    }
+  }catch(e){
+    const previewEl = document.getElementById('share-preview');
+    if(previewEl)previewEl.innerHTML = `<div style="color:#A32D2D;font-size:13px;padding:1rem">Couldn't generate the share image: ${e.message}</div>`;
+  }
+}
+
+function buildShareCaption(type,data,referralLink){
+  if(type==='deal')return `Check out this deal on Fundova — ${data.title}! Join with my link: ${referralLink}`;
+  if(type==='investment')return `Fundova members get access to group investment opportunities. Join with my link: ${referralLink}`;
+  if(type==='ajo')return `I'm running a savings circle on Fundova — a trusted, transparent way to save together. Join with my link: ${referralLink}`;
+  return `Join me on Fundova: ${referralLink}`;
+}
+
+function loadImageForCanvas(src){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.crossOrigin='anonymous';
+    img.onload=()=>resolve(img);
+    img.onerror=reject;
+    img.src=src;
+  });
+}
+
+function canvasRoundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function canvasDrawImageCover(ctx,img,x,y,w,h,radius){
+  ctx.save();
+  canvasRoundRect(ctx,x,y,w,h,radius);
+  ctx.clip();
+  const scale=Math.max(w/img.width,h/img.height);
+  const dw=img.width*scale, dh=img.height*scale;
+  ctx.drawImage(img, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
+  ctx.restore();
+}
+
+// Wraps text within maxWidth, returns the y position after the last line
+function canvasWrapText(ctx,text,x,y,maxWidth,lineHeight){
+  const words=(text||'').split(' ');
+  let line='';
+  for(let i=0;i<words.length;i++){
+    const test=line+words[i]+' ';
+    if(ctx.measureText(test).width>maxWidth && i>0){
+      ctx.fillText(line,x,y);
+      line=words[i]+' ';
+      y+=lineHeight;
+    } else {
+      line=test;
+    }
+  }
+  ctx.fillText(line,x,y);
+  return y+lineHeight;
+}
+
+async function buildShareImage(type,data,referralLink){
+  const canvas=document.createElement('canvas');
+  canvas.width=1080; canvas.height=1920;
+  const ctx=canvas.getContext('2d');
+
+  // Background
+  const grad=ctx.createLinearGradient(0,0,0,1920);
+  grad.addColorStop(0,'#0D3D2A');
+  grad.addColorStop(1,'#082017');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,1080,1920);
+
+  // Header — logo + wordmark
+  try{
+    const logo=await loadImageForCanvas('/logo.png');
+    canvasRoundRect(ctx,90,90,90,90,16); ctx.save(); ctx.clip(); ctx.drawImage(logo,90,90,90,90); ctx.restore();
+  }catch(e){ /* no logo available — proceed text-only */ }
+  ctx.fillStyle='#fff';
+  ctx.font='bold 42px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+  ctx.fillText('FUNDOVA',200,150);
+  ctx.fillStyle='#C9961A';
+  ctx.font='24px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+  ctx.fillText('Money · Mindset · Growth',200,188);
+
+  let y=380;
+
+  if(type==='deal'){
+    if(data.image_url){
+      try{
+        const img=await loadImageForCanvas(data.image_url);
+        canvasDrawImageCover(ctx,img,90,300,900,620,24);
+        y=1000;
+      }catch(e){ y=380; }
+    }
+    ctx.fillStyle='#C9961A';
+    ctx.font='bold 30px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    ctx.fillText('DEAL OF THE WEEK',90,y);
+    y+=64;
+    ctx.fillStyle='#fff';
+    ctx.font='bold 54px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    y=canvasWrapText(ctx,data.title||'Exclusive member deal',90,y,900,64);
+    if(data.discount){
+      y+=10;
+      ctx.fillStyle='#1D9E75';
+      ctx.font='bold 46px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+      ctx.fillText(`${data.discount}% OFF`,90,y);
+    }
+  } else if(type==='investment'){
+    ctx.fillStyle='#C9961A';
+    ctx.font='bold 30px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    ctx.fillText('INVESTMENT OPPORTUNITY',90,y);
+    y+=70;
+    ctx.fillStyle='#fff';
+    ctx.font='bold 50px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    y=canvasWrapText(ctx,'Fundova members get access to group investment opportunities.',90,y,900,64);
+    y+=30;
+    if(data.title){
+      ctx.fillStyle='#ccc';
+      ctx.font='34px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+      y=canvasWrapText(ctx,`This week: ${data.title}`,90,y,900,46);
+    }
+  } else if(type==='ajo'){
+    ctx.fillStyle='#C9961A';
+    ctx.font='bold 30px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    ctx.fillText('GROUP SAVINGS (AJO)',90,y);
+    y+=70;
+    ctx.fillStyle='#fff';
+    ctx.font='bold 50px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+    y=canvasWrapText(ctx,"I'm running a savings circle on Fundova — a trusted, transparent way to save together.",90,y,900,64);
+  }
+
+  // Bottom CTA panel
+  const panelY=1650;
+  ctx.fillStyle='rgba(255,255,255,.1)';
+  canvasRoundRect(ctx,90,panelY,900,180,18); ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.font='bold 34px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+  ctx.fillText('Join me on Fundova',130,panelY+70);
+  ctx.fillStyle='#C9961A';
+  ctx.font='28px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+  ctx.fillText(referralLink.replace('https://',''),130,panelY+120);
+
+  const dataUrl=canvas.toDataURL('image/png');
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  return {blob,dataUrl};
 }
 
 
