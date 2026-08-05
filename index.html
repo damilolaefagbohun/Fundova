@@ -3008,7 +3008,7 @@ function buildDealCard(d){
       ${discountedPrice?`<span style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(discountedPrice)}</span><span style="font-size:13px;color:#aaa;text-decoration:line-through">${fmt(d.price)}</span>`:
       `<span style="font-size:18px;font-weight:700;color:#1a1a1a">${fmt(d.price)}</span>`}
     </div>
-    <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
+    <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}?text=${encodeURIComponent(`Hi, I'm interested in "${d.title}" I saw on Fundova`)}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
     ${d.expires_at?`<div style="font-size:11px;color:#aaa">Offer expires ${fmtDate(d.expires_at)}</div>`:''}
   </div></div>`;
 }
