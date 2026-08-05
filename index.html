@@ -674,9 +674,13 @@ function renderLogin(){
       el.textContent=(count>=10?count+'+ ':'');
     }
   }).catch(()=>{});
-  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
+  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(async deals=>{
+    deals = await expireOldFeaturedDeals(deals);
     const el=document.getElementById('deals-content') || document.getElementById('homepage-deals');
-    if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,true):'<div style="text-align:center;color:#888;padding:2rem">No featured deals right now. Check back soon!</div>';
+    if(el){
+      el.innerHTML=deals&&deals.filter(d=>d.status==='featured').length?buildDealsSection(deals,true):'<div style="text-align:center;color:#888;padding:2rem">No featured deals right now. Check back soon!</div>';
+      startDealsCarouselAutoplay('deals-carousel-track-home');
+    }
   }).catch(()=>{});
 }
 
@@ -1831,9 +1835,13 @@ async function renderContributor(){
       el.textContent=(count>=10?count+'+ ':'');
     }
   }).catch(()=>{});
-  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(deals=>{
-    const el=document.getElementById('contrib-deals-content');
-    if(el)el.innerHTML=deals&&deals.length?buildDealsSection(deals,false):'<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
+  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(async deals=>{
+    deals = await expireOldFeaturedDeals(deals);
+    const el=document.getElementById('deals-content');
+    if(el){
+      el.innerHTML=deals&&deals.filter(d=>d.status==='featured').length?buildDealsSection(deals,false):'<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
+      startDealsCarouselAutoplay('deals-carousel-track-dash');
+    }
   }).catch(()=>{});
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
 }
@@ -2877,6 +2885,7 @@ async function updateInvestmentRefund(refundId,status,invId){
 // ─── DEALS OF THE WEEK ────────────────────────────────────
 
 async function buildDealsAdminTab(deals){
+  deals = await expireOldFeaturedDeals(deals);
   const pending=(deals||[]).filter(d=>d.status==='pending');
   const featured=(deals||[]).filter(d=>d.status==='featured');
   const approved=(deals||[]).filter(d=>d.status==='approved');
@@ -2887,7 +2896,8 @@ async function buildDealsAdminTab(deals){
     const [sc,bg]=(statusColors[d.status]||'#666|#f5f5f3').split('|');
     const pill=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${bg};color:${sc}">${d.status.toUpperCase()}</span>`;
     const actions=showActions&&!isViewOnly()?`<div style="display:flex;gap:5px">
-      ${d.status!=='featured'&&featured.length<3?`<button class="btn btn-sm btn-primary" onclick="updateDeal('${d.id}','featured')"><i class="ti ti-star"></i> Feature</button>`:''}
+      ${d.status!=='featured'&&featured.length<5?`<button class="btn btn-sm btn-primary" onclick="openFeatureDeal('${d.id}','${d.title.replace(/'/g,"\\'")}','${d.expires_at||''}')"><i class="ti ti-star"></i> Feature</button>`:''}
+      ${d.status==='featured'?`<button class="btn btn-sm" onclick="openFeatureDeal('${d.id}','${d.title.replace(/'/g,"\\'")}','${d.expires_at||''}')"><i class="ti ti-calendar"></i> Edit expiry</button>`:''}
       ${d.status==='pending'?`<button class="btn btn-sm" onclick="updateDeal('${d.id}','approved')"><i class="ti ti-check"></i> Approve</button>`:''}
       ${d.status!=='rejected'?`<button class="btn btn-sm btn-danger" onclick="updateDeal('${d.id}','rejected')"><i class="ti ti-x"></i></button>`:''}
     </div>`:'';
@@ -2905,7 +2915,7 @@ async function buildDealsAdminTab(deals){
   return`<div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
       <h3 style="margin:0">Deals of the week</h3>
-      <div style="font-size:12px;color:#888">${featured.length}/3 featured slots used</div>
+      <div style="font-size:12px;color:#888">${featured.length}/5 featured slots used</div>
     </div>
     ${pending.length?`<div class="card" style="margin-bottom:1rem">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
@@ -2935,9 +2945,24 @@ async function buildDealsAdminTab(deals){
   </div>`;
 }
 
-async function updateDeal(id,status){
+function openFeatureDeal(id,title,currentExpiry){
+  const defaultDate = currentExpiry ? currentExpiry.split('T')[0] : new Date(Date.now()+7*24*60*60*1000).toISOString().split('T')[0];
+  openModal(`
+  <h3>Feature "${title}"</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Set how long this deal stays featured. When the date passes, it's automatically un-featured — not deleted. You can feature it again anytime with a new date.</p>
+  <div class="field"><label>Featured until</label><input id="fd-expiry" type="date" value="${defaultDate}" min="${new Date().toISOString().split('T')[0]}"></div>
+  <div class="error" id="fd-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="updateDeal('${id}','featured',document.getElementById('fd-expiry').value)"><i class="ti ti-star"></i> Feature this deal</button>
+  </div>`);
+}
+
+async function updateDeal(id,status,newExpiry){
   try{
-    await sb(`deals?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    const patchBody={status};
+    if(newExpiry)patchBody.expires_at=newExpiry;
+    await sb(`deals?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patchBody)});
     // Notify contributor
     try{
       const dealArr=await sb(`deals?id=eq.${id}&select=*`);
@@ -2949,31 +2974,54 @@ async function updateDeal(id,status){
         }
       }
     }catch(e){console.error('Deal notify error:',e);}
+    closeModal();
     await renderAdmin();
   }catch(e){alert('Error updating deal.');}
 }
 
+// Featured deals quietly expire back to "approved" (never deleted) once their date passes.
+// No server cron exists, so this runs client-side whenever deals are loaded — checked on
+// every admin/homepage/dashboard deals fetch, so it self-corrects within one page load of
+// the expiry date passing, without needing a backend job.
+async function expireOldFeaturedDeals(deals){
+  const today=new Date();today.setHours(0,0,0,0);
+  const expired=(deals||[]).filter(d=>d.status==='featured'&&d.expires_at&&new Date(d.expires_at)<today);
+  for(const d of expired){
+    try{
+      await sb(`deals?id=eq.${d.id}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
+      d.status='approved'; // reflect immediately in the in-memory list passed in
+    }catch(e){logSystemError('expireOldFeaturedDeals',e);}
+  }
+  return deals;
+}
+
+function buildDealCard(d){
+  const discountedPrice=d.discount?+(d.price*(1-d.discount/100)).toFixed(2):null;
+  return`<div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;position:relative">
+    ${d.image_url?`<img src="${d.image_url}" alt="${d.title}" style="width:100%;height:200px;object-fit:cover;cursor:pointer" onclick="openImageViewer('${d.image_url}','${(d.title||'').replace(/'/g,"\\'")}')">`:''}
+    <div style="padding:1.25rem;display:flex;flex-direction:column;gap:8px;flex:1;position:relative">
+    ${d.discount?`<div style="position:absolute;top:12px;right:12px;background:#1D9E75;color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">-${d.discount}% OFF</div>`:''}
+    <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">${d.category}</div>
+    <div style="font-size:15px;font-weight:700;color:#1a1a1a;padding-right:${d.discount?'50px':'0'}">${d.title}</div>
+    <div style="font-size:12px;color:#666;line-height:1.5">${d.description||''}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      ${discountedPrice?`<span style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(discountedPrice)}</span><span style="font-size:13px;color:#aaa;text-decoration:line-through">${fmt(d.price)}</span>`:
+      `<span style="font-size:18px;font-weight:700;color:#1a1a1a">${fmt(d.price)}</span>`}
+    </div>
+    <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
+    ${d.expires_at?`<div style="font-size:11px;color:#aaa">Offer expires ${fmtDate(d.expires_at)}</div>`:''}
+  </div></div>`;
+}
+
+let dealsCarouselIndex=0;
+let dealsCarouselTimer=null;
+
 function buildDealsSection(deals,isHomepage){
   const featured=(deals||[]).filter(d=>d.status==='featured');
   if(!featured.length)return'';
-
-  const cards=featured.map(d=>{
-    const discountedPrice=d.discount?+(d.price*(1-d.discount/100)).toFixed(2):null;
-    return`<div style="background:#fff;border:1px solid #e5e5e2;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;position:relative">
-      ${d.image_url?`<img src="${d.image_url}" alt="${d.title}" style="width:100%;height:160px;object-fit:cover;cursor:pointer" onclick="openImageViewer('${d.image_url}','${(d.title||'').replace(/'/g,"\\'")}')">`:''}
-      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:8px;flex:1;position:relative">
-      ${d.discount?`<div style="position:absolute;top:12px;right:12px;background:#1D9E75;color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">-${d.discount}% OFF</div>`:''}
-      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em">${d.category}</div>
-      <div style="font-size:15px;font-weight:700;color:#1a1a1a;padding-right:${d.discount?'50px':'0'}">${d.title}</div>
-      <div style="font-size:12px;color:#666;line-height:1.5">${d.description||''}</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-        ${discountedPrice?`<span style="font-size:18px;font-weight:700;color:#0F6E56">${fmt(discountedPrice)}</span><span style="font-size:13px;color:#aaa;text-decoration:line-through">${fmt(d.price)}</span>`:
-        `<span style="font-size:18px;font-weight:700;color:#1a1a1a">${fmt(d.price)}</span>`}
-      </div>
-      <a href="https://wa.me/234${d.whatsapp.replace(/^0/,'')}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Contact seller</a>
-      ${d.expires_at?`<div style="font-size:11px;color:#aaa">Offer expires ${fmtDate(d.expires_at)}</div>`:''}
-    </div></div>`;
-  }).join('');
+  window._dealsCarouselList=featured;
+  dealsCarouselIndex=0;
+  const trackId=isHomepage?'deals-carousel-track-home':'deals-carousel-track-dash';
 
   return`<div style="${isHomepage?'max-width:700px;margin:0 auto 1.5rem;padding:0 1rem':'margin-bottom:1rem'}">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -2982,9 +3030,48 @@ function buildDealsSection(deals,isHomepage){
         <p style="font-size:12px;color:#888">Exclusive offers from Fundova members</p>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${cards}</div>
+    <div style="max-width:340px;margin:0 auto" id="${trackId}">${buildDealCard(featured[0])}</div>
+    ${featured.length>1?`
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px">
+      <button onclick="dealsCarouselNav('${trackId}',-1)" class="btn btn-sm"><i class="ti ti-chevron-left"></i></button>
+      <div style="display:flex;gap:6px" id="${trackId}-dots">${featured.map((_,i)=>`<div onclick="dealsCarouselGoTo('${trackId}',${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===0?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}</div>
+      <button onclick="dealsCarouselNav('${trackId}',1)" class="btn btn-sm"><i class="ti ti-chevron-right"></i></button>
+    </div>`:''}
     <p style="font-size:11px;color:#aaa;margin-top:10px;text-align:center">Fundova facilitates visibility only. All transactions are between buyer and seller directly.</p>
   </div>`;
+}
+
+// Manual navigation (also resets the autoplay timer so it doesn't jump right after a click)
+function dealsCarouselGoTo(trackId,idx){
+  const list=window._dealsCarouselList||[];
+  if(!list.length)return;
+  dealsCarouselIndex=((idx%list.length)+list.length)%list.length;
+  renderDealsCarouselFrame(trackId);
+  startDealsCarouselAutoplay(trackId);
+}
+function dealsCarouselNav(trackId,dir){
+  dealsCarouselGoTo(trackId,dealsCarouselIndex+dir);
+}
+function renderDealsCarouselFrame(trackId){
+  const list=window._dealsCarouselList||[];
+  const el=document.getElementById(trackId);
+  if(!el||!list.length)return;
+  el.innerHTML=buildDealCard(list[dealsCarouselIndex]);
+  const dotsEl=document.getElementById(trackId+'-dots');
+  if(dotsEl)dotsEl.innerHTML=list.map((_,i)=>`<div onclick="dealsCarouselGoTo('${trackId}',${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===dealsCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('');
+}
+// Auto-advances every 5s; self-clears if the carousel's container has left the DOM
+// (e.g. the user navigated away), so it never keeps ticking on a page that's gone.
+function startDealsCarouselAutoplay(trackId){
+  if(dealsCarouselTimer)clearInterval(dealsCarouselTimer);
+  const list=window._dealsCarouselList||[];
+  if(list.length<=1)return;
+  dealsCarouselTimer=setInterval(()=>{
+    const el=document.getElementById(trackId);
+    if(!el){clearInterval(dealsCarouselTimer);dealsCarouselTimer=null;return;}
+    dealsCarouselIndex=(dealsCarouselIndex+1)%list.length;
+    renderDealsCarouselFrame(trackId);
+  },5000);
 }
 
 function openSubmitDeal(){
