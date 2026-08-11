@@ -336,6 +336,32 @@ exports.handler = async (event) => {
         ${btn('Review application', SITE_URL)}
       `);
 
+    // ── KYC REMINDER (admin-triggered, sent to the contributor) ──
+    } else if (type === 'kyc_reminder') {
+      to = body.to; const name = body.name;
+      if (!to) return { statusCode: 400, body: JSON.stringify({ error: 'Missing recipient' }) };
+      subject = 'Please complete your KYC on Fundova';
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">A quick reminder, ${name}</h2>
+        <p style="color:#555;line-height:1.7">We noticed your KYC details on Fundova aren't complete yet. This only takes a few minutes, and it's required before you can request a withdrawal.</p>
+        <div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:14px;margin:16px 0;font-size:13px;color:#856404">
+          Log in, go to your dashboard, and click <strong>"Update profile &amp; KYC"</strong> to finish up.
+        </div>
+        ${btn('Complete my KYC', SITE_URL)}
+      `);
+
+    // ── CONTRIBUTOR ACTION CONFIRMATION (generic — one action, one plain email) ──
+    } else if (type === 'contributor_action') {
+      to = body.to; const name = body.name; const actionTitle = body.title; const detail = body.detail;
+      if (!to) return { statusCode: 400, body: JSON.stringify({ error: 'Missing recipient' }) };
+      subject = actionTitle;
+      html = wrap(`
+        <h2 style="color:#1a1a1a;margin-bottom:8px">${actionTitle}</h2>
+        <p style="color:#555;line-height:1.7">Hi ${name},</p>
+        <p style="color:#555;line-height:1.7">${detail}</p>
+        ${btn('View your dashboard', SITE_URL)}
+      `);
+
     // ── BROADCAST ──
     } else if (type === 'broadcast') {
       to = body.to; const name = body.name; const subj = body.subject; const msg = body.body; const image_url = body.image_url;
