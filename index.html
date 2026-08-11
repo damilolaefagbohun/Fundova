@@ -696,6 +696,7 @@ async function doLogin(){
     const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
     if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     if(users[0].status==='revoked'){err.textContent='Your account access has been revoked. Please contact the administrator.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
+    if(users[0].status==='closed'){err.textContent='This account has been closed. Please contact the administrator if you believe this is a mistake.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     currentUser=users[0];saveSession(currentUser);localStorage.setItem('fundova_saved_email',email);await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
@@ -828,9 +829,10 @@ async function renderAdmin(){
       sb('deals?select=*&order=created_at.desc'),
       sb('kyc_details?select=user_id,kyc_verified')
     ]);
-    // Build KYC verified lookup map
+    // Build KYC status lookup map — three states: 'verified', 'awaiting' (submitted, not yet
+    // reviewed), or absent entirely (never started at all — no kyc_details row exists)
     const kycMap={};
-    (kycAll||[]).forEach(k=>{ kycMap[k.user_id]=k.kyc_verified; });
+    (kycAll||[]).forEach(k=>{ kycMap[k.user_id]=k.kyc_verified?'verified':'awaiting'; });
     const pendingWithdrawals=(requests||[]).filter(r=>r.status==='pending').length;
     const tabContent=adminTab==='contributors'?buildContributorsTab(contributors,payments,kycMap||{}):
       adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
@@ -986,7 +988,7 @@ async function renderAdmin(){
     const todayStr = new Date().toDateString();
     const todayContribs = allPayments.filter(p=>new Date(p.date).toDateString()===todayStr).reduce((a,p)=>a+Number(p.amount),0);
     const todayWd = (requests||[]).filter(r=>new Date(r.created_at).toDateString()===todayStr&&r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
-    const todayInterest = payments.reduce((a,p)=>a+Number(p.amount)*0.10/261,0);
+    const todayInterest = payments.reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
     const todayApps = (signups||[]).filter(s=>new Date(s.created_at).toDateString()===todayStr).length;
 
     statsRow.innerHTML = `
@@ -1100,10 +1102,7 @@ async function renderAdmin(){
       return `<tr>
         <td><div style="display:flex;align-items:center;gap:8px"><div style="width:32px;height:32px;border-radius:50%;background:#0D3D2A;color:#C9961A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${ini}</div><div><div style="font-size:13px;font-weight:500;color:#0D1F14">${c.name}</div><div style="font-size:11px;color:#aaa">${c.email}</div></div></div></td>
         <td><span class="status-pill ${cP.length?'pill-approved':'pill-pending'}">${cP.length?'Active':'No payments'}</span></td>
-        <td>${kycMap[c.id]
-          ? '<span title="KYC Verified" style="display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield-check\" style=\"font-size:12px\"></i> Verified</span>'
-          : '<span title="KYC Not Verified" style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#856404;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield\" style=\"font-size:12px\"></i> Pending</span>'
-        }</td>
+        <td>${kycBadgeHTML(kycMap[c.id])}</td>
         <td>${gpHTML}</td>
         <td style="font-weight:600;color:#0D1F14">${fmt(tot)}</td>
         <td style="font-size:12px;color:#888">${lastP?fmtDate(lastP.date):'Never'}</td>
@@ -1189,10 +1188,7 @@ function buildContributorsTab(contributors,payments,kycMap={}){
     const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
     return`<tr>
       <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div><div style="font-weight:500">${c.name}</div><div style="font-size:11px;color:#888">${c.email}</div></div></div></td>
-      <td>${kycMap[c.id]
-        ? '<span style="display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield-check\" style=\"font-size:12px\"></i> Verified</span>'
-        : '<span style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#856404;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class=\"ti ti-shield\" style=\"font-size:12px\"></i> Pending</span>'
-      }</td>
+      <td>${kycBadgeHTML(kycMap[c.id])}</td>
       <td style="color:#888">${pays.length}</td>
       <td>${fmt(principal)}</td>
       <td class="green">${fmt(interest)}</td>
@@ -1261,8 +1257,8 @@ function buildRequestsTab(requests,contributors){
     const actions=!isViewOnly()&&r.status==='pending'?`
       <button class="btn btn-sm btn-primary" onclick="updateRequest('${r.id}','approved')"><i class="ti ti-check"></i> Approve</button>
       <button class="btn btn-sm btn-danger" onclick="updateRequest('${r.id}','rejected')"><i class="ti ti-x"></i> Reject</button>`:`<span style="font-size:12px;color:#aaa">&mdash;</span>`;
-    return`<tr>
-      <td><div style="font-weight:500">${user?user.name:'Unknown'}</div><div style="font-size:11px;color:#888">${user?user.email:''}</div></td>
+    return`<tr style="${r.is_account_closure?'background:#FEF2F2':''}">
+      <td><div style="font-weight:500">${user?user.name:'Unknown'}</div><div style="font-size:11px;color:#888">${user?user.email:''}</div>${r.is_account_closure?'<span style="display:inline-block;margin-top:3px;font-size:10px;font-weight:700;color:#991B1B;background:#FEE2E2;padding:2px 6px;border-radius:10px">ACCOUNT CLOSURE</span>':''}</td>
       <td>${fmt(r.amount)}</td>
       <td style="font-size:12px;color:#666;max-width:180px">${r.note||'&mdash;'}</td>
       <td>${fmtDate(r.created_at)}</td>
@@ -1433,14 +1429,17 @@ async function saveEditCredentials(userId){
 
 async function updateRequest(id,status){
   try{
-    if(status==='approved'){
-      const requests=await sb(`withdrawal_requests?id=eq.${id}&select=*`);
-      if(!requests||!requests.length)throw new Error('Request not found');
-      const req=requests[0];
+    const requests0=await sb(`withdrawal_requests?id=eq.${id}&select=*`);
+    if(!requests0||!requests0.length)throw new Error('Request not found');
+    const req0=requests0[0];
+
+    if(status==='approved' && !req0.is_account_closure){
+      const req=req0;
       let remaining=Number(req.amount);
 
-      // Fetch only active (non-withdrawn) payments oldest first
-      const payments=await sb(`payments?user_id=eq.${req.user_id}&withdrawn=eq.false&select=*&order=date.asc`);
+      // Fetch only active, unallocated (non-goal) payments oldest first — goal-tagged
+      // money must never be touched by a regular withdrawal approval
+      const payments=await sb(`payments?user_id=eq.${req.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
       if(!payments||!payments.length)throw new Error('No active payments found');
 
       const today=new Date().toISOString().split('T')[0];
@@ -1474,6 +1473,11 @@ async function updateRequest(id,status){
       }
     }
     await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    // Account closure requests: the balance was already frozen/closed at request time —
+    // approval here just finalizes it by marking the account closed
+    if(req0.is_account_closure && status==='approved'){
+      await sb(`users?id=eq.${req0.user_id}`,{method:'PATCH',body:JSON.stringify({status:'closed',closed_at:new Date().toISOString()})});
+    }
     // Send notification to contributor
     try{
       const reqArr=await sb(`withdrawal_requests?id=eq.${id}&select=*`);
@@ -1488,22 +1492,106 @@ async function updateRequest(id,status){
   }catch(e){alert('Error updating request: '+e.message);}
 }
 
+// ─── ACCOUNT CLOSURE ────────────────────────────────────────
+// Deliberately tucked away (linked only from the KYC/profile form), not a prominent
+// dashboard action — closing an account is a big, rare, irreversible-feeling decision.
+function confirmRequestAccountClosure(){
+  closeModal();
+  openModal(`
+  <h3 style="color:#A32D2D">Close your Fundova account?</h3>
+  <p style="font-size:13px;color:#666;line-height:1.6">This will:</p>
+  <ul style="font-size:13px;color:#666;line-height:1.8;padding-left:1.2rem">
+    <li>Move any money in your goals back into your general savings automatically</li>
+    <li>Stop your interest from accruing immediately</li>
+    <li>Submit a request for admin to review and pay out your full balance to the bank account on file</li>
+  </ul>
+  <p style="font-size:13px;color:#666">You won't be able to log in again once this is approved. This can't be undone.</p>
+  <div class="error" id="ac-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel, keep my account</button>
+    <button class="btn btn-danger" id="ac-btn" onclick="requestAccountClosure()"><i class="ti ti-alert-triangle"></i> Yes, close my account</button>
+  </div>`);
+}
+
+async function requestAccountClosure(){
+  const err=document.getElementById('ac-err');
+  const btn=document.getElementById('ac-btn');
+  btn.innerHTML='<span class="spinner"></span> Processing…';btn.disabled=true;
+  try{
+    // 1. Auto-collapse any active goals back into general savings first
+    const goals=await sb(`goals?user_id=eq.${currentUser.id}&archived=eq.false&select=*`);
+    for(const g of (goals||[])){
+      const gPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${g.id}&moved_at=is.null&select=*&order=date.asc`);
+      const gBalance=(gPayments||[]).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(p.amount,p.date),0);
+      if(gBalance>0.5){
+        await consumePaymentsFIFO(gPayments,gBalance,g.id);
+        const todayDateOnly=new Date().toISOString().split('T')[0];
+        await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+gBalance.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null})});
+      }
+    }
+    // 2. Freeze every remaining general-savings payment right now — this is a real
+    // closure (money is genuinely leaving), so reusing withdrawn/withdrawn_at is correct here
+    const generalPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*`);
+    const nowIso=new Date().toISOString();
+    let frozenTotal=0;
+    for(const p of (generalPayments||[])){
+      frozenTotal+=Number(p.amount)+calcAccruedInterest(p.amount,p.date);
+      await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:nowIso})});
+    }
+    frozenTotal=+frozenTotal.toFixed(2);
+    // 3. Submit the closure request for admin
+    await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({
+      user_id:currentUser.id,amount:frozenTotal,note:'Account closure — full balance payout',status:'pending',is_account_closure:true
+    })});
+    notify({type:'admin_withdrawal_request',name:currentUser.name,amount:frozenTotal,note:'⚠️ ACCOUNT CLOSURE — full balance payout, please review'}).catch(e=>logSystemError('notify:account_closure',e));
+    notifyContributorAction('Account closure requested','You requested to close your Fundova account. Your interest has stopped accruing, and your final balance of '+fmt(frozenTotal)+' is now pending admin review before payout to the bank account on file.');
+    toast('<i class="ti ti-check"></i> Closure requested — admin will process your final payout.');
+    closeModal();
+    await renderContributor();
+  }catch(e){err.textContent='Error: '+e.message;btn.innerHTML='<i class="ti ti-alert-triangle"></i> Yes, close my account';btn.disabled=false;}
+}
+
+function renderClosurePendingScreen(closureReq){
+  setHTML(`
+  <div class="pending-screen">
+    <div class="pending-icon"><i class="ti ti-door-exit"></i></div>
+    <h2 style="font-size:19px;font-weight:600">Your account closure is being processed</h2>
+    <p style="font-size:13px;color:#666;max-width:380px">Your interest stopped accruing when you requested this. Your final balance of <strong>${fmt(closureReq.amount)}</strong> is pending admin review and will be paid out to your bank account on file.</p>
+    <p style="font-size:12px;color:#999;max-width:380px">If you'd like to keep your account instead, please contact admin before this is approved.</p>
+    <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+  </div>`);
+}
+
+
 // ─── CONTRIBUTOR DASHBOARD ────────────────────────────────
 async function renderContributor(){
   setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
-    const [payments,withdrawnPayments,requests,bankArr]=await Promise.all([
-      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&select=*&order=date.asc`),
+    // If a closure request is pending, show a dedicated screen instead of the normal dashboard
+    const closureReq=await sb(`withdrawal_requests?user_id=eq.${currentUser.id}&is_account_closure=eq.true&status=eq.pending&select=*`);
+    if(closureReq&&closureReq.length){
+      renderClosurePendingScreen(closureReq[0]);
+      return;
+    }
+    const [payments,withdrawnPayments,requests,bankArr,goals,goalPayments]=await Promise.all([
+      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`),
       sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.true&select=*&order=date.asc`),
       sb(`withdrawal_requests?user_id=eq.${currentUser.id}&select=*&order=created_at.desc`),
-      sb(`bank_details?user_id=eq.${currentUser.id}&select=*`)
+      sb(`bank_details?user_id=eq.${currentUser.id}&select=*`),
+      sb(`goals?user_id=eq.${currentUser.id}&archived=eq.false&select=*&order=created_at.asc`),
+      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=not.is.null&moved_at=is.null&select=*&order=date.asc`)
     ]);
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
     const principal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const interest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
     const currentTotal=+(principal+interest).toFixed(2);
-    const totalPrincipal=principal;
+    const totalPrincipal=principal; // unallocated/general savings only — this is what backs the withdrawal cap, unchanged behavior
     const totalInterest=interest;
+    // Goals totals — additive, doesn't touch anything the withdrawal flow relies on
+    const goalsPrincipal=(goalPayments||[]).reduce((a,p)=>a+Number(p.amount),0);
+    const goalsInterest=(goalPayments||[]).reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const combinedPrincipal=totalPrincipal+goalsPrincipal;
+    const combinedInterest=totalInterest+goalsInterest;
     const today=new Date();today.setHours(0,0,0,0);
     const hasPending=(requests||[]).some(r=>r.status==='pending');
 
@@ -1599,32 +1687,73 @@ async function renderContributor(){
         <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
         <div style="position:absolute;bottom:-60px;right:60px;width:150px;height:150px;border-radius:50%;background:rgba(201,150,26,.06)"></div>
         <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Current total value</div>
-        <div style="font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px">₦${(totalPrincipal+totalInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+        <div style="font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px">₦${(combinedPrincipal+combinedInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
         <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:1.25rem">Interest grows every weekday automatically</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:${currentUser.savings_goal?'1.25rem':'0'}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px">
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Principal saved</div>
-            <div style="font-size:16px;font-weight:700;color:#fff">₦${totalPrincipal.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+            <div style="font-size:16px;font-weight:700;color:#fff">₦${combinedPrincipal.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Interest earned</div>
-            <div style="font-size:16px;font-weight:700;color:#1D9E75">₦${totalInterest.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+            <div style="font-size:16px;font-weight:700;color:#1D9E75">₦${combinedInterest.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Today's interest</div>
-            <div style="font-size:16px;font-weight:700;color:#C9961A">₦${payments.reduce((a,p)=>a+Number(p.amount)*0.10/261,0).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+            <div style="font-size:16px;font-weight:700;color:#C9961A">₦${[...payments,...(goalPayments||[])].reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
         </div>
-        ${currentUser.savings_goal?`
-        <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px;cursor:pointer" onclick="openSetSavingsGoal()" title="Edit your savings goal">
-          <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px">
-            <span>Savings goal progress</span>
-            <span style="color:#C9961A;font-weight:600">${Math.min(100,Math.round(((totalPrincipal+totalInterest)/currentUser.savings_goal)*100))}% of ₦${Number(currentUser.savings_goal).toLocaleString()}</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:${goals&&goals.length?'1.25rem':'0'}">
+          <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="scrollToSection('goals')">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(201,150,26,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-target" style="color:#C9961A;font-size:16px"></i></div>
+            <div><div style="font-size:10px;color:rgba(255,255,255,.5)">Allocated to goals</div><div style="font-size:14px;font-weight:700;color:#fff">₦${(goalsPrincipal+goalsInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div></div>
           </div>
-          <div style="background:rgba(255,255,255,.1);border-radius:4px;height:6px;overflow:hidden">
-            <div style="height:100%;background:#C9961A;width:${Math.min(100,Math.round(((totalPrincipal+totalInterest)/currentUser.savings_goal)*100))}%;transition:width .5s"></div>
+          <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-wallet" style="color:#fff;font-size:16px"></i></div>
+            <div><div style="font-size:10px;color:rgba(255,255,255,.5)">Unallocated savings</div><div style="font-size:14px;font-weight:700;color:#fff">₦${(totalPrincipal+totalInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div></div>
+          </div>
+        </div>
+        ${goals&&goals.length?`
+        <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px;cursor:pointer" onclick="scrollToSection('goals')" title="View your goals">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.5)">
+            <span>${goals.length} active goal${goals.length!==1?'s':''}</span>
+            <span style="color:#C9961A;font-weight:600">View all goals →</span>
           </div>
         </div>`:''}
+      </div>
+
+      <!-- MY GOALS -->
+      <div id="goals" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:#0D1F14">My Goals</div>
+            <div style="font-size:12px;color:#888">Give every naira a destination — a child's future, land, a car, anything.</div>
+          </div>
+        </div>
+        <div id="goals-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:12px">
+          ${(goals||[]).map(g=>{
+            const gPays=(goalPayments||[]).filter(p=>p.goal_id===g.id);
+            const gPrincipal=gPays.reduce((a,p)=>a+Number(p.amount),0);
+            const gInterest=gPays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+            const gTotal=gPrincipal+gInterest;
+            const pct=g.target_amount?Math.min(100,Math.round((gTotal/g.target_amount)*100)):null;
+            return`<div style="border:1px solid #e5e5e2;border-radius:12px;padding:14px;position:relative">
+              <div style="position:absolute;top:10px;right:10px"><button class="btn btn-sm" style="padding:4px 6px" onclick="openGoalMenu('${g.id}','${g.name.replace(/'/g,"\\'")}',${g.target_amount||'null'})"><i class="ti ti-dots-vertical"></i></button></div>
+              <div style="width:36px;height:36px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:16px">${g.icon||'🎯'}</div>
+              <div style="font-size:13px;font-weight:700;color:#0D1F14;margin-bottom:2px">${g.name}</div>
+              <div style="font-size:15px;font-weight:700;color:#0F6E56;margin-bottom:2px">${fmt(gTotal)}</div>
+              ${g.target_amount?`<div style="font-size:11px;color:#888;margin-bottom:6px">of ${fmt(g.target_amount)}</div>
+              <div style="background:#e5e5e2;border-radius:4px;height:5px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${pct>=100?'#1D9E75':'#C9961A'}"></div></div>
+              <div style="font-size:11px;color:#888;margin-bottom:10px">${pct}%</div>`:`<div style="margin-bottom:10px"></div>`}
+              <button class="btn btn-sm btn-primary" style="width:100%" onclick="openAssignToGoal('${g.id}','${g.name.replace(/'/g,"\\'")}')">Add money</button>
+              ${gTotal>0?`<button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="openMoveToGeneral('${g.id}','${g.name.replace(/'/g,"\\'")}',${gTotal})">Move to savings</button>`:''}
+            </div>`;
+          }).join('')}
+          <div style="border:1.5px dashed #e5e5e2;border-radius:12px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:180px" onclick="openCreateGoal()">
+            <div style="width:36px;height:36px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center"><i class="ti ti-plus" style="font-size:18px;color:#555"></i></div>
+            <div style="font-size:13px;font-weight:600;color:#555;text-align:center">Create a new goal</div>
+          </div>
+        </div>
       </div>
 
       <!-- TWO COLUMN ROW -->
@@ -1654,7 +1783,7 @@ async function renderContributor(){
               {icon:'ti-cash',label:'Withdraw',action:'checkKycBeforeWithdrawal('+Math.round(totalPrincipal+totalInterest)+')'},
               {icon:'ti-file-text',label:'Statement',action:'scrollToSection(\'txn\')'},
               {icon:'ti-users',label:'Invite',action:'copyReferralLink()'},
-              {icon:'ti-target',label:'Goal',action:'openSetSavingsGoal()'},
+              {icon:'ti-target',label:'Goal',action:'openCreateGoal()'},
             ].map(a=>`<div onclick="${a.action}" style="display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;padding:8px 4px;border-radius:10px;background:#f5f5f3" onmouseover="this.style.background='#E8F5EE'" onmouseout="this.style.background='#f5f5f3'">
               <div style="width:36px;height:36px;border-radius:50%;background:#0D3D2A;display:flex;align-items:center;justify-content:center"><i class="ti ${a.icon}" style="color:#fff;font-size:16px"></i></div>
               <div style="font-size:10px;color:#555;text-align:center;font-weight:500">${a.label}</div>
@@ -1878,8 +2007,201 @@ async function saveWithdrawRequest(currentTotal){
   try{
     await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount,note,status:'pending'})});
     notify({type:'admin_withdrawal_request',name:currentUser.name,amount,note}).catch(e=>logSystemError('notify:withdrawal_request',e));
+    notifyContributorAction('Withdrawal request submitted','Your request to withdraw '+fmt(amount)+' has been submitted and is pending admin approval. You\'ll get another email once it\'s processed.');
     closeModal();await renderContributor();
   }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-cash"></i> Submit request';btn.disabled=false;}
+}
+
+// ─── GOALS (beneficiary/goal boxes) ────────────────────────
+// A "goal" is just a named box under the contributor's own account — never a separate
+// member, no KYC. Money moves in and out via the same oldest-first FIFO consume/split
+// mechanic used for partial withdrawals: fully-consumed source payments get retired
+// (moved_at set, excluding them from their old bucket), the payment that overflows gets
+// split into a retired original + a fresh leftover payment left behind in the SOURCE
+// bucket, and the full assigned amount lands as one brand-new payment in the DESTINATION
+// bucket, dated today — so it starts earning interest fresh from the moment it moves,
+// exactly like a partial-withdrawal leftover does today.
+
+// Sends a plain confirmation email to the currently logged-in contributor for something
+// they just did. Fire-and-forget — never blocks the UI on this.
+function notifyContributorAction(title, detail){
+  if(!currentUser||!currentUser.email)return;
+  notify({type:'contributor_action',to:currentUser.email,name:currentUser.name,title,detail}).catch(e=>logSystemError('notify:contributor_action:'+title,e));
+}
+
+// Consumes `amountNeeded` worth of current value (principal+interest) from `sourcePayments`
+// (already fetched, oldest-first, already filtered to the correct bucket). Returns true if
+// fully consumed, false if the source bucket didn't have enough to cover it (nothing is
+// changed in that case — caller should check before writing the destination payment).
+async function consumePaymentsFIFO(sourcePayments, amountNeeded, sourceGoalId){
+  const totalAvailable=(sourcePayments||[]).reduce((a,p)=>{
+    const endDate=p.withdrawn_at||p.moved_at||null;
+    return a+Number(p.amount)+calcAccruedInterest(p.amount,p.date,endDate);
+  },0);
+  if(totalAvailable+0.005<amountNeeded)return false;
+
+  let remaining=amountNeeded;
+  const nowIso=new Date().toISOString();
+  const todayDateOnly=nowIso.split('T')[0];
+  for(const p of sourcePayments){
+    if(remaining<=0.005)break;
+    const endDate=p.withdrawn_at||p.moved_at||null;
+    const currentValue=Number(p.amount)+calcAccruedInterest(p.amount,p.date,endDate);
+    if(currentValue<=remaining+0.005){
+      await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({moved_at:nowIso})});
+      remaining-=currentValue;
+    } else {
+      const leftover=+(currentValue-remaining).toFixed(2);
+      await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({moved_at:nowIso})});
+      await sb('payments',{method:'POST',body:JSON.stringify({
+        user_id:currentUser.id,amount:leftover,date:todayDateOnly,withdrawn:false,goal_id:sourceGoalId||null
+      })});
+      remaining=0;
+    }
+  }
+  return true;
+}
+
+function openCreateGoal(){
+  openModal(`
+  <h3>Create a goal</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Give a portion of your savings a purpose — a child's future, land, a car, anything. No ID or extra verification needed, just a name.</p>
+  <div class="field"><label>What's this goal called?</label><input id="cg-name" placeholder="e.g. Ada's Future, Land Fund, Tolu's Christmas gift" autocomplete="off"></div>
+  <div class="field"><label>Target amount <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="cg-target" type="number" placeholder="e.g. 500000"></div>
+  <div class="error" id="cg-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="cg-btn" onclick="saveGoal()"><i class="ti ti-target"></i> Create goal</button>
+  </div>`);
+}
+
+async function saveGoal(){
+  const name=document.getElementById('cg-name').value.trim();
+  const target=parseFloat(document.getElementById('cg-target').value)||null;
+  const err=document.getElementById('cg-err');
+  const btn=document.getElementById('cg-btn');
+  if(!name){err.textContent='Please name your goal.';return;}
+  btn.innerHTML='<span class="spinner"></span> Creating…';btn.disabled=true;
+  try{
+    await sb('goals',{method:'POST',body:JSON.stringify({user_id:currentUser.id,name,target_amount:target,archived:false})});
+    notifyContributorAction('Goal created: '+name, 'You created a new goal called "'+name+'"'+(target?' with a target of '+fmt(target):'')+'. You can add money to it anytime from your dashboard.');
+    closeModal();
+    toast('<i class="ti ti-check"></i> Goal created!');
+    await renderContributor();
+  }catch(e){err.textContent='Error creating goal.';btn.innerHTML='<i class="ti ti-target"></i> Create goal';btn.disabled=false;}
+}
+
+function openGoalMenu(goalId,goalName,targetAmount){
+  openModal(`
+  <h3>${goalName}</h3>
+  <div class="modal-footer" style="flex-direction:column;gap:8px;align-items:stretch">
+    <button class="btn" onclick="closeModal();openEditGoal('${goalId}','${goalName.replace(/'/g,"\\'")}',${targetAmount||'null'})"><i class="ti ti-pencil"></i> Rename / edit target</button>
+    <button class="btn btn-danger" onclick="archiveGoal('${goalId}','${goalName.replace(/'/g,"\\'")}')"><i class="ti ti-archive"></i> Archive this goal</button>
+    <button class="btn" onclick="closeModal()">Cancel</button>
+  </div>`);
+}
+
+function openEditGoal(goalId,goalName,targetAmount){
+  openModal(`
+  <h3>Edit goal</h3>
+  <div class="field"><label>Name</label><input id="eg-name" value="${goalName.replace(/"/g,'&quot;')}" autocomplete="off"></div>
+  <div class="field"><label>Target amount <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="eg-target" type="number" value="${targetAmount||''}"></div>
+  <div class="error" id="eg-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="eg-btn" onclick="saveGoalEdit('${goalId}')"><i class="ti ti-check"></i> Save</button>
+  </div>`);
+}
+
+async function saveGoalEdit(goalId){
+  const name=document.getElementById('eg-name').value.trim();
+  const target=parseFloat(document.getElementById('eg-target').value)||null;
+  const err=document.getElementById('eg-err');
+  const btn=document.getElementById('eg-btn');
+  if(!name){err.textContent='Please name your goal.';return;}
+  btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
+  try{
+    await sb(`goals?id=eq.${goalId}`,{method:'PATCH',body:JSON.stringify({name,target_amount:target})});
+    notifyContributorAction('Goal updated: '+name, 'You updated your goal — it\'s now named "'+name+'"'+(target?' with a target of '+fmt(target):' with no target set')+'.');
+    closeModal();
+    toast('<i class="ti ti-check"></i> Goal updated!');
+    await renderContributor();
+  }catch(e){err.textContent='Error saving changes.';btn.innerHTML='<i class="ti ti-check"></i> Save';btn.disabled=false;}
+}
+
+async function archiveGoal(goalId,goalName){
+  if(!confirm(`Archive "${goalName}"? You can only archive a goal once its balance is ₦0 — move any money back to your savings first.`))return;
+  try{
+    const gPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${goalId}&moved_at=is.null&select=*`);
+    const balance=(gPayments||[]).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(p.amount,p.date),0);
+    if(balance>0.5){alert(`This goal still has ${fmt(balance)} in it. Move it back to your savings first, then archive.`);return;}
+    await sb(`goals?id=eq.${goalId}`,{method:'PATCH',body:JSON.stringify({archived:true})});
+    notifyContributorAction('Goal archived: '+goalName, 'You archived your goal "'+goalName+'". It no longer appears on your dashboard.');
+    toast('<i class="ti ti-check"></i> Goal archived.');
+    await renderContributor();
+  }catch(e){alert('Error archiving goal: '+e.message);}
+}
+
+function openAssignToGoal(goalId,goalName){
+  openModal(`
+  <h3>Add money to "${goalName}"</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">This moves money from your unallocated savings into this goal. It starts earning interest fresh from today under this goal.</p>
+  <div class="field"><label>Amount (₦)</label><input id="ag-amt" type="number" placeholder="e.g. 20000"></div>
+  <div class="error" id="ag-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="ag-btn" onclick="assignToGoal('${goalId}','${goalName.replace(/'/g,"\\'")}')"><i class="ti ti-arrow-right"></i> Add to goal</button>
+  </div>`);
+}
+
+async function assignToGoal(goalId,goalName){
+  const amount=parseFloat(document.getElementById('ag-amt').value);
+  const err=document.getElementById('ag-err');
+  const btn=document.getElementById('ag-btn');
+  if(!amount||amount<=0){err.textContent='Please enter a valid amount.';return;}
+  btn.innerHTML='<span class="spinner"></span> Moving…';btn.disabled=true;
+  try{
+    const generalPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
+    const ok=await consumePaymentsFIFO(generalPayments,amount,null);
+    if(!ok){err.textContent='That\'s more than your unallocated savings — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-right"></i> Add to goal';btn.disabled=false;return;}
+    const todayDateOnly=new Date().toISOString().split('T')[0];
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:goalId})});
+    notifyContributorAction('Money added to '+goalName, 'You moved '+fmt(amount)+' from your unallocated savings into "'+goalName+'". It\'s now earning interest under this goal.');
+    closeModal();
+    toast('<i class="ti ti-check"></i> Added to '+goalName+'!');
+    await renderContributor();
+  }catch(e){err.textContent='Error: '+e.message;btn.innerHTML='<i class="ti ti-arrow-right"></i> Add to goal';btn.disabled=false;}
+}
+
+function openMoveToGeneral(goalId,goalName,maxAmount){
+  openModal(`
+  <h3>Move money from "${goalName}" back to savings</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">This is required before you can withdraw money that's sitting in a goal — it can't be withdrawn directly from here.</p>
+  <div class="field"><label>Amount (₦) <span style="color:#aaa;font-weight:400">— up to ${fmt(maxAmount)}</span></label><input id="mg-amt" type="number" placeholder="e.g. 10000"></div>
+  <div class="error" id="mg-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="mg-btn" onclick="moveGoalToGeneral('${goalId}','${goalName.replace(/'/g,"\\'")}')"><i class="ti ti-arrow-left"></i> Move to savings</button>
+  </div>`);
+}
+
+async function moveGoalToGeneral(goalId,goalName){
+  const amount=parseFloat(document.getElementById('mg-amt').value);
+  const err=document.getElementById('mg-err');
+  const btn=document.getElementById('mg-btn');
+  if(!amount||amount<=0){err.textContent='Please enter a valid amount.';return;}
+  btn.innerHTML='<span class="spinner"></span> Moving…';btn.disabled=true;
+  try{
+    const goalPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${goalId}&moved_at=is.null&select=*&order=date.asc`);
+    const ok=await consumePaymentsFIFO(goalPayments,amount,goalId);
+    if(!ok){err.textContent='That\'s more than this goal currently holds — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-left"></i> Move to savings';btn.disabled=false;return;}
+    const todayDateOnly=new Date().toISOString().split('T')[0];
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null})});
+    notifyContributorAction('Money moved from '+goalName, 'You moved '+fmt(amount)+' from "'+goalName+'" back into your unallocated savings. You can now request a withdrawal on it if you\'d like.');
+    closeModal();
+    toast('<i class="ti ti-check"></i> Moved back to your savings!');
+    await renderContributor();
+  }catch(e){err.textContent='Error: '+e.message;btn.innerHTML='<i class="ti ti-arrow-left"></i> Move to savings';btn.disabled=false;}
 }
 
 // ─── ADMIN CONTRIBUTOR MANAGEMENT ─────────────────────────
@@ -5874,6 +6196,14 @@ function filterTableRows(searchInputId, tableId, countElId){
   if(countEl) countEl.textContent = query ? `${visible} of ${rows.length}` : `${rows.length}`;
 }
 
+// Three-state KYC badge — 'verified' (green), 'awaiting' (amber, submitted and needs admin
+// review), or anything else/undefined treated as 'not_started' (grey, hasn't begun at all)
+function kycBadgeHTML(status){
+  if(status==='verified')return '<span title="KYC Verified" style="display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#065F46;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class="ti ti-shield-check" style="font-size:12px"></i> Verified</span>';
+  if(status==='awaiting')return '<span title="Submitted, awaiting review" style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#856404;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class="ti ti-clock" style="font-size:12px"></i> Awaiting review</span>';
+  return '<span title="KYC not started" style="display:inline-flex;align-items:center;gap:4px;background:#F3F4F6;color:#6B7280;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px"><i class="ti ti-shield-off" style="font-size:12px"></i> Not started</span>';
+}
+
 function filterContributors(){
   const query = document.getElementById('contrib-search')?.value?.toLowerCase().trim() || '';
   const table = document.getElementById('contrib-table');
@@ -6068,7 +6398,8 @@ async function openKycForm(){
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="kyc-btn" onclick="saveKycWithAudit()"><i class="ti ti-device-floppy"></i> Save details</button>
-  </div>`);
+  </div>
+  <div style="text-align:center;margin-top:1.25rem"><a href="#" onclick="event.preventDefault();confirmRequestAccountClosure()" style="font-size:11px;color:#bbb;text-decoration:none">Close my Fundova account</a></div>`);
 }
 
 async function saveKyc(){
@@ -6193,10 +6524,17 @@ async function getKycStatus(userId){
 }
 
 async function sendKycNudge(userId, userName){
-  if(!confirm(`Send a KYC reminder notification to ${userName}?`))return;
+  if(!confirm(`Send a KYC reminder to ${userName}? This will email them and add an in-app notification.`))return;
   try{
+    const userArr = await sb(`users?id=eq.${userId}&select=email,name`);
+    const email = userArr&&userArr.length?userArr[0].email:null;
     await addNotification(userId,'📋 Please complete your KYC details to unlock withdrawals. Go to your dashboard and click "Update profile & KYC".');
-    toast('<i class="ti ti-check"></i> KYC reminder sent to '+userName);
+    if(email){
+      await notify({type:'kyc_reminder',to:email,name:userName}).catch(e=>logSystemError('notify:kyc_reminder',e));
+      toast('<i class="ti ti-check"></i> KYC reminder emailed to '+userName);
+    } else {
+      toast('<i class="ti ti-alert-triangle"></i> In-app notification sent, but no email found for '+userName);
+    }
   }catch(e){alert('Error sending nudge: '+e.message);}
 }
 
