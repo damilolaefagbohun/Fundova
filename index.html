@@ -821,7 +821,7 @@ async function renderAdmin(){
   try{
     const [contributors,payments,allPayments,requests,signups,investments,deals,kycAll]=await Promise.all([
       sb('users?role=eq.contributor&select=*&order=created_at.asc'),
-      sb('payments?withdrawn=eq.false&select=*'),
+      sb('payments?withdrawn=eq.false&moved_at=is.null&select=*'),
       sb('payments?select=*&order=date.asc'),
       sb('withdrawal_requests?select=*&order=created_at.desc'),
       sb('signup_requests?select=*&order=created_at.desc'),
@@ -2327,7 +2327,7 @@ async function openViewContributor(userId,userName){
   openModal(`<div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;margin:0 auto 10px"></div>Loading…</div>`);
   try{
     const [pays,bankArr]=await Promise.all([
-      sb(`payments?user_id=eq.${userId}&withdrawn=eq.false&select=*&order=date.asc`),
+      sb(`payments?user_id=eq.${userId}&withdrawn=eq.false&moved_at=is.null&select=*&order=date.asc`),
       sb(`bank_details?user_id=eq.${userId}&select=*`)
     ]);
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
@@ -2718,7 +2718,7 @@ async function updateReservation(resId,status,invId){
         const invArr=await sb(`investments?id=eq.${res.investment_id}&select=*`);
         const inv=invArr[0];
         const totalCost=res.units*inv.unit_price;
-        const pays=await sb(`payments?user_id=eq.${res.user_id}&withdrawn=eq.false&select=*&order=date.asc`);
+        const pays=await sb(`payments?user_id=eq.${res.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
         let remaining=totalCost;
         const today=new Date().toISOString().split('T')[0];
         for(const p of pays){
@@ -5069,7 +5069,7 @@ async function previewSurplus(){
     try{
       const [contributors, payments] = await Promise.all([
         sb('users?role=eq.contributor&select=id,name,email'),
-        sb('payments?withdrawn=eq.false&select=user_id,amount')
+        sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount')
       ]);
       surplusContributors = contributors || [];
       // Calculate each contributor's savings
@@ -5684,10 +5684,10 @@ async function buildAnalyticsTab(){
     ]);
 
     const totalMembers = (contributors||[]).length;
-    const activePayments = (allPayments||[]).filter(p=>!p.withdrawn);
+    const activePayments = (allPayments||[]).filter(p=>!p.withdrawn && !p.moved_at);
     const totalSavings = activePayments.reduce((a,p)=>a+Number(p.amount),0);
     const lifetimeInflow = (allPayments||[]).reduce((a,p)=>a+Number(p.amount),0);
-    const totalWithdrawn = (allPayments||[]).filter(p=>p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
+    const totalWithdrawn = (requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
     const pendingWithdrawals = (requests||[]).filter(r=>r.status==='pending').length;
     const totalInterest = activePayments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
 
@@ -5840,7 +5840,7 @@ async function loadAnalyticsSections(){
       sb('food_scheme_enrollments?select=*'),
       sb('food_scheme_options?select=*'),
       sb('kyc_details?select=user_id,kyc_verified'),
-      sb('payments?withdrawn=eq.false&select=user_id,amount,date'),
+      sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount,date'),
       sb('users?role=eq.contributor&select=id')
     ]);
 
@@ -7538,7 +7538,7 @@ async function buildFoodSchemeAdminTab(){
     if(userIds.length){
       [users, payments] = await Promise.all([
         sb('users?id=in.('+userIds.join(',')+')'+'&select=id,name,email'),
-        sb('payments?withdrawn=eq.false&select=user_id,amount')
+        sb('payments?withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=user_id,amount')
       ]);
     }
 
@@ -7684,7 +7684,7 @@ async function triggerFoodSchemeDeduction(skippedOnly=false){
       const opt = optionMap[e.option_id];
       if(!opt) continue;
       // Check balance
-      const pArr = await sb('payments?user_id=eq.'+e.user_id+'&withdrawn=eq.false&select=amount');
+      const pArr = await sb('payments?user_id=eq.'+e.user_id+'&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=amount');
       const balance = (pArr||[]).reduce((a,p)=>a+Number(p.amount),0);
 
       if(balance >= opt.price){
