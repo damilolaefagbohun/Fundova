@@ -827,7 +827,7 @@ async function renderAdmin(){
       sb('signup_requests?select=*&order=created_at.desc'),
       sb('investments?select=*&order=created_at.desc'),
       sb('deals?select=*&order=created_at.desc'),
-      sb('kyc_details?select=user_id,kyc_verified')
+      sb('kyc_details?select=user_id,kyc_verified,verified_at')
     ]);
     // Build KYC status lookup map — three states: 'verified', 'awaiting' (submitted, not yet
     // reviewed), or absent entirely (never started at all — no kyc_details row exists)
@@ -838,7 +838,7 @@ async function renderAdmin(){
       adminTab==='payments'?buildPaymentsTab(allPayments,contributors):
       adminTab==='requests'?buildRequestsTab(requests,contributors):
       adminTab==='signups'?buildSignupsTab(signups):
-      adminTab==='credentials'?buildCredentialsTab(contributors):
+      adminTab==='credentials'?buildCredentialsTab(contributors,kycMap||{}):
       adminTab==='deals'?await buildDealsAdminTab(deals):
       adminTab==='profile_requests'?await buildProfileRequestsAdminTab():
       adminTab==='webinars'?await buildWebinarsAdminTab():
@@ -859,7 +859,7 @@ async function renderAdmin(){
   const totalValue=totalPrincipal+totalInterest;
   checkMilestones(totalValue).catch(()=>{});
   checkBirthday().catch(()=>{});
-    const lifetimeInflow=allPayments.reduce((a,p)=>a+Number(p.amount),0);
+    const lifetimeInflow=allPayments.filter(p=>!p.is_transfer).reduce((a,p)=>a+Number(p.amount),0);
     const currentSavingsOnly=allPayments.filter(p=>!p.withdrawn).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawals=(requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
     // Build admin dashboard using DOM to avoid string escaping issues
@@ -986,10 +986,17 @@ async function renderAdmin(){
     const pendingWdCount = (requests||[]).filter(r=>r.status==='pending').length;
     const coordCount = (contributors||[]).filter(c=>c.is_coordinator).length;
     const todayStr = new Date().toDateString();
-    const todayContribs = allPayments.filter(p=>new Date(p.date).toDateString()===todayStr).reduce((a,p)=>a+Number(p.amount),0);
-    const todayWd = (requests||[]).filter(r=>new Date(r.created_at).toDateString()===todayStr&&r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
+    const todayContribs = allPayments.filter(p=>!p.is_transfer&&new Date(p.date).toDateString()===todayStr).reduce((a,p)=>a+Number(p.amount),0);
+    const todayWd = (requests||[]).filter(r=>r.status==='approved'&&r.approved_at&&new Date(r.approved_at).toDateString()===todayStr).reduce((a,r)=>a+Number(r.amount),0);
     const todayInterest = payments.reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
     const todayApps = (signups||[]).filter(s=>new Date(s.created_at).toDateString()===todayStr).length;
+    const todayKycVerifications = (kycAll||[]).filter(k=>k.verified_at&&new Date(k.verified_at).toDateString()===todayStr).length;
+    const [todayProfileRequests,pendingProfileRequests] = await Promise.all([
+      sb(`profile_update_requests?select=id&created_at=gte.${new Date(new Date().setHours(0,0,0,0)).toISOString()}`).catch(()=>[]),
+      sb('profile_update_requests?select=id&status=eq.pending').catch(()=>[])
+    ]);
+    const todayProfileCount = (todayProfileRequests||[]).length;
+    const pendingProfileCount = (pendingProfileRequests||[]).length;
 
     statsRow.innerHTML = `
       <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
@@ -1040,7 +1047,7 @@ async function renderAdmin(){
     const opCards = statsRow.querySelector('#op-cards');
     [
       {icon:'ti-cash',label:'Pending withdrawals',val:pendingWdCount,color:'#856404',bg:'#FEF3C7',tab:'requests'},
-      {icon:'ti-user-edit',label:'Profile requests',val:'—',color:'#3730A3',bg:'#EEF2FF',tab:'profile_requests'},
+      {icon:'ti-user-edit',label:'Profile requests',val:pendingProfileCount,color:'#3730A3',bg:'#EEF2FF',tab:'profile_requests'},
       {icon:'ti-user-plus',label:'New applications',val:pendingSignups,color:'#0F6E56',bg:'#E8F5EE',tab:'signups'},
       {icon:'ti-users',label:'Coordinators',val:coordCount,color:'#555',bg:'#f5f5f3',tab:'coordinators'},
     ].forEach(op => {
@@ -1077,7 +1084,8 @@ async function renderAdmin(){
       {icon:'ti-arrow-down',label:'Withdrawals',val:fmt(todayWd),color:'#A32D2D'},
       {icon:'ti-trending-up',label:'Interest credited',val:fmt(todayInterest),color:'#C9961A'},
       {icon:'ti-user-plus',label:'New applications',val:todayApps,color:'#60A5FA'},
-      {icon:'ti-shield-check',label:'KYC verifications',val:'—',color:'#A78BFA'},
+      {icon:'ti-user-edit',label:'Profile requests',val:todayProfileCount,color:'#3730A3'},
+      {icon:'ti-shield-check',label:'KYC verifications',val:todayKycVerifications,color:'#A78BFA'},
     ].forEach(a => {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)';
@@ -1108,7 +1116,7 @@ async function renderAdmin(){
         <td style="font-size:12px;color:#888">${lastP?fmtDate(lastP.date):'Never'}</td>
         <td><div style="display:flex;gap:4px">
           <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-eye"></i></button>
-          <button class="btn btn-sm" title="KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"></i></button>
+          <button class="btn btn-sm" title="${kycMap[c.id]==='verified'?'Already verified — no reminder needed':'Send KYC reminder'}" data-uid="${c.id}" data-uname="${c.name}" ${kycMap[c.id]==='verified'?'disabled':`onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)"`} style="background:${kycMap[c.id]==='verified'?'#e5e5e2':'#856404'};color:${kycMap[c.id]==='verified'?'#aaa':'#fff'};cursor:${kycMap[c.id]==='verified'?'not-allowed':'pointer'}"><i class="ti ti-id"></i></button>
           ${editBtn}
         </div></td>
       </tr>`;
@@ -1359,21 +1367,28 @@ async function rejectSignup(id){
   }catch(e){alert('Error rejecting application.');}
 }
 
-function buildCredentialsTab(contributors){
+function buildCredentialsTab(contributors,kycMap={}){
   if(!contributors.length)return`<div class="card"><div class="empty"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;color:#ccc"></i>No contributors yet.</div></div>`;
-  const rows=contributors.map(c=>`<tr>
+  const rows=contributors.map(c=>{
+    const kycStatus=kycMap[c.id]; // 'verified' | 'awaiting' | undefined (not started)
+    const needsReminder=kycStatus!=='verified'; // only clickable for awaiting/not-started
+    return`<tr>
     <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div style="font-weight:500">${c.name}</div></div></td>
     <td>${c.email}</td>
     <td style="font-size:12px">${c.phone||'<span style="color:#ccc">&mdash;</span>'}</td>
     <td style="font-size:12px">${c.whatsapp?`<a href="https://wa.me/234${c.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46">${c.whatsapp}</a>`:'<span style="color:#ccc">&mdash;</span>'}</td>
+    <td>${kycBadgeHTML(kycStatus)}</td>
     <td><div style="display:flex;align-items:center;gap:8px">
       <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
       <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
     </div></td>
-    <td><div style="display:flex;gap:4px"><button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button>
-      <button class="btn btn-sm" title="Send KYC reminder" data-uid="${c.id}" data-uname="${c.name}" onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)" style="background:#856404;color:#fff"><i class="ti ti-id"
-              <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-shield-check"></i></button>></i></button></div></td>
-  </tr>`).join('');
+    <td><div style="display:flex;gap:4px">
+      <button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button>
+      <button class="btn btn-sm" title="${needsReminder?'Send KYC reminder':'Already verified — no reminder needed'}" data-uid="${c.id}" data-uname="${c.name}" ${needsReminder?`onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)"`:'disabled'} style="background:${needsReminder?'#856404':'#e5e5e2'};color:${needsReminder?'#fff':'#aaa'};cursor:${needsReminder?'pointer':'not-allowed'}"><i class="ti ti-id"></i></button>
+      <button class="btn btn-sm" title="View KYC" data-uid="${c.id}" data-uname="${c.name}" onclick="openContributorKyc(this.dataset.uid,this.dataset.uname)" style="background:#185FA5;color:#fff"><i class="ti ti-shield-check"></i></button>
+    </div></td>
+  </tr>`;
+  }).join('');
   return`<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
       <h3 style="margin:0">Contributor credentials</h3>
@@ -1383,7 +1398,7 @@ function buildCredentialsTab(contributors){
       </div>
     </div>
     <div class="table-wrap"><table id="credentials-table">
-      <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>PIN</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>KYC Status</th><th>PIN</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
@@ -1466,13 +1481,16 @@ async function updateRequest(id,status){
               user_id:req.user_id,
               amount:leftover,
               date:today,
-              withdrawn:false
+              withdrawn:false,
+              is_transfer:true
             })});
           }
         }
       }
     }
-    await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    const statusPatch={status};
+    if(status==='approved')statusPatch.approved_at=new Date().toISOString();
+    await sb(`withdrawal_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(statusPatch)});
     // Account closure requests: the balance was already frozen/closed at request time —
     // approval here just finalizes it by marking the account closed
     if(req0.is_account_closure && status==='approved'){
@@ -1526,7 +1544,7 @@ async function requestAccountClosure(){
       if(gBalance>0.5){
         await consumePaymentsFIFO(gPayments,gBalance,g.id);
         const todayDateOnly=new Date().toISOString().split('T')[0];
-        await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+gBalance.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null})});
+        await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+gBalance.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null,is_transfer:true})});
       }
     }
     // 2. Freeze every remaining general-savings payment right now — this is a real
@@ -2054,7 +2072,7 @@ async function consumePaymentsFIFO(sourcePayments, amountNeeded, sourceGoalId){
       const leftover=+(currentValue-remaining).toFixed(2);
       await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({moved_at:nowIso})});
       await sb('payments',{method:'POST',body:JSON.stringify({
-        user_id:currentUser.id,amount:leftover,date:todayDateOnly,withdrawn:false,goal_id:sourceGoalId||null
+        user_id:currentUser.id,amount:leftover,date:todayDateOnly,withdrawn:false,goal_id:sourceGoalId||null,is_transfer:true
       })});
       remaining=0;
     }
@@ -2165,7 +2183,7 @@ async function assignToGoal(goalId,goalName){
     const ok=await consumePaymentsFIFO(generalPayments,amount,null);
     if(!ok){err.textContent='That\'s more than your unallocated savings — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-right"></i> Add to goal';btn.disabled=false;return;}
     const todayDateOnly=new Date().toISOString().split('T')[0];
-    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:goalId})});
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:goalId,is_transfer:true})});
     notifyContributorAction('Money added to '+goalName, 'You moved '+fmt(amount)+' from your unallocated savings into "'+goalName+'". It\'s now earning interest under this goal.');
     closeModal();
     toast('<i class="ti ti-check"></i> Added to '+goalName+'!');
@@ -2196,7 +2214,7 @@ async function moveGoalToGeneral(goalId,goalName){
     const ok=await consumePaymentsFIFO(goalPayments,amount,goalId);
     if(!ok){err.textContent='That\'s more than this goal currently holds — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-left"></i> Move to savings';btn.disabled=false;return;}
     const todayDateOnly=new Date().toISOString().split('T')[0];
-    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null})});
+    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null,is_transfer:true})});
     notifyContributorAction('Money moved from '+goalName, 'You moved '+fmt(amount)+' from "'+goalName+'" back into your unallocated savings. You can now request a withdrawal on it if you\'d like.');
     closeModal();
     toast('<i class="ti ti-check"></i> Moved back to your savings!');
@@ -2733,7 +2751,7 @@ async function updateReservation(resId,status,invId){
             await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
             const leftover=+(totalValue-remaining).toFixed(2);
             remaining=0;
-            if(leftover>0){await sb('payments',{method:'POST',body:JSON.stringify({user_id:res.user_id,amount:leftover,date:today,withdrawn:false})});}
+            if(leftover>0){await sb('payments',{method:'POST',body:JSON.stringify({user_id:res.user_id,amount:leftover,date:today,withdrawn:false,is_transfer:true})});}
           }
         }
       }
@@ -3176,7 +3194,7 @@ async function approveInvestmentRefund(refundId,invId){
       const refundAmount=+(res.units*inv.unit_price).toFixed(2);
       const today=new Date().toISOString().split('T')[0];
       // Credit back to savings
-      await sb('payments',{method:'POST',body:JSON.stringify({user_id:req.user_id,amount:refundAmount,date:today,withdrawn:false})});
+      await sb('payments',{method:'POST',body:JSON.stringify({user_id:req.user_id,amount:refundAmount,date:today,withdrawn:false,is_transfer:true})});
       // Cancel the reservation
       await sb(`investment_reservations?id=eq.${res.id}`,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});
     }
@@ -5686,7 +5704,7 @@ async function buildAnalyticsTab(){
     const totalMembers = (contributors||[]).length;
     const activePayments = (allPayments||[]).filter(p=>!p.withdrawn && !p.moved_at);
     const totalSavings = activePayments.reduce((a,p)=>a+Number(p.amount),0);
-    const lifetimeInflow = (allPayments||[]).reduce((a,p)=>a+Number(p.amount),0);
+    const lifetimeInflow = (allPayments||[]).filter(p=>!p.is_transfer).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawn = (requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
     const pendingWithdrawals = (requests||[]).filter(r=>r.status==='pending').length;
     const totalInterest = activePayments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
@@ -5701,7 +5719,7 @@ async function buildAnalyticsTab(){
       const month = String(d.getMonth()+1).padStart(2,'0');
       const key = year+'-'+month;
       const label = d.toLocaleString('default',{month:'short'});
-      const inflow = (allPayments||[]).filter(p=>p.date&&p.date.startsWith(key)).reduce((a,p)=>a+Number(p.amount),0);
+      const inflow = (allPayments||[]).filter(p=>!p.is_transfer&&p.date&&p.date.startsWith(key)).reduce((a,p)=>a+Number(p.amount),0);
       months.push({label,inflow,key});
     }
 
@@ -5942,7 +5960,7 @@ async function refundFailedInvestment(invId){
     for(const r of (reservations||[])){
       const refundAmount = +(r.units * inv[0].unit_price).toFixed(2);
       // Credit back to savings
-      await sb('payments',{method:'POST',body:JSON.stringify({user_id:r.user_id,amount:refundAmount,date:today,withdrawn:false})});
+      await sb('payments',{method:'POST',body:JSON.stringify({user_id:r.user_id,amount:refundAmount,date:today,withdrawn:false,is_transfer:true})});
       // Cancel reservation
       await sb(`investment_reservations?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});
       // Notify investor
@@ -6652,7 +6670,7 @@ async function openContributorKyc(userId, userName){
 
 async function verifyKyc(userId, userName){
   try{
-    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:true})});
+    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:true,verified_at:new Date().toISOString()})});
     // Notify contributor
     const userArr = await sb(`users?id=eq.${userId}&select=name,email`);
     if(userArr&&userArr.length){
@@ -6670,7 +6688,7 @@ async function verifyKyc(userId, userName){
 async function unverifyKyc(userId){
   if(!confirm('Remove KYC verification? Member will need to be re-verified before withdrawals.'))return;
   try{
-    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:false})});
+    await sb(`kyc_details?user_id=eq.${userId}`,{method:'PATCH',body:JSON.stringify({kyc_verified:false,verified_at:null})});
     toast('<i class="ti ti-check"></i> KYC verification removed.');
     closeModal();
     await renderAdmin();
@@ -7117,6 +7135,7 @@ function renderAdminChart(allPayments){
   // Build monthly totals
   const months = {};
   (allPayments||[]).forEach(p=>{
+    if(p.is_transfer)return; // internal relabeling, not real new value — would double-count
     const d = new Date(p.date);
     const key = d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
     months[key] = (months[key]||0) + Number(p.amount);
@@ -7690,7 +7709,7 @@ async function triggerFoodSchemeDeduction(skippedOnly=false){
       if(balance >= opt.price){
         // Deduct from savings as a withdrawal-type payment (negative)
         await sb('payments', {method:'POST', body:JSON.stringify({
-          user_id:e.user_id, amount:-opt.price, date:today, withdrawn:false,
+          user_id:e.user_id, amount:-opt.price, date:today, withdrawn:false, is_transfer:true,
           purpose:'Food Scheme deduction — '+opt.name
         })});
         await sb('food_scheme_enrollments?id=eq.'+e.id, {method:'PATCH', body:JSON.stringify({status:'deducted', deducted_at:new Date().toISOString()})});
