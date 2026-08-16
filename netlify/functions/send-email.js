@@ -362,6 +362,16 @@ exports.handler = async (event) => {
         ${btn('View your dashboard', SITE_URL)}
       `);
 
+    // ── BIRTHDAY WISH (admin-drafted, sent to one contributor) ──
+    } else if (type === 'birthday_wish') {
+      to = body.to; const name = body.name; const msg = body.body; const image_url = body.image_url;
+      if (!to || !msg) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      subject = `🎂 Happy Birthday, ${name.split(' ')[0]}!`;
+      html = wrap(`
+        ${image_url ? `<img src="${image_url}" alt="" style="width:100%;border-radius:10px;margin-bottom:16px;display:block">` : ''}
+        <div style="color:#444;font-size:14px;line-height:1.8;white-space:pre-wrap">${msg}</div>
+      `);
+
     // ── BROADCAST ──
     } else if (type === 'broadcast') {
       to = body.to; const name = body.name; const subj = body.subject; const msg = body.body; const image_url = body.image_url;
