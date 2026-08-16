@@ -1043,32 +1043,39 @@ async function renderAdmin(){
       </div>`;
     pageContent.appendChild(statsRow);
 
-    // ── BIRTHDAYS TODAY ──
-    const todayMD = new Date();
-    const todayBirthdays = (contributors||[]).filter(c=>{
+    // ── UPCOMING BIRTHDAYS ──
+    const bdayNow = new Date(); bdayNow.setHours(0,0,0,0);
+    const upcomingBirthdays = (contributors||[]).map(c=>{
       const k = (kycAll||[]).find(x=>x.user_id===c.id);
-      if(!k || !k.date_of_birth) return false;
+      if(!k || !k.date_of_birth) return null;
       const dob = new Date(k.date_of_birth);
-      return dob.getMonth()===todayMD.getMonth() && dob.getDate()===todayMD.getDate();
-    });
-    if(todayBirthdays.length){
+      let next = new Date(bdayNow.getFullYear(), dob.getMonth(), dob.getDate());
+      if(next < bdayNow) next = new Date(bdayNow.getFullYear()+1, dob.getMonth(), dob.getDate());
+      const daysAway = Math.round((next-bdayNow)/(1000*60*60*24));
+      return {c, daysAway};
+    }).filter(e=>e && e.daysAway<=14).sort((a,b)=>a.daysAway-b.daysAway);
+    const todayBirthdays = upcomingBirthdays.filter(e=>e.daysAway===0);
+    if(upcomingBirthdays.length){
       const bdayRow = document.createElement('div');
       bdayRow.style.cssText = 'background:linear-gradient(135deg,#C9961A,#0D3D2A);border-radius:16px;padding:1.25rem;margin-bottom:1.5rem;color:#fff';
       bdayRow.innerHTML = `
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px">🎉 ${todayBirthdays.length} birthday${todayBirthdays.length!==1?'s':''} today!</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">${todayBirthdays.length?`🎉 ${todayBirthdays.length} birthday${todayBirthdays.length!==1?'s':''} today!`:'🎂 Upcoming birthdays'}</div>
         <div id="bday-list" style="display:flex;flex-direction:column;gap:8px"></div>`;
       pageContent.appendChild(bdayRow);
       const bdayList = bdayRow.querySelector('#bday-list');
-      todayBirthdays.forEach(c=>{
+      upcomingBirthdays.forEach(({c,daysAway})=>{
         const row = document.createElement('div');
-        row.style.cssText = 'background:rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between';
-        row.innerHTML = `<div style="font-size:13px;font-weight:600">${c.name}</div>`;
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style.cssText = 'background:#fff;color:#0D3D2A';
-        btn.innerHTML = '<i class="ti ti-cake"></i> Send birthday wish';
-        btn.addEventListener('click', ()=>openBirthdayWishComposer(c.id,c.name,c.email));
-        row.appendChild(btn);
+        row.style.cssText = 'background:rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px';
+        const whenLabel = daysAway===0?'Today':daysAway===1?'Tomorrow':`In ${daysAway} days`;
+        row.innerHTML = `<div><div style="font-size:13px;font-weight:600">${c.name}</div><div style="font-size:11px;color:rgba(255,255,255,.7)">${whenLabel}</div></div>`;
+        if(daysAway===0){
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-sm';
+          btn.style.cssText = 'background:#fff;color:#0D3D2A;flex-shrink:0';
+          btn.innerHTML = '<i class="ti ti-cake"></i> Send birthday wish';
+          btn.addEventListener('click', ()=>openBirthdayWishComposer(c.id,c.name,c.email));
+          row.appendChild(btn);
+        }
         bdayList.appendChild(row);
       });
     }
