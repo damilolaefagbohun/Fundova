@@ -827,7 +827,7 @@ async function renderAdmin(){
       sb('signup_requests?select=*&order=created_at.desc'),
       sb('investments?select=*&order=created_at.desc'),
       sb('deals?select=*&order=created_at.desc'),
-      sb('kyc_details?select=user_id,kyc_verified,verified_at')
+      sb('kyc_details?select=user_id,kyc_verified,verified_at,date_of_birth')
     ]);
     // Build KYC status lookup map — three states: 'verified', 'awaiting' (submitted, not yet
     // reviewed), or absent entirely (never started at all — no kyc_details row exists)
@@ -1042,6 +1042,36 @@ async function renderAdmin(){
         </div>
       </div>`;
     pageContent.appendChild(statsRow);
+
+    // ── BIRTHDAYS TODAY ──
+    const todayMD = new Date();
+    const todayBirthdays = (contributors||[]).filter(c=>{
+      const k = (kycAll||[]).find(x=>x.user_id===c.id);
+      if(!k || !k.date_of_birth) return false;
+      const dob = new Date(k.date_of_birth);
+      return dob.getMonth()===todayMD.getMonth() && dob.getDate()===todayMD.getDate();
+    });
+    if(todayBirthdays.length){
+      const bdayRow = document.createElement('div');
+      bdayRow.style.cssText = 'background:linear-gradient(135deg,#C9961A,#0D3D2A);border-radius:16px;padding:1.25rem;margin-bottom:1.5rem;color:#fff';
+      bdayRow.innerHTML = `
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">🎉 ${todayBirthdays.length} birthday${todayBirthdays.length!==1?'s':''} today!</div>
+        <div id="bday-list" style="display:flex;flex-direction:column;gap:8px"></div>`;
+      pageContent.appendChild(bdayRow);
+      const bdayList = bdayRow.querySelector('#bday-list');
+      todayBirthdays.forEach(c=>{
+        const row = document.createElement('div');
+        row.style.cssText = 'background:rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between';
+        row.innerHTML = `<div style="font-size:13px;font-weight:600">${c.name}</div>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style.cssText = 'background:#fff;color:#0D3D2A';
+        btn.innerHTML = '<i class="ti ti-cake"></i> Send birthday wish';
+        btn.addEventListener('click', ()=>openBirthdayWishComposer(c.id,c.name,c.email));
+        row.appendChild(btn);
+        bdayList.appendChild(row);
+      });
+    }
 
     // Operations cards (built via DOM to avoid quote issues)
     const opCards = statsRow.querySelector('#op-cards');
@@ -1591,14 +1621,22 @@ async function renderContributor(){
       renderClosurePendingScreen(closureReq[0]);
       return;
     }
-    const [payments,withdrawnPayments,requests,bankArr,goals,goalPayments]=await Promise.all([
+    const [payments,withdrawnPayments,requests,bankArr,goals,goalPayments,kycArr]=await Promise.all([
       sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`),
       sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.true&select=*&order=date.asc`),
       sb(`withdrawal_requests?user_id=eq.${currentUser.id}&select=*&order=created_at.desc`),
       sb(`bank_details?user_id=eq.${currentUser.id}&select=*`),
       sb(`goals?user_id=eq.${currentUser.id}&archived=eq.false&select=*&order=created_at.asc`),
-      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=not.is.null&moved_at=is.null&select=*&order=date.asc`)
+      sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=not.is.null&moved_at=is.null&select=*&order=date.asc`),
+      sb(`kyc_details?user_id=eq.${currentUser.id}&select=date_of_birth`)
     ]);
+    const isBirthdayToday=(()=>{
+      const k=kycArr&&kycArr.length?kycArr[0]:null;
+      if(!k||!k.date_of_birth)return false;
+      const dob=new Date(k.date_of_birth);
+      const now=new Date();
+      return dob.getMonth()===now.getMonth() && dob.getDate()===now.getDate();
+    })();
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
     const principal=payments.reduce((a,p)=>a+Number(p.amount),0);
     const interest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
@@ -1683,8 +1721,8 @@ async function renderContributor(){
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <button id="contrib-hamburger" onclick="toggleContribSidebarMobile()" title="Menu"><i class="ti ti-menu-2"></i></button>
           <div style="min-width:0">
-          <h1 style="font-size:22px;font-weight:700;color:#0D1F14;margin-bottom:2px">Good ${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, ${currentUser.name.split(' ')[0]} 👋</h1>
-          ${currentUser.savings_goal?`<p style="font-size:13px;color:#888;margin:0">You are ${Math.min(100,Math.round((totalPrincipal+totalInterest)/currentUser.savings_goal*100))}% of the way to your ₦${Number(currentUser.savings_goal).toLocaleString()} goal</p>`:`<p style="font-size:13px;color:#888;margin:0">Welcome to Fundova — your money is growing every weekday</p>`}
+          <h1 style="font-size:22px;font-weight:700;color:#0D1F14;margin-bottom:2px">${isBirthdayToday?`🎉 Happy Birthday, ${currentUser.name.split(' ')[0]}! 🎂`:`Good ${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, ${currentUser.name.split(' ')[0]} 👋`}</h1>
+          ${isBirthdayToday?`<p style="font-size:13px;color:#C9961A;font-weight:600;margin:0">Wishing you a wonderful day from all of us at Fundova! 🎈</p>`:currentUser.savings_goal?`<p style="font-size:13px;color:#888;margin:0">You are ${Math.min(100,Math.round((totalPrincipal+totalInterest)/currentUser.savings_goal*100))}% of the way to your ₦${Number(currentUser.savings_goal).toLocaleString()} goal</p>`:`<p style="font-size:13px;color:#888;margin:0">Welcome to Fundova — your money is growing every weekday</p>`}
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
@@ -1972,6 +2010,7 @@ async function renderContributor(){
   setTimeout(()=>{
     startTour();
     initContribSidebar();
+    if(isBirthdayToday)triggerBirthdayConfetti();
   }, 800);
   // Load deals asynchronously
   // Fetch real member count
@@ -4957,8 +4996,61 @@ async function sendBroadcastEmail(){
   }
 }
 
+// ─── BIRTHDAY WISH ─────────────────────────────────────────
+function openBirthdayWishComposer(userId,userName,userEmail){
+  openModal(`
+  <h3>🎂 Send a birthday wish to ${userName}</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Write your own message — nothing is auto-generated.</p>
+  <div class="field"><label>Message</label><textarea id="bw-body" rows="6" placeholder="Happy birthday! Wishing you...">Happy birthday, ${userName.split(' ')[0]}! 🎉 Wishing you a wonderful year ahead, filled with good health, happiness, and continued growth. Thank you for being part of the Fundova family.</textarea></div>
+  <div class="field"><label>Image <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="bw-image" type="file" accept="image/*" onchange="uploadBirthdayImage(this)"><div id="bw-image-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
+  <div class="error" id="bw-err"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="bw-btn" onclick="sendBirthdayWish('${userId}','${userName.replace(/'/g,"\\'")}','${userEmail}')"><i class="ti ti-cake"></i> Send birthday wish</button>
+  </div>`);
+}
 
-// ─── EMAIL NOTIFICATION HELPER ────────────────────────────
+async function uploadBirthdayImage(input){
+  const file=input.files[0];
+  if(!file)return;
+  const urlEl=document.getElementById('bw-image-url');
+  urlEl.textContent='Uploading…';
+  urlEl.style.color='#888';
+  try{
+    const ext=file.name.split('.').pop();
+    const path='birthdays/'+Date.now()+'.'+ext;
+    const res=await fetch(`${SB_URL}/storage/v1/object/fundova-media/${path}`,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY,'Content-Type':file.type,'x-upsert':'true'},
+      body:file
+    });
+    if(!res.ok)throw new Error('Upload failed');
+    const url=`${SB_URL}/storage/v1/object/public/fundova-media/${path}`;
+    input.dataset.url=url;
+    urlEl.textContent='Uploaded!';
+    urlEl.style.color='#0F6E56';
+  }catch(e){urlEl.textContent='Upload failed: '+e.message;urlEl.style.color='#A32D2D';}
+}
+
+async function sendBirthdayWish(userId,userName,userEmail){
+  const body=document.getElementById('bw-body').value.trim();
+  const image_url=document.getElementById('bw-image')?.dataset?.url||null;
+  const err=document.getElementById('bw-err');
+  const btn=document.getElementById('bw-btn');
+  if(!body){err.textContent='Please write a message.';return;}
+  btn.innerHTML='<span class="spinner"></span> Sending…';btn.disabled=true;
+  try{
+    await fetch('/.netlify/functions/send-email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'birthday_wish',to:userEmail,name:userName,body,image_url})
+    });
+    closeModal();
+    toast('<i class="ti ti-check"></i> Birthday wish sent to '+userName+'!');
+  }catch(e){err.textContent='Error: '+e.message;btn.innerHTML='<i class="ti ti-cake"></i> Send birthday wish';btn.disabled=false;}
+}
+
+
 
 async function notify(payload){
   try{
@@ -7101,6 +7193,65 @@ function toggleContribSidebar(){
     });
   }
   localStorage.setItem('contrib_sidebar_collapsed', contribSidebarCollapsed ? '1' : '0');
+}
+
+// ─── BIRTHDAY CONFETTI ──────────────────────────────────────
+// A lightweight canvas particle celebration — runs once per calendar day even if the
+// dashboard re-renders many times (e.g. after every action), guarded via localStorage.
+function triggerBirthdayConfetti(){
+  const todayKey = 'fundova_bday_shown_' + new Date().toDateString();
+  if(localStorage.getItem(todayKey))return;
+  localStorage.setItem(todayKey,'1');
+
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999';
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  const colors = ['#C9961A','#0D3D2A','#1D9E75','#F7F5F0','#A32D2D','#3730A3'];
+  const particles = [];
+  for(let i=0;i<140;i++){
+    particles.push({
+      x: Math.random()*canvas.width,
+      y: -20-Math.random()*canvas.height*0.5,
+      w: 6+Math.random()*6,
+      h: 8+Math.random()*8,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      speedY: 2+Math.random()*3,
+      speedX: (Math.random()-0.5)*2,
+      rotation: Math.random()*360,
+      rotSpeed: (Math.random()-0.5)*10,
+      opacity: 1
+    });
+  }
+
+  const startTime = Date.now();
+  const duration = 4000;
+  function animate(){
+    const elapsed = Date.now()-startTime;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles.forEach(p=>{
+      p.y += p.speedY;
+      p.x += p.speedX;
+      p.rotation += p.rotSpeed;
+      if(elapsed>duration-800)p.opacity=Math.max(0,p.opacity-0.02);
+      ctx.save();
+      ctx.globalAlpha = p.opacity;
+      ctx.translate(p.x,p.y);
+      ctx.rotate(p.rotation*Math.PI/180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+      ctx.restore();
+    });
+    if(elapsed<duration){
+      requestAnimationFrame(animate);
+    } else {
+      canvas.remove();
+    }
+  }
+  animate();
 }
 
 function initContribSidebar(){
