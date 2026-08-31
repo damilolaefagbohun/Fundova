@@ -86,10 +86,13 @@ exports.handler = async (event) => {
         </div>
         <div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:16px;margin-bottom:16px">
           <div style="font-size:12px;font-weight:600;color:#856404;margin-bottom:8px">Getting started</div>
-          <div style="font-size:13px;color:#555;line-height:1.8">
+          <div style="font-size:13px;color:#555;line-height:2">
             <strong>1. Sign in</strong> at ${SITE_URL} with your email and default PIN.<br>
             <strong>2. Change your PIN</strong> immediately for security.<br>
-            <strong>3. Make your first contribution</strong> to the account below.
+            <strong>3. Explore your dashboard</strong> — see everything Fundova offers.<br>
+            <strong>4. Complete your KYC</strong> — this keeps your withdrawals ready whenever you need them.<br>
+            <strong>5. Create a Savings Box</strong> — give your money a destination.<br>
+            <strong>6. Start saving!</strong> Pay into your account below and earn 10% ROI per annum.
           </div>
         </div>
         <div style="background:#f5f5f3;border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.8">
