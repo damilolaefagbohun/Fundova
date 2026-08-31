@@ -64,7 +64,7 @@ th{text-align:left;padding:8px 10px;color:#888;font-weight:500;border-bottom:1px
 td{padding:10px;border-bottom:1px solid #f0f0ee;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#fafafa}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
 .modal{background:#fff;border-radius:16px;border:1px solid #e5e5e2;padding:1.75rem;width:440px;display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.15)}
 .modal h3{font-size:17px;font-weight:600}
@@ -329,7 +329,7 @@ function renderLogin(){
       <a href="#faq" style="font-size:13px;color:#444;text-decoration:none;font-weight:500" onclick="smoothScroll('faq')">FAQ</a>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <button onclick="smoothScroll('signin')" style="background:none;border:2px solid #0D3D2A;color:#0D3D2A;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Log in</button>
+      <button onclick="openLoginModal()" style="background:none;border:2px solid #0D3D2A;color:#0D3D2A;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Log in</button>
       <button onclick="renderSignup()" style="background:#0D3D2A;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Join Fundova</button>
     </div>
   </nav>`;
@@ -436,7 +436,7 @@ function renderLogin(){
           <h3 style="font-size:20px;font-weight:700;margin-bottom:10px">Save. Invest. Grow.</h3>
           <p style="font-size:13px;color:#aaa;line-height:1.7;margin-bottom:1.25rem">A registered multipurpose cooperative where your savings earn about 10% interest per annum — calculated every weekday from the day your money is recorded.</p>
           ${['No fixed amounts — save what you can','Daily interest accrual — weekdays','Group investment opportunities','Flexible withdrawals anytime'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ccc"><span style="color:#1D9E75;font-size:14px">✓</span>${f}</div>`).join('')}
-          <button onclick="smoothScroll('signin')" style="margin-top:1.25rem;background:#C9961A;color:#0D1F14;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Join the Cooperative →</button>
+          <button onclick="renderSignup()" style="margin-top:1.25rem;background:#C9961A;color:#0D1F14;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Join the Cooperative →</button>
         </div>
         <div style="background:#fff;border-radius:20px;padding:2rem;border:2px solid #e5e5e2;position:relative;overflow:hidden">
           <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:#F7F5F0"></div>
@@ -573,25 +573,6 @@ function renderLogin(){
     </section>
 
     <!-- SIGN IN SECTION -->
-    <section id="signin" style="padding:5rem 1.5rem;background:#F7F5F0">
-      <div style="max-width:420px;margin:0 auto">
-        <div style="text-align:center;margin-bottom:2rem">
-          <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Access</div>
-          <h2 style="font-size:26px;font-weight:800;color:#0D1F14">Sign in to your dashboard</h2>
-        </div>
-        <div style="background:#fff;border-radius:20px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" value="${localStorage.getItem('fundova_saved_email')||''}" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
-          <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
-          <div class="error" id="l-err" style="margin-bottom:10px"></div>
-          <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
-          <div style="text-align:center;margin-top:12px">
-            <a onclick="openForgotPin()" style="font-size:12px;color:#1D9E75;cursor:pointer;text-decoration:underline">Forgot your PIN?</a>
-          </div>
-          <p style="text-align:center;font-size:12px;color:#888;margin-top:10px">Not a member yet? <button onclick="renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
-        </div>
-      </div>
-    </section>
-
     <!-- FOOTER -->
     <footer style="background:#0D1F14;padding:3rem 1.5rem 1.5rem">
       <div style="max-width:1100px;margin:0 auto">
@@ -652,6 +633,26 @@ function renderLogin(){
   window.smoothScroll = function(id){
     const el = document.getElementById(id);
     if(el) el.scrollIntoView({behavior:'smooth'});
+  };
+
+  // Login — pops up as a modal (blurred background) instead of scrolling to a section
+  window.openLoginModal = function(){
+    openModal(`
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Access</div>
+        <h2 style="font-size:22px;font-weight:800;color:#0D1F14;margin:0">Sign in to your dashboard</h2>
+      </div>
+      <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" value="${localStorage.getItem('fundova_saved_email')||''}" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
+      <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
+      <div class="error" id="l-err" style="margin-bottom:10px"></div>
+      <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
+      <div style="text-align:center;margin-top:12px">
+        <a onclick="openForgotPin()" style="font-size:12px;color:#1D9E75;cursor:pointer;text-decoration:underline">Forgot your PIN?</a>
+      </div>
+      <p style="text-align:center;font-size:12px;color:#888;margin-top:10px">Not a member yet? <button onclick="closeModal();renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
+    `);
+    // Focus the email field once the modal is in the DOM
+    setTimeout(()=>{ const el=document.getElementById('l-email'); if(el) el.focus(); }, 50);
   };
 
   // FAQ toggle
@@ -4556,13 +4557,15 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
-        <button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>
+        ${gMembers.length>=g.max_members
+          ?`<button class="btn btn-sm" disabled title="Group is full (${gMembers.length}/${g.max_members}). Edit the group to raise the member cap." style="opacity:.5;cursor:not-allowed"><i class="ti ti-users"></i> Group full</button>`
+          :`<button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>`}
         ${unpaidMembers.length===0&&gMembers.length?`<button class="btn btn-sm" title="All members paid out — start a new cycle" onclick="resetGroupCycle('${g.id}')"><i class="ti ti-refresh"></i> Reset for new cycle</button>`:''}
         <button class="btn btn-sm btn-danger" title="Close group" onclick="closeAjoGroup('${g.id}')"><i class="ti ti-x"></i></button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
-      <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600">${gMembers.length}/${g.max_members}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600${gMembers.length>=g.max_members?';color:#856404':''}">${gMembers.length}/${g.max_members}${gMembers.length>=g.max_members?' <span style="font-size:10px;font-weight:600">(Full)</span>':''}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
@@ -4845,6 +4848,15 @@ async function addGroupMember(groupId){
   if(!email||!contribution_amount){err.textContent='Email and contribution amount are required.';return;}
   btn.innerHTML='<span class="spinner"></span> Adding…';btn.disabled=true;
   try{
+    const [groupArr,activeMembers]=await Promise.all([
+      sb(`savings_groups?id=eq.${groupId}&select=max_members`),
+      sb(`group_members?group_id=eq.${groupId}&status=eq.active&select=id`)
+    ]);
+    const maxMembers=groupArr&&groupArr.length?groupArr[0].max_members:null;
+    if(maxMembers&&activeMembers&&activeMembers.length>=maxMembers){
+      err.textContent=`This group is full (${activeMembers.length}/${maxMembers}). Edit the group to raise the member cap first.`;
+      btn.innerHTML='<i class="ti ti-user-plus"></i> Add member';btn.disabled=false;return;
+    }
     const users=await sb(`users?email=eq.${email}&role=eq.contributor&select=id`);
     if(!users||!users.length){err.textContent='No contributor found with that email.';btn.innerHTML='<i class="ti ti-user-plus"></i> Add member';btn.disabled=false;return;}
     await sb('group_members',{method:'POST',body:JSON.stringify({group_id:groupId,user_id:users[0].id,contribution_amount,payout_order,status:'active'})});
@@ -5511,6 +5523,15 @@ async function inviteGroupMember(groupId){
   btn.innerHTML='<span class="spinner"></span> Sending…';btn.disabled=true;
 
   try{
+    const [groupArr,activeMembers]=await Promise.all([
+      sb(`savings_groups?id=eq.${groupId}&select=name,max_members`),
+      sb(`group_members?group_id=eq.${groupId}&status=eq.active&select=id`)
+    ]);
+    const maxMembers=groupArr&&groupArr.length?groupArr[0].max_members:null;
+    if(maxMembers&&activeMembers&&activeMembers.length>=maxMembers){
+      err.textContent=`This group is full (${activeMembers.length}/${maxMembers}). Edit the group to raise the member cap first.`;
+      btn.innerHTML='<i class="ti ti-send"></i> Send invitation';btn.disabled=false;return;
+    }
     // Check if already a contributor
     const existing = await sb(`users?email=eq.${email}&role=eq.contributor&select=id`);
 
@@ -5524,8 +5545,7 @@ async function inviteGroupMember(groupId){
       toast('<i class="ti ti-check"></i> Member added to group directly — they are already a Fundova contributor!');
     } else {
       // Not a contributor — save pending invitation and send email
-      const group = await sb(`savings_groups?id=eq.${groupId}&select=name`);
-      const groupName = group&&group.length?group[0].name:'your group';
+      const groupName = groupArr&&groupArr.length?groupArr[0].name:'your group';
 
       await sb('group_invitations',{method:'POST',body:JSON.stringify({
         group_id:groupId, coordinator_id:currentUser.id,
