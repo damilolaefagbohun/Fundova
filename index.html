@@ -698,7 +698,7 @@ async function doLogin(){
     if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     if(users[0].status==='revoked'){err.textContent='Your account access has been revoked. Please contact the administrator.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
     if(users[0].status==='closed'){err.textContent='This account has been closed. Please contact the administrator if you believe this is a mistake.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    currentUser=users[0];saveSession(currentUser);localStorage.setItem('fundova_saved_email',email);await render();
+    currentUser=users[0];saveSession(currentUser);localStorage.setItem('fundova_saved_email',email);closeModal();await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
 function doLogout(){currentUser=null;clearSession();signupStep=1;render();}
@@ -1701,17 +1701,31 @@ async function renderContributor(){
       </div>
       <div style="padding:1.25rem 0;flex:1;overflow-y:auto">
         ${[
-          {icon:'ti-home',label:'Dashboard',id:'dash'},
-          {icon:'ti-chart-bar',label:'Transactions',id:'txn'},
-          {icon:'ti-cash',label:'Withdrawals',id:'wdw'},
-          {icon:'ti-building-bank',label:'Investments',id:'inv'},
-          {icon:'ti-tag',label:'Deals',id:'deals'},
-          {icon:'ti-users',label:'Group Savings',id:'groups',href:'/ajo'},
-          {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
-          {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
-        ].map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`};closeContribSidebarMobile()" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
+          {section:'Main', items:[
+            {icon:'ti-home',label:'Dashboard',id:'dash'},
+            {icon:'ti-chart-bar',label:'Transactions',id:'txn'},
+            {icon:'ti-cash',label:'Withdrawals',id:'wdw'},
+            {icon:'ti-file-text',label:'Statements',id:'txn'},
+          ]},
+          {section:'Save & Grow', items:[
+            {icon:'ti-target',label:'Savings Goals',id:'goals'},
+            {icon:'ti-users',label:'Group Savings (Ajo)',id:'groups',href:'/ajo'},
+            {icon:'ti-building-bank',label:'Investments',id:'inv'},
+          ]},
+          {section:'Member Benefits', items:[
+            {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
+            {icon:'ti-tag',label:'Member Deals',id:'deals'},
+            {icon:'ti-gift',label:'Refer & Earn',id:'referral'},
+          ]},
+          {section:'Account', items:[
+            {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
+          ]},
+        ].map(group=>`
+          <div class="sidebar-label" style="font-size:10px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;padding:14px 1.25rem 6px">${group.section}</div>
+          ${group.items.map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`};closeContribSidebarMobile()" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
           <i class="ti ${n.icon}" style="font-size:18px;width:20px"></i><span class="sidebar-label">${n.label}</span>
         </div>`).join('')}
+        `).join('')}
       </div>
       <div style="padding:1rem 1.25rem;border-top:1px solid rgba(255,255,255,.1)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -1754,22 +1768,26 @@ async function renderContributor(){
       <div id="dash" style="background:#0D3D2A;border-radius:20px;padding:1.75rem;margin-bottom:1.5rem;position:relative;overflow:hidden">
         <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
         <div style="position:absolute;bottom:-60px;right:60px;width:150px;height:150px;border-radius:50%;background:rgba(201,150,26,.06)"></div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Current total value</div>
-        <div style="font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px">₦${(combinedPrincipal+combinedInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em">Total savings</div>
+          <button onclick="toggleBalanceVisibility()" id="balance-eye-btn" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:0;display:flex;align-items:center" title="Hide/show balance"><i class="ti ti-eye" id="balance-eye-icon" style="font-size:15px"></i></button>
+        </div>
+        <div id="balance-value-visible" style="font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px">₦${(combinedPrincipal+combinedInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
+        <div id="balance-value-hidden" style="display:none;font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px;letter-spacing:3px">₦••••••••</div>
         <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:1.25rem">Interest grows every weekday automatically</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
-            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Principal saved</div>
+            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Principal</div>
             <div style="font-size:16px;font-weight:700;color:#fff">₦${combinedPrincipal.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Interest earned</div>
             <div style="font-size:16px;font-weight:700;color:#1D9E75">₦${combinedInterest.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
-          <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
-            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Today's interest</div>
-            <div style="font-size:16px;font-weight:700;color:#C9961A">₦${[...payments,...(goalPayments||[])].reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
-          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#C9961A;font-weight:600;margin-bottom:1.25rem">
+          <i class="ti ti-trending-up" style="font-size:14px"></i>
+          +₦${[...payments,...(goalPayments||[])].reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0).toLocaleString('en-NG',{minimumFractionDigits:2})} earned today
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:${goals&&goals.length?'1.25rem':'0'}">
           <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="scrollToSection('goals')">
@@ -1788,6 +1806,33 @@ async function renderContributor(){
             <span style="color:#C9961A;font-weight:600">View all goals →</span>
           </div>
         </div>`:''}
+      </div>
+
+      <!-- EXPLORE FUNDOVA -->
+      <div id="explore-fundova" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem">
+        <div style="font-size:15px;font-weight:600;color:#0D1F14;margin-bottom:12px">Explore Fundova</div>
+        <div id="explore-fundova-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="window.location.href='/ajo'">
+            <i class="ti ti-users-group" style="font-size:22px;color:#1D9E75"></i>
+            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Group Savings (Ajo)</div>
+            <div id="explore-ajo-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
+          </div>
+          <div style="background:#FEF3E8;border-radius:12px;padding:14px;cursor:pointer" onclick="openFoodScheme()">
+            <i class="ti ti-basket" style="font-size:22px;color:#C9961A"></i>
+            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Food Basket</div>
+            <div id="explore-food-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
+          </div>
+          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="scrollToSection('inv')">
+            <i class="ti ti-chart-line" style="font-size:22px;color:#1D9E75"></i>
+            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Investments</div>
+            <div id="explore-inv-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
+          </div>
+          <div style="background:#F3EEFB;border-radius:12px;padding:14px;cursor:pointer" onclick="scrollToSection('deals')">
+            <i class="ti ti-tag" style="font-size:22px;color:#7C3AED"></i>
+            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Member Deals</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Browse offers</div>
+          </div>
+        </div>
       </div>
 
       <!-- MY GOALS -->
@@ -1923,7 +1968,7 @@ async function renderContributor(){
       </div>
 
       <!-- REFERRAL -->
-      <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+      <div id="referral" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div style="font-size:15px;font-weight:600;color:#0D1F14">My referral link</div>
           <span style="background:#E8F5EE;color:#065F46;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px">Earn ₦500 per referral</span>
@@ -1975,6 +2020,8 @@ async function renderContributor(){
     if(el)el.innerHTML=html;
   });
   // Load Ajo groups preview (coordinator and/or member) — full management lives at /ajo
+  initBalanceVisibility();
+  loadExploreFundovaStatuses();
   loadAjoDashboardPreview();
   // Load food scheme carousel (visible before opening the modal)
   loadDashFoodCarousel();
@@ -4410,6 +4457,64 @@ async function submitCoordinatorApp(){
 // ── Coordinator dashboard ──
 // Compact Ajo preview shown on the main dashboard (coordinator status + membership status),
 // with a button to the full /ajo dashboard for management/detail.
+// Hide/show the hero balance figure — persisted so it stays hidden across visits if the
+// contributor prefers it that way (e.g. checking their dashboard in a public place)
+function toggleBalanceVisibility(){
+  const visible = document.getElementById('balance-value-visible');
+  const hidden = document.getElementById('balance-value-hidden');
+  const icon = document.getElementById('balance-eye-icon');
+  if(!visible||!hidden||!icon)return;
+  const isCurrentlyHidden = hidden.style.display !== 'none';
+  if(isCurrentlyHidden){
+    hidden.style.display='none'; visible.style.display='';
+    icon.className='ti ti-eye';
+    localStorage.setItem('fundova_balance_hidden','0');
+  } else {
+    hidden.style.display=''; visible.style.display='none';
+    icon.className='ti ti-eye-off';
+    localStorage.setItem('fundova_balance_hidden','1');
+  }
+}
+function initBalanceVisibility(){
+  if(localStorage.getItem('fundova_balance_hidden')==='1'){
+    const visible = document.getElementById('balance-value-visible');
+    const hidden = document.getElementById('balance-value-hidden');
+    const icon = document.getElementById('balance-eye-icon');
+    if(visible)visible.style.display='none';
+    if(hidden)hidden.style.display='';
+    if(icon)icon.className='ti ti-eye-off';
+  }
+}
+
+// Populates the small status line on each Explore Fundova card — reuses data already
+// available from the Ajo preview / food scheme fetches rather than duplicating queries
+async function loadExploreFundovaStatuses(){
+  try{
+    const [coordGroups,myMemberships,foodEnrollment,myInvestments]=await Promise.all([
+      currentUser.is_coordinator?sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=id`):Promise.resolve([]),
+      sb(`group_members?user_id=eq.${currentUser.id}&status=eq.active&select=id`),
+      sb(`food_scheme_enrollments?user_id=eq.${currentUser.id}&select=*,food_scheme_options(name)`).catch(()=>[]),
+      sb(`investment_reservations?user_id=eq.${currentUser.id}&status=eq.confirmed&select=id`).catch(()=>[])
+    ]);
+    const ajoEl=document.getElementById('explore-ajo-status');
+    if(ajoEl){
+      const groupCount=(coordGroups||[]).length;
+      const memberCount=(myMemberships||[]).length;
+      ajoEl.textContent = groupCount ? `Coordinating ${groupCount} group${groupCount!==1?'s':''}` : memberCount ? `Member of ${memberCount} group${memberCount!==1?'s':''}` : 'Not joined yet';
+    }
+    const foodEl=document.getElementById('explore-food-status');
+    if(foodEl){
+      const enr=foodEnrollment&&foodEnrollment.length?foodEnrollment[0]:null;
+      foodEl.textContent = enr ? `${enr.food_scheme_options?.name||'Package'} · Active` : 'Not opted in';
+    }
+    const invEl=document.getElementById('explore-inv-status');
+    if(invEl){
+      const count=(myInvestments||[]).length;
+      invEl.textContent = count ? `${count} active investment${count!==1?'s':''}` : 'No active investment';
+    }
+  }catch(e){ /* leave loading text as a harmless fallback */ }
+}
+
 async function loadAjoDashboardPreview(){
   const el = document.getElementById('ajo-preview-content');
   if(!el) return;
