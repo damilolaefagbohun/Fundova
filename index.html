@@ -1710,15 +1710,15 @@ async function renderContributor(){
           {section:'Save & Grow', items:[
             {icon:'ti-target',label:'Savings Goals',id:'goals'},
             {icon:'ti-users',label:'Group Savings (Ajo)',id:'groups',href:'/ajo'},
-            {icon:'ti-building-bank',label:'Investments',action:'openInvestmentsModal()'},
+            {icon:'ti-building-bank',label:'Investments',id:'inv'},
           ]},
           {section:'Member Benefits', items:[
             {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
-            {icon:'ti-tag',label:'Member Deals',action:'openDealsModal()'},
+            {icon:'ti-tag',label:'Member Deals',id:'deals'},
             {icon:'ti-gift',label:'Refer & Earn',id:'referral'},
           ]},
           {section:'Account', items:[
-            {icon:'ti-user',label:'Profile & KYC',id:'kyc'},
+            {icon:'ti-user',label:'Profile & KYC',action:'openKycForm()'},
           ]},
         ].map(group=>`
           <div class="sidebar-label" style="font-size:10px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;padding:14px 1.25rem 6px">${group.section}</div>
@@ -1811,26 +1811,11 @@ async function renderContributor(){
       <!-- EXPLORE FUNDOVA -->
       <div id="explore-fundova" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem">
         <div style="font-size:15px;font-weight:600;color:#0D1F14;margin-bottom:12px">Explore Fundova</div>
-        <div id="explore-fundova-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="window.location.href='/ajo'">
-            <i class="ti ti-users-group" style="font-size:22px;color:#1D9E75"></i>
-            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Group Savings (Ajo)</div>
-            <div id="explore-ajo-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
-          </div>
-          <div style="background:#FEF3E8;border-radius:12px;padding:14px;cursor:pointer" onclick="openFoodScheme()">
-            <i class="ti ti-basket" style="font-size:22px;color:#C9961A"></i>
-            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Food Basket</div>
-            <div id="explore-food-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
-          </div>
-          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="openInvestmentsModal()">
-            <i class="ti ti-chart-line" style="font-size:22px;color:#1D9E75"></i>
-            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Investments</div>
-            <div id="explore-inv-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
-          </div>
-          <div style="background:#F3EEFB;border-radius:12px;padding:14px;cursor:pointer" onclick="openDealsModal()">
-            <i class="ti ti-tag" style="font-size:22px;color:#7C3AED"></i>
-            <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Member Deals</div>
-            <div style="font-size:11px;color:#888;margin-top:2px">Browse offers</div>
+        <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="window.location.href='/ajo'">
+          <i class="ti ti-users-group" style="font-size:24px;color:#1D9E75"></i>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#0D1F14">Group Savings (Ajo)</div>
+            <div id="explore-ajo-status" style="font-size:11px;color:#888">Loading…</div>
           </div>
         </div>
       </div>
@@ -1843,30 +1828,7 @@ async function renderContributor(){
             <div style="font-size:12px;color:#888">Give every naira a destination — a child's future, land, a car, anything.</div>
           </div>
         </div>
-        <div id="goals-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:12px">
-          ${(goals||[]).map(g=>{
-            const gPays=(goalPayments||[]).filter(p=>p.goal_id===g.id);
-            const gPrincipal=gPays.reduce((a,p)=>a+Number(p.amount),0);
-            const gInterest=gPays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
-            const gTotal=gPrincipal+gInterest;
-            const pct=g.target_amount?Math.min(100,Math.round((gTotal/g.target_amount)*100)):null;
-            return`<div style="border:1px solid #e5e5e2;border-radius:12px;padding:14px;position:relative">
-              <div style="position:absolute;top:10px;right:10px"><button class="btn btn-sm" style="padding:4px 6px" onclick="openGoalMenu('${g.id}','${g.name.replace(/'/g,"\\'")}',${g.target_amount||'null'})"><i class="ti ti-dots-vertical"></i></button></div>
-              <div style="width:36px;height:36px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:16px">${g.icon||'🎯'}</div>
-              <div style="font-size:13px;font-weight:700;color:#0D1F14;margin-bottom:2px">${g.name}</div>
-              <div style="font-size:15px;font-weight:700;color:#0F6E56;margin-bottom:2px">${fmt(gTotal)}</div>
-              ${g.target_amount?`<div style="font-size:11px;color:#888;margin-bottom:6px">of ${fmt(g.target_amount)}</div>
-              <div style="background:#e5e5e2;border-radius:4px;height:5px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${pct>=100?'#1D9E75':'#C9961A'}"></div></div>
-              <div style="font-size:11px;color:#888;margin-bottom:10px">${pct}%</div>`:`<div style="margin-bottom:10px"></div>`}
-              <button class="btn btn-sm btn-primary" style="width:100%" onclick="openAssignToGoal('${g.id}','${g.name.replace(/'/g,"\\'")}')">Add money</button>
-              ${gTotal>0?`<button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="openMoveToGeneral('${g.id}','${g.name.replace(/'/g,"\\'")}',${gTotal})">Move to savings</button>`:''}
-            </div>`;
-          }).join('')}
-          <div style="border:1.5px dashed #e5e5e2;border-radius:12px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:180px" onclick="openCreateGoal()">
-            <div style="width:36px;height:36px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center"><i class="ti ti-plus" style="font-size:18px;color:#555"></i></div>
-            <div style="font-size:13px;font-weight:600;color:#555;text-align:center">Create a new goal</div>
-          </div>
-        </div>
+        <div style="max-width:320px;margin:12px auto 0">${buildGoalsCarouselSection(goals,goalPayments)}</div>
       </div>
 
       <!-- TWO COLUMN ROW -->
@@ -1914,44 +1876,8 @@ async function renderContributor(){
       <!-- Investment opportunities now live in a modal (openInvestmentsModal), triggered
            from the Explore Fundova card or the sidebar, to keep the main dashboard shorter -->
 
-      <!-- TRANSACTIONS -->
-      <div id="txn" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14">Recent transactions</div>
-        </div>
-        ${payments.length?`<div class="table-wrap"><table>
-          <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest accrued</th></tr>
-          ${payments.slice(0,5).map(p=>{
-            const wd=countWeekdays(new Date(p.date),new Date());
-            const interest=calcAccruedInterest(p.amount,p.date);
-            return`<tr>
-              <td style="font-weight:500">${fmtDate(p.date)}</td>
-              <td style="color:${Number(p.amount)<0?'#A32D2D':'#0F6E56'};font-weight:600">${Number(p.amount)<0?'-':'+'}${fmt(Math.abs(p.amount))}</td>
-              <td style="font-size:12px;color:#888">${p.purpose||'Savings contribution'}</td>
-              <td>${wd} days</td>
-              <td style="color:#C9961A">${Number(p.amount)>0?fmt(interest):'—'}</td>
-            </tr>`;
-          }).join('')}
-        </table></div>`:`<div class="empty">No payments recorded yet.</div>`}
-      </div>
-
-      <!-- WITHDRAWAL SECTION -->
-      <div id="wdw" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14">Withdrawals</div>
-          ${hasPending?
-            `<span style="background:#FEF3C7;color:#856404;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px"><i class="ti ti-clock"></i> Request pending</span>`:
-            `<button class="btn btn-sm btn-warn" onclick="checkKycBeforeWithdrawal(${Math.round(totalPrincipal+totalInterest)})"><i class="ti ti-cash"></i> Request withdrawal</button>`
-          }
-        </div>
-        ${requests.length?`<div class="table-wrap"><table>
-          <tr><th>Date</th><th>Amount</th><th>Note</th><th>Status</th></tr>
-          ${requests.slice(0,5).map(r=>{
-            const pill=r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':r.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>';
-            return`<tr><td>${fmtDate(r.created_at)}</td><td style="font-weight:500">${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'—'}</td><td>${pill}</td></tr>`;
-          }).join('')}
-        </table></div>`:`<div class="empty" style="padding:1rem">No withdrawal requests yet.</div>`}
-      </div>
+      <!-- Transactions and Withdrawals moved to the bottom of the page — only needed when
+           someone actively wants to review their history, not core to the main dashboard -->
 
       <!-- Deals of the week now live in a modal (openDealsModal), triggered from the
            Explore Fundova card or sidebar, to keep the main dashboard shorter -->
@@ -1978,17 +1904,70 @@ async function renderContributor(){
           </div>
           <button class="btn btn-sm btn-primary" onclick="openFoodScheme()"><i class="ti ti-basket"></i> View packages</button>
         </div>
-        <div id="food-scheme-status"></div>
+        <div id="food-scheme-status" style="margin-bottom:10px"></div>
+        <div style="max-width:320px;margin:0 auto" id="dash-food-carousel"><div style="font-size:12px;color:#888;text-align:center">Loading packages…</div></div>
       </div>
 
-      <!-- KYC SECTION -->
-      <div id="kyc" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+      <!-- INVESTMENTS CAROUSEL -->
+      <div id="inv" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14">Profile & KYC</div>
-          <button class="btn btn-sm btn-primary" onclick="openKycForm()"><i class="ti ti-edit"></i> Update</button>
+          <div style="font-size:15px;font-weight:600;color:#0D1F14">📈 Investment opportunities</div>
+          <button class="btn btn-sm" onclick="openInvestmentsModal()">View all</button>
         </div>
-        <div style="font-size:12px;color:#888">Keep your profile complete to unlock all features including withdrawals.</div>
+        <div style="max-width:320px;margin:0 auto" id="dash-investments-carousel"><div style="font-size:12px;color:#888;text-align:center">Loading investments…</div></div>
       </div>
+
+      <!-- DEALS CAROUSEL -->
+      <div id="deals" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:15px;font-weight:600;color:#0D1F14">🏷️ Deals of the week</div>
+          <button class="btn btn-sm" onclick="openDealsModal()">View all</button>
+        </div>
+        <div style="max-width:320px;margin:0 auto" id="dash-deals-carousel"><div style="font-size:12px;color:#888;text-align:center">Loading deals…</div></div>
+      </div>
+
+      <!-- TRANSACTIONS (moved to bottom — history, not core to the main dashboard) -->
+      <div id="txn" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <div style="font-size:15px;font-weight:600;color:#0D1F14">Recent transactions</div>
+        </div>
+        ${payments.length?`<div class="table-wrap"><table>
+          <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest accrued</th></tr>
+          ${payments.slice(0,5).map(p=>{
+            const wd=countWeekdays(new Date(p.date),new Date());
+            const interest=calcAccruedInterest(p.amount,p.date);
+            return`<tr>
+              <td style="font-weight:500">${fmtDate(p.date)}</td>
+              <td style="color:${Number(p.amount)<0?'#A32D2D':'#0F6E56'};font-weight:600">${Number(p.amount)<0?'-':'+'}${fmt(Math.abs(p.amount))}</td>
+              <td style="font-size:12px;color:#888">${p.purpose||'Savings contribution'}</td>
+              <td>${wd} days</td>
+              <td style="color:#C9961A">${Number(p.amount)>0?fmt(interest):'—'}</td>
+            </tr>`;
+          }).join('')}
+        </table></div>`:`<div class="empty">No payments recorded yet.</div>`}
+      </div>
+
+      <!-- WITHDRAWAL SECTION (moved to bottom — history, not core to the main dashboard) -->
+      <div id="wdw" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <div style="font-size:15px;font-weight:600;color:#0D1F14">Withdrawals</div>
+          ${hasPending?
+            `<span style="background:#FEF3C7;color:#856404;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px"><i class="ti ti-clock"></i> Request pending</span>`:
+            `<button class="btn btn-sm btn-warn" onclick="checkKycBeforeWithdrawal(${Math.round(totalPrincipal+totalInterest)})"><i class="ti ti-cash"></i> Request withdrawal</button>`
+          }
+        </div>
+        ${requests.length?`<div class="table-wrap"><table>
+          <tr><th>Date</th><th>Amount</th><th>Note</th><th>Status</th></tr>
+          ${requests.slice(0,5).map(r=>{
+            const pill=r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':r.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>';
+            return`<tr><td>${fmtDate(r.created_at)}</td><td style="font-weight:500">${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'—'}</td><td>${pill}</td></tr>`;
+          }).join('')}
+        </table></div>`:`<div class="empty" style="padding:1rem">No withdrawal requests yet.</div>`}
+      </div>
+
+      <!-- Profile & KYC section removed — the completion bar above already handles this
+           while incomplete (and genuinely disappears once done), and the sidebar's
+           "Profile & KYC" link stays available afterward for anyone who wants to update it -->
 
     </div>
   </div>
@@ -1998,6 +1977,9 @@ async function renderContributor(){
   // Fundova + /ajo) — loadExploreFundovaStatuses() covers the same status info compactly
   initBalanceVisibility();
   loadExploreFundovaStatuses();
+  loadDashFoodCarousel();
+  loadDashInvestmentsCarousel();
+  loadDashDealsCarousel();
   // Load cooperative bonuses
   loadCooperativeBonuses();
   // Load notifications
@@ -2284,6 +2266,202 @@ async function moveGoalToGeneral(goalId,goalName){
     toast('<i class="ti ti-check"></i> Moved back to your savings!');
     await renderContributor();
   }catch(e){err.textContent='Error: '+e.message;btn.innerHTML='<i class="ti ti-arrow-left"></i> Move to savings';btn.disabled=false;}
+}
+
+// ─── GOALS CAROUSEL ─────────────────────────────────────────
+// Shows one goal at a time (rather than a grid) to keep the dashboard compact when someone
+// has several goals. The final slide is always a "Create a new goal" prompt card.
+let goalsCarouselIndex=0;
+
+function buildGoalCarouselCard(item){
+  if(item.isPrompt){
+    return`<div style="border:1.5px dashed #e5e5e2;border-radius:12px;padding:24px 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:180px" onclick="openCreateGoal()">
+      <div style="width:40px;height:40px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center"><i class="ti ti-plus" style="font-size:20px;color:#555"></i></div>
+      <div style="font-size:14px;font-weight:600;color:#555;text-align:center">Create a new goal</div>
+      <div style="font-size:11px;color:#999;text-align:center">Give another naira a destination</div>
+    </div>`;
+  }
+  const {g,gTotal,pct}=item;
+  return`<div style="border:1px solid #e5e5e2;border-radius:12px;padding:14px;position:relative">
+    <div style="position:absolute;top:10px;right:10px"><button class="btn btn-sm" style="padding:4px 6px" onclick="openGoalMenu('${g.id}','${g.name.replace(/'/g,"\\'")}',${g.target_amount||'null'})"><i class="ti ti-dots-vertical"></i></button></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#E8F5EE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:16px">${g.icon||'🎯'}</div>
+    <div style="font-size:13px;font-weight:700;color:#0D1F14;margin-bottom:2px">${g.name}</div>
+    <div style="font-size:15px;font-weight:700;color:#0F6E56;margin-bottom:2px">${fmt(gTotal)}</div>
+    ${g.target_amount?`<div style="font-size:11px;color:#888;margin-bottom:6px">of ${fmt(g.target_amount)}</div>
+    <div style="background:#e5e5e2;border-radius:4px;height:5px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${pct>=100?'#1D9E75':'#C9961A'}"></div></div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">${pct}%</div>`:`<div style="margin-bottom:10px"></div>`}
+    <button class="btn btn-sm btn-primary" style="width:100%" onclick="openAssignToGoal('${g.id}','${g.name.replace(/'/g,"\\'")}')">Add money</button>
+    ${gTotal>0?`<button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="openMoveToGeneral('${g.id}','${g.name.replace(/'/g,"\\'")}',${gTotal})">Move to savings</button>`:''}
+  </div>`;
+}
+
+function buildGoalsCarouselSection(goals,goalPayments){
+  const items=(goals||[]).map(g=>{
+    const gPays=(goalPayments||[]).filter(p=>p.goal_id===g.id);
+    const gPrincipal=gPays.reduce((a,p)=>a+Number(p.amount),0);
+    const gInterest=gPays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const gTotal=gPrincipal+gInterest;
+    const pct=g.target_amount?Math.min(100,Math.round((gTotal/g.target_amount)*100)):null;
+    return{g,gTotal,pct};
+  });
+  items.push({isPrompt:true});
+  window._goalsCarouselList=items;
+  goalsCarouselIndex=0;
+  return`<div id="goals-carousel-track">${buildGoalCarouselCard(items[0])}</div>
+    ${items.length>1?`
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px">
+      <button onclick="goalsCarouselNav(-1)" class="btn btn-sm"><i class="ti ti-chevron-left"></i></button>
+      <div style="display:flex;gap:6px" id="goals-carousel-dots">${items.map((_,i)=>`<div onclick="goalsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===0?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}</div>
+      <button onclick="goalsCarouselNav(1)" class="btn btn-sm"><i class="ti ti-chevron-right"></i></button>
+    </div>`:''}`;
+}
+function goalsCarouselGoTo(idx){
+  const list=window._goalsCarouselList||[];
+  if(!list.length)return;
+  goalsCarouselIndex=((idx%list.length)+list.length)%list.length;
+  renderGoalsCarouselFrame();
+}
+function goalsCarouselNav(dir){ goalsCarouselGoTo(goalsCarouselIndex+dir); }
+function renderGoalsCarouselFrame(){
+  const list=window._goalsCarouselList||[];
+  const el=document.getElementById('goals-carousel-track');
+  if(!el||!list.length)return;
+  el.innerHTML=buildGoalCarouselCard(list[goalsCarouselIndex]);
+  const dotsEl=document.getElementById('goals-carousel-dots');
+  if(dotsEl)dotsEl.innerHTML=list.map((_,i)=>`<div onclick="goalsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===goalsCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('');
+}
+
+// ─── INVESTMENTS CAROUSEL (dashboard preview — full browse lives in openInvestmentsModal) ──
+let investmentsCarouselIndex=0;
+
+function buildInvestmentCarouselCard(inv){
+  if(inv.comingSoon){
+    return`<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:14px;padding:1.25rem;color:#fff">
+      <div style="display:inline-block;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.4);color:#C9A84C;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;margin-bottom:10px;text-transform:uppercase">Coming Soon</div>
+      <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px">${inv.title}</div>
+      <div style="font-size:12px;color:#aaa;line-height:1.5;margin-bottom:10px">${inv.description||''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:#aaa">Total cost</div><div style="font-weight:600;color:#C9A84C;font-size:13px">${fmt(inv.total_cost)}</div></div>
+        <div style="background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:#aaa">Unit price</div><div style="font-weight:600;color:#C9A84C;font-size:13px">${fmt(inv.unit_price)}</div></div>
+      </div>
+    </div>`;
+  }
+  const pct=Math.min(100,Math.round((inv.unitsSold/inv.total_units)*100));
+  return`<div style="border:1px solid #e5e5e2;border-radius:14px;padding:1.25rem">
+    <div style="display:inline-block;background:#D1FAE5;color:#065F46;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-bottom:8px">Open for investment</div>
+    <div style="font-size:15px;font-weight:700;color:#0D1F14;margin-bottom:4px">${inv.title}</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">${inv.description||''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="stat" style="padding:8px 10px"><div class="stat-label">Unit price</div><div style="font-size:13px;font-weight:600">${fmt(inv.unit_price)}</div></div>
+      <div class="stat" style="padding:8px 10px"><div class="stat-label">Units left</div><div style="font-size:13px;font-weight:600;color:${inv.unitsAvailable<100?'#A32D2D':'#1a1a1a'}">${inv.unitsAvailable}</div></div>
+    </div>
+    <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:#1D9E75;width:${pct}%"></div></div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">${pct}% funded</div>
+    <button class="btnbtn-primary" data-inv-id="${inv.id}" data-inv-title="${inv.title.replace(/"/g,'&quot;')}" data-unit-price="${inv.unit_price}" data-units="${inv.unitsAvailable}" onclick="openReserveUnitsFromBtn(this)" style="width:100%"><i class="ti ti-shopping-cart"></i> Reserve units</button>
+  </div>`;
+}
+
+async function loadDashInvestmentsCarousel(){
+  const el=document.getElementById('dash-investments-carousel');
+  if(!el)return;
+  try{
+    const [investments,myReservations]=await Promise.all([
+      sb('investments?select=*&order=created_at.desc'),
+      sb(`investment_reservations?user_id=eq.${currentUser.id}&status=eq.payment_confirmed&select=investment_id`)
+    ]);
+    const myConfirmedIds=new Set((myReservations||[]).map(r=>r.investment_id));
+    const open=(investments||[]).filter(i=>i.status==='open'&&!myConfirmedIds.has(i.id));
+    const comingSoon=(investments||[]).filter(i=>i.status==='coming_soon');
+
+    let items=[];
+    if(open.length){
+      const openIds=open.map(i=>i.id);
+      const allRes=await sb(`investment_reservations?investment_id=in.(${openIds.join(',')})&status=eq.payment_confirmed&select=investment_id,units`).catch(()=>[]);
+      const soldMap={};
+      (allRes||[]).forEach(r=>{ soldMap[r.investment_id]=(soldMap[r.investment_id]||0)+Number(r.units); });
+      items=items.concat(open.map(inv=>({...inv,unitsSold:soldMap[inv.id]||0,unitsAvailable:inv.total_units-(soldMap[inv.id]||0)})));
+    }
+    items=items.concat(comingSoon.map(inv=>({...inv,comingSoon:true})));
+
+    if(!items.length){
+      el.innerHTML='<div class="empty" style="padding:1rem;text-align:center">No investment opportunities right now. Check back soon!</div>';
+      return;
+    }
+    window._investmentsCarouselList=items;
+    investmentsCarouselIndex=0;
+    el.innerHTML=`<div id="investments-carousel-track">${buildInvestmentCarouselCard(items[0])}</div>
+      ${items.length>1?`
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px">
+        <button onclick="investmentsCarouselNav(-1)" class="btn btn-sm"><i class="ti ti-chevron-left"></i></button>
+        <div style="display:flex;gap:6px" id="investments-carousel-dots">${items.map((_,i)=>`<div onclick="investmentsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===0?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}</div>
+        <button onclick="investmentsCarouselNav(1)" class="btn btn-sm"><i class="ti ti-chevron-right"></i></button>
+      </div>`:''}`;
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:1rem;text-align:center">Couldn\'t load investments right now.</div>'; }
+}
+function investmentsCarouselGoTo(idx){
+  const list=window._investmentsCarouselList||[];
+  if(!list.length)return;
+  investmentsCarouselIndex=((idx%list.length)+list.length)%list.length;
+  renderInvestmentsCarouselFrame();
+}
+function investmentsCarouselNav(dir){ investmentsCarouselGoTo(investmentsCarouselIndex+dir); }
+function renderInvestmentsCarouselFrame(){
+  const list=window._investmentsCarouselList||[];
+  const el=document.getElementById('investments-carousel-track');
+  if(!el||!list.length)return;
+  el.innerHTML=buildInvestmentCarouselCard(list[investmentsCarouselIndex]);
+  const dotsEl=document.getElementById('investments-carousel-dots');
+  if(dotsEl)dotsEl.innerHTML=list.map((_,i)=>`<div onclick="investmentsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===investmentsCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('');
+}
+
+// ─── DASHBOARD DEALS CAROUSEL (separate state from the homepage's own deals carousel) ──
+// Ends with a "Submit your own deal" prompt slide, matching the Goals carousel pattern.
+let dashDealsCarouselIndex=0;
+
+function buildDashDealsCarouselCard(item){
+  if(item.isPrompt){
+    return`<div style="border:1.5px dashed #e5e5e2;border-radius:14px;padding:24px 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:200px" onclick="openSubmitDeal()">
+      <div style="width:40px;height:40px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center"><i class="ti ti-plus" style="font-size:20px;color:#555"></i></div>
+      <div style="font-size:14px;font-weight:600;color:#555;text-align:center">Submit your own deal</div>
+      <div style="font-size:11px;color:#999;text-align:center">Got something to sell? List it here.</div>
+    </div>`;
+  }
+  return buildDealCard(item);
+}
+
+async function loadDashDealsCarousel(){
+  const el=document.getElementById('dash-deals-carousel');
+  if(!el)return;
+  try{
+    let deals=await sb('deals?status=eq.featured&select=*&order=created_at.desc');
+    deals=await expireOldFeaturedDeals(deals);
+    const featured=(deals||[]).filter(d=>d.status==='featured');
+    const items=[...featured,{isPrompt:true}];
+    window._dashDealsCarouselList=items;
+    dashDealsCarouselIndex=0;
+    el.innerHTML=`<div id="dash-deals-carousel-track">${buildDashDealsCarouselCard(items[0])}</div>
+      ${items.length>1?`
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px">
+        <button onclick="dashDealsCarouselNav(-1)" class="btn btn-sm"><i class="ti ti-chevron-left"></i></button>
+        <div style="display:flex;gap:6px" id="dash-deals-carousel-dots">${items.map((_,i)=>`<div onclick="dashDealsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===0?'#0D3D2A':'#e5e5e2'}"></div>`).join('')}</div>
+        <button onclick="dashDealsCarouselNav(1)" class="btn btn-sm"><i class="ti ti-chevron-right"></i></button>
+      </div>`:''}`;
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:1rem;text-align:center">Couldn\'t load deals right now.</div>'; }
+}
+function dashDealsCarouselGoTo(idx){
+  const list=window._dashDealsCarouselList||[];
+  if(!list.length)return;
+  dashDealsCarouselIndex=((idx%list.length)+list.length)%list.length;
+  renderDashDealsCarouselFrame();
+}
+function dashDealsCarouselNav(dir){ dashDealsCarouselGoTo(dashDealsCarouselIndex+dir); }
+function renderDashDealsCarouselFrame(){
+  const list=window._dashDealsCarouselList||[];
+  const el=document.getElementById('dash-deals-carousel-track');
+  if(!el||!list.length)return;
+  el.innerHTML=buildDashDealsCarouselCard(list[dashDealsCarouselIndex]);
+  const dotsEl=document.getElementById('dash-deals-carousel-dots');
+  if(dotsEl)dotsEl.innerHTML=list.map((_,i)=>`<div onclick="dashDealsCarouselGoTo(${i})" style="width:7px;height:7px;border-radius:50%;cursor:pointer;background:${i===dashDealsCarouselIndex?'#0D3D2A':'#e5e5e2'}"></div>`).join('');
 }
 
 // ─── ADMIN CONTRIBUTOR MANAGEMENT ─────────────────────────
@@ -4494,27 +4672,15 @@ async function openDealsModal(){
 
 async function loadExploreFundovaStatuses(){
   try{
-    const [coordGroups,myMemberships,foodEnrollment,myInvestments]=await Promise.all([
+    const [coordGroups,myMemberships]=await Promise.all([
       currentUser.is_coordinator?sb(`savings_groups?coordinator_id=eq.${currentUser.id}&status=eq.active&select=id`):Promise.resolve([]),
-      sb(`group_members?user_id=eq.${currentUser.id}&status=eq.active&select=id`),
-      sb(`food_scheme_enrollments?user_id=eq.${currentUser.id}&select=*,food_scheme_options(name)`).catch(()=>[]),
-      sb(`investment_reservations?user_id=eq.${currentUser.id}&status=eq.confirmed&select=id`).catch(()=>[])
+      sb(`group_members?user_id=eq.${currentUser.id}&status=eq.active&select=id`)
     ]);
     const ajoEl=document.getElementById('explore-ajo-status');
     if(ajoEl){
       const groupCount=(coordGroups||[]).length;
       const memberCount=(myMemberships||[]).length;
       ajoEl.textContent = groupCount ? `Coordinating ${groupCount} group${groupCount!==1?'s':''}` : memberCount ? `Member of ${memberCount} group${memberCount!==1?'s':''}` : 'Not joined yet';
-    }
-    const foodEl=document.getElementById('explore-food-status');
-    if(foodEl){
-      const enr=foodEnrollment&&foodEnrollment.length?foodEnrollment[0]:null;
-      foodEl.textContent = enr ? `${enr.food_scheme_options?.name||'Package'} · Active` : 'Not opted in';
-    }
-    const invEl=document.getElementById('explore-inv-status');
-    if(invEl){
-      const count=(myInvestments||[]).length;
-      invEl.textContent = count ? `${count} active investment${count!==1?'s':''}` : 'No active investment';
     }
   }catch(e){ /* leave loading text as a harmless fallback */ }
 }
@@ -6481,7 +6647,7 @@ const TOUR_STEPS = [
   { id:'dash', title:'Your savings overview', body:'This is your total value — principal saved plus all interest earned. It updates every weekday automatically.' },
   { id:'goals', title:'Savings goals', body:'Set a target amount and watch your progress in real time. A great way to stay motivated and focused.' },
   { id:'bonus-section', title:'Cooperative bonuses', body:'Any surplus distributed by Fundova appears here. You can add it to your savings or request a withdrawal.' },
-  { id:'explore-fundova', title:'Explore Fundova', body:'Tap into group investments, Ajo savings circles, the food scheme, and member deals — all from here.' },
+  { id:'explore-fundova', title:'Group savings (Ajo)', body:'Coordinate your own rotating savings group, or see your position in one you\'ve joined — right from here. Investments, the food scheme, and deals also have their own sections further down.' },
 ];
 
 let tourStep = 0;
@@ -6550,6 +6716,11 @@ async function renderProfileCompletion(kyc){
   const completed = fields.filter(f=>f.done).length;
   const total = fields.length;
   const pct = Math.round((completed/total)*100);
+
+  // Once fully complete, this card has nothing left to prompt — hide it entirely rather
+  // than keep showing a "you're done!" card taking up permanent space on the dashboard.
+  // Profile & KYC stays reachable via the sidebar for anyone who wants to update it later.
+  if(pct===100)return'';
   const allKycDone = fields.slice(1).filter(f=>!f.done).length === 0 && fields[0].done;
 
   return`<div class="card" style="margin-bottom:1rem">
