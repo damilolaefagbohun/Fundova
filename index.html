@@ -1710,11 +1710,11 @@ async function renderContributor(){
           {section:'Save & Grow', items:[
             {icon:'ti-target',label:'Savings Goals',id:'goals'},
             {icon:'ti-users',label:'Group Savings (Ajo)',id:'groups',href:'/ajo'},
-            {icon:'ti-building-bank',label:'Investments',id:'inv'},
+            {icon:'ti-building-bank',label:'Investments',action:'openInvestmentsModal()'},
           ]},
           {section:'Member Benefits', items:[
             {icon:'ti-basket',label:'Food Scheme',id:'food-scheme'},
-            {icon:'ti-tag',label:'Member Deals',id:'deals'},
+            {icon:'ti-tag',label:'Member Deals',action:'openDealsModal()'},
             {icon:'ti-gift',label:'Refer & Earn',id:'referral'},
           ]},
           {section:'Account', items:[
@@ -1722,7 +1722,7 @@ async function renderContributor(){
           ]},
         ].map(group=>`
           <div class="sidebar-label" style="font-size:10px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;padding:14px 1.25rem 6px">${group.section}</div>
-          ${group.items.map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:`scrollToSection('${n.id}')`};closeContribSidebarMobile()" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
+          ${group.items.map(n=>`<div onclick="${n.href?`window.location.href='${n.href}'`:n.action?n.action:`scrollToSection('${n.id}')`};closeContribSidebarMobile()" style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;cursor:pointer;color:rgba(255,255,255,.75);font-size:13px;font-weight:500;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)'">
           <i class="ti ${n.icon}" style="font-size:18px;width:20px"></i><span class="sidebar-label">${n.label}</span>
         </div>`).join('')}
         `).join('')}
@@ -1822,12 +1822,12 @@ async function renderContributor(){
             <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Food Basket</div>
             <div id="explore-food-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
           </div>
-          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="scrollToSection('inv')">
+          <div style="background:#E8F5EE;border-radius:12px;padding:14px;cursor:pointer" onclick="openInvestmentsModal()">
             <i class="ti ti-chart-line" style="font-size:22px;color:#1D9E75"></i>
             <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Investments</div>
             <div id="explore-inv-status" style="font-size:11px;color:#888;margin-top:2px">Loading…</div>
           </div>
-          <div style="background:#F3EEFB;border-radius:12px;padding:14px;cursor:pointer" onclick="scrollToSection('deals')">
+          <div style="background:#F3EEFB;border-radius:12px;padding:14px;cursor:pointer" onclick="openDealsModal()">
             <i class="ti ti-tag" style="font-size:22px;color:#7C3AED"></i>
             <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-top:8px">Member Deals</div>
             <div style="font-size:11px;color:#888;margin-top:2px">Browse offers</div>
@@ -1911,13 +1911,8 @@ async function renderContributor(){
       <!-- BONUS SECTION -->
       <div id="bonus-section" style="margin-bottom:1.25rem"></div>
 
-      <!-- INVESTMENTS SECTION -->
-      <div id="inv" style="margin-bottom:1.25rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14">Investment opportunities</div>
-        </div>
-        <div id="inv-content"><div style="background:#fff;border-radius:16px;padding:1.5rem;border:1px solid #e5e5e2;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-bottom:8px"></div><br>Loading investments…</div></div>
-      </div>
+      <!-- Investment opportunities now live in a modal (openInvestmentsModal), triggered
+           from the Explore Fundova card or the sidebar, to keep the main dashboard shorter -->
 
       <!-- TRANSACTIONS -->
       <div id="txn" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
@@ -1951,42 +1946,27 @@ async function renderContributor(){
         </div>
         ${requests.length?`<div class="table-wrap"><table>
           <tr><th>Date</th><th>Amount</th><th>Note</th><th>Status</th></tr>
-          ${requests.map(r=>{
+          ${requests.slice(0,5).map(r=>{
             const pill=r.status==='approved'?'<span class="status-pill pill-approved">Approved</span>':r.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>';
             return`<tr><td>${fmtDate(r.created_at)}</td><td style="font-weight:500">${fmt(r.amount)}</td><td style="font-size:12px;color:#666">${r.note||'—'}</td><td>${pill}</td></tr>`;
           }).join('')}
         </table></div>`:`<div class="empty" style="padding:1rem">No withdrawal requests yet.</div>`}
       </div>
 
-      <!-- DEALS -->
-      <div id="deals" style="margin-bottom:1.25rem">
-        <div style="font-size:15px;font-weight:600;color:#0D1F14;margin-bottom:12px">Deals of the week</div>
-        <div id="deals-content"><div style="background:#fff;border-radius:16px;padding:1.5rem;border:1px solid #e5e5e2;text-align:center;color:#888">Loading deals…</div></div>
-        <div style="margin-top:12px">
-          <button class="btn btn-sm btn-primary" onclick="openSubmitDeal()"><i class="ti ti-plus"></i> Submit your deal</button>
-        </div>
-      </div>
+      <!-- Deals of the week now live in a modal (openDealsModal), triggered from the
+           Explore Fundova card or sidebar, to keep the main dashboard shorter -->
 
       <!-- REFERRAL -->
-      <div id="referral" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14">My referral link</div>
-          <span style="background:#E8F5EE;color:#065F46;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px">Earn ₦500 per referral</span>
+      <div id="referral" style="background:#E8F5EE;border-radius:16px;padding:14px 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer" onclick="copyReferralLink()">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <div style="width:36px;height:36px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-gift" style="color:#0F6E56;font-size:18px"></i></div>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#0D1F14">Invite a friend, earn ₦500</div>
+            <div style="font-size:11px;color:#666">Tap to copy your referral link</div>
+          </div>
         </div>
-        <div style="background:#f5f5f3;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <span style="font-size:12px;color:#444;word-break:break-all" id="referral-link-text">https://www.fundova.africa/?ref=${generateReferralCode(currentUser.name,currentUser.id)}</span>
-          <button class="btn btn-sm" onclick="copyReferralLink()" style="flex-shrink:0"><i class="ti ti-copy"></i> Copy</button>
-        </div>
-        <div style="font-size:12px;color:#888">Your referral code: <strong style="color:#0F6E56;font-family:monospace">${generateReferralCode(currentUser.name,currentUser.id)}</strong></div>
-      </div>
-
-      <!-- AJO / GROUP SAVINGS SECTION -->
-      <div id="ajo-section" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div style="font-size:15px;font-weight:600;color:#0D1F14"><i class="ti ti-users" style="color:#1D9E75"></i> Group Savings (Ajo)</div>
-          <button class="btn btn-sm btn-primary" onclick="window.location.href='/ajo'"><i class="ti ti-arrow-right"></i> Open Ajo dashboard</button>
-        </div>
-        <div id="ajo-preview-content"><div style="font-size:12px;color:#888">Loading…</div></div>
+        <i class="ti ti-copy" style="color:#0F6E56;font-size:18px;flex-shrink:0"></i>
+        <span id="referral-link-text" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0">https://www.fundova.africa/?ref=${generateReferralCode(currentUser.name,currentUser.id)}</span>
       </div>
 
       <!-- FOOD SCHEME SECTION -->
@@ -1998,8 +1978,7 @@ async function renderContributor(){
           </div>
           <button class="btn btn-sm btn-primary" onclick="openFoodScheme()"><i class="ti ti-basket"></i> View packages</button>
         </div>
-        <div id="food-scheme-status" style="margin-bottom:10px"></div>
-        <div id="dash-food-carousel"><div style="font-size:12px;color:#888">Loading packages…</div></div>
+        <div id="food-scheme-status"></div>
       </div>
 
       <!-- KYC SECTION -->
@@ -2014,17 +1993,11 @@ async function renderContributor(){
     </div>
   </div>
   `);
-  // Load investments asynchronously
-  renderContributorInvestments().then(html=>{
-    const el=document.getElementById('inv-content');
-    if(el)el.innerHTML=html;
-  });
-  // Load Ajo groups preview (coordinator and/or member) — full management lives at /ajo
+  // Investments are now loaded on-demand inside openInvestmentsModal(), not on every dashboard render
+  // Ajo/food preview panels were removed from the main dashboard (redundant with Explore
+  // Fundova + /ajo) — loadExploreFundovaStatuses() covers the same status info compactly
   initBalanceVisibility();
   loadExploreFundovaStatuses();
-  loadAjoDashboardPreview();
-  // Load food scheme carousel (visible before opening the modal)
-  loadDashFoodCarousel();
   // Load cooperative bonuses
   loadCooperativeBonuses();
   // Load notifications
@@ -2080,14 +2053,7 @@ async function renderContributor(){
       el.textContent=(count>=10?count+'+ ':'');
     }
   }).catch(()=>{});
-  sb('deals?status=eq.featured&select=*&order=created_at.desc').then(async deals=>{
-    deals = await expireOldFeaturedDeals(deals);
-    const el=document.getElementById('deals-content');
-    if(el){
-      el.innerHTML=deals&&deals.filter(d=>d.status==='featured').length?buildDealsSection(deals,false):'<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
-      startDealsCarouselAutoplay('deals-carousel-track-dash');
-    }
-  }).catch(()=>{});
+  // Deals are now loaded on-demand inside openDealsModal(), not on every dashboard render
   }catch(e){setHTML(`<div class="loading-full" style="color:#A32D2D">Failed to load: ${e.message}</div>`);}
 }
 
@@ -3861,9 +3827,9 @@ async function markPaymentMade(btn){
   try{
     await sb(`investment_reservations?id=eq.${resId}`,{method:'PATCH',body:JSON.stringify({status:'payment_made'})});
     toast('<i class="ti ti-check"></i> Payment noted! Admin will confirm receipt shortly.');
-    // Reload investment section
+    // Reload investment content — wherever it's currently showing (modal now, was inline before)
     renderContributorInvestments().then(html=>{
-      const el=document.getElementById('inv-content');
+      const el=document.getElementById('inv-modal-content')||document.getElementById('inv-content');
       if(el)el.innerHTML=html;
     });
   }catch(e){
@@ -4488,6 +4454,44 @@ function initBalanceVisibility(){
 
 // Populates the small status line on each Explore Fundova card — reuses data already
 // available from the Ajo preview / food scheme fetches rather than duplicating queries
+// Investment opportunities — now opened as a modal (was a permanently-rendered inline
+// section) to keep the main mobile dashboard shorter. Reuses the exact same renderer.
+async function openInvestmentsModal(){
+  openModal(`
+    <h3>Investment opportunities</h3>
+    <div id="inv-modal-content" style="max-height:65vh;overflow-y:auto"><div style="text-align:center;padding:2rem;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block;margin-bottom:8px"></div><br>Loading investments…</div></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>
+  `);
+  const html = await renderContributorInvestments();
+  const el = document.getElementById('inv-modal-content');
+  if(el) el.innerHTML = html;
+}
+
+// Deals of the week — now opened as a modal (was a permanently-rendered inline carousel)
+// to keep the main mobile dashboard shorter. Reuses the exact same carousel/rendering logic.
+async function openDealsModal(){
+  openModal(`
+    <h3>Deals of the week</h3>
+    <div id="deals-modal-content" style="max-height:60vh;overflow-y:auto"><div style="text-align:center;padding:2rem;color:#888">Loading deals…</div></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="openSubmitDeal()"><i class="ti ti-plus"></i> Submit your deal</button>
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  `);
+  try{
+    let deals = await sb('deals?status=eq.featured&select=*&order=created_at.desc');
+    deals = await expireOldFeaturedDeals(deals);
+    const el = document.getElementById('deals-modal-content');
+    if(el){
+      el.innerHTML = deals&&deals.filter(d=>d.status==='featured').length ? buildDealsSection(deals,false) : '<div class="empty" style="padding:1rem">No featured deals right now. Check back soon!</div>';
+      startDealsCarouselAutoplay('deals-carousel-track-dash');
+    }
+  }catch(e){
+    const el = document.getElementById('deals-modal-content');
+    if(el) el.innerHTML = '<div class="empty" style="padding:1rem">Couldn\'t load deals right now.</div>';
+  }
+}
+
 async function loadExploreFundovaStatuses(){
   try{
     const [coordGroups,myMemberships,foodEnrollment,myInvestments]=await Promise.all([
@@ -6474,12 +6478,10 @@ function filterContributors(){
 // ─── ONBOARDING TOUR ──────────────────────────────────────
 
 const TOUR_STEPS = [
-  { id:'accrued-box', title:'Your savings overview', body:'This is your total value — principal saved plus all interest earned. It updates every weekday automatically.' },
-  { id:'savings-goal-card', title:'Savings goal', body:'Set a target amount and watch your progress in real time. A great way to stay motivated and focused.' },
+  { id:'dash', title:'Your savings overview', body:'This is your total value — principal saved plus all interest earned. It updates every weekday automatically.' },
+  { id:'goals', title:'Savings goals', body:'Set a target amount and watch your progress in real time. A great way to stay motivated and focused.' },
   { id:'bonus-section', title:'Cooperative bonuses', body:'Any surplus distributed by Fundova appears here. You can add it to your savings or request a withdrawal.' },
-  { id:'inv-content', title:'Group investments', body:'Pool funds with other members to purchase real assets like vehicles or property and earn monthly income from them.' },
-  { id:'deals-content', title:'Deals marketplace', body:'Exclusive offers from fellow Fundova members. Contact sellers directly via WhatsApp — no middleman.' },
-  { id:'ajo-section', title:'Group savings (Ajo)', body:'Apply to become a coordinator and run your own rotating savings group on Fundova. Earn bonuses while helping others save.' },
+  { id:'explore-fundova', title:'Explore Fundova', body:'Tap into group investments, Ajo savings circles, the food scheme, and member deals — all from here.' },
 ];
 
 let tourStep = 0;
