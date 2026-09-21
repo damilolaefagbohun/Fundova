@@ -3880,13 +3880,28 @@ async function approveProfileRequest(reqId,userId){
 }
 
 async function updateProfileRequest(reqId,status,oldValues,newValues){
+  const body={status};
+  if(oldValues)body.previous_values=JSON.stringify(oldValues);
+  if(newValues)body.approved_values=JSON.stringify(newValues);
   try{
-    const body={status};
-    if(oldValues)body.previous_values=JSON.stringify(oldValues);
-    if(newValues)body.approved_values=JSON.stringify(newValues);
     await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify(body)});
-    await renderAdmin();
-  }catch(e){alert('Error updating request.');}
+  }catch(e){
+    // If the audit-trail columns (previous_values/approved_values) don't exist on this
+    // table yet, PostgREST rejects the whole PATCH and status never flips to
+    // approved/rejected — the row just sits there looking "stuck" as pending even
+    // though everything else (user update, email) already went through. Fall back to
+    // updating just the status so the request actually clears, and surface the real
+    // problem instead of silently swallowing it.
+    console.error('Profile request status update failed, retrying with status only:',e);
+    try{
+      await sb(`profile_update_requests?id=eq.${reqId}`,{method:'PATCH',body:JSON.stringify({status})});
+    }catch(e2){
+      await renderAdmin();
+      alert('Error updating request: '+e2.message);
+      throw e2;
+    }
+  }
+  await renderAdmin();
 }
 
 
