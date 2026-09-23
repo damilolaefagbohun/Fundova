@@ -4528,7 +4528,12 @@ async function buildAdminAjoGroupsSection(){
         <td style="font-weight:500">${u.name}</td>
         <td>${fmt(m.contribution_amount)}</td>
         <td>${hasPaid?'<span class="status-pill pill-approved">Recorded</span>':'<span class="status-pill pill-pending">Not yet</span>'}</td>
-        <td>${!hasPaid?`<button class="btn btn-sm btn-primary" onclick="adminRecordGroupContribution('${m.id}','${g.id}',${m.contribution_amount},${currentCycle})"><i class="ti ti-plus"></i> Record</button>`:'<span style="color:#aaa;font-size:12px">—</span>'}</td>
+        <td>${!hasPaid?`<button class="btn btn-sm btn-primary"
+              data-mid="${m.id}" data-gid="${g.id}" data-amt="${m.contribution_amount}" data-cycle="${currentCycle}"
+              data-uid="${m.user_id}" data-order="${m.payout_order||''}" data-total="${gMembers.length}"
+              data-gname="${(g.name||'').replace(/"/g,'&quot;')}" data-coordid="${g.coordinator_id||''}"
+              onclick="adminRecordGroupContribution(this.dataset.mid,this.dataset.gid,Number(this.dataset.amt),Number(this.dataset.cycle),this.dataset.uid,this.dataset.order?Number(this.dataset.order):null,Number(this.dataset.total),this.dataset.gname,this.dataset.coordid)">
+              <i class="ti ti-plus"></i> Record</button>`:'<span style="color:#aaa;font-size:12px">—</span>'}</td>
       </tr>`;
     }).join('');
     return`<div style="margin-bottom:1.25rem">
@@ -4547,13 +4552,52 @@ async function buildAdminAjoGroupsSection(){
   </div>`;
 }
 
-async function adminRecordGroupContribution(memberId,groupId,amount,cycle){
+function ordinal(n){
+  n=Number(n);
+  if(!n||isNaN(n))return'';
+  const s=['th','st','nd','rd'],v=n%100;
+  return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+
+async function adminRecordGroupContribution(memberId,groupId,amount,cycle,userId,payoutOrder,totalMembers,groupName,coordinatorId){
   if(!confirm(`Record payment of ${fmt(amount)} for this member?`))return;
   try{
     const today=new Date().toISOString().split('T')[0];
     await sb('group_contributions',{method:'POST',body:JSON.stringify({group_id:groupId,member_id:memberId,amount,cycle,status:'paid',date:today})});
     toast('<i class="ti ti-check"></i> Contribution recorded!');
     await renderAdmin();
+
+    const posText=payoutOrder?`You're ${ordinal(payoutOrder)} in line${totalMembers?' of '+totalMembers+' members':''} to collect the payout this cycle.`:'';
+
+    // Notify the member whose contribution was recorded — email + in-app bell
+    (async()=>{
+      try{
+        const memberArr=await sb(`users?id=eq.${userId}&select=name,email`);
+        if(memberArr&&memberArr.length){
+          const mem=memberArr[0];
+          const title=`Ajo contribution recorded — ${groupName}`;
+          const detail=`Your contribution of ${fmt(amount)} to "${groupName}" (cycle ${cycle}) has been recorded. ${posText}`;
+          await addNotification(userId,title+': '+detail);
+          await notify({type:'contributor_action',to:mem.email,name:mem.name,title,detail});
+        }
+      }catch(e){logSystemError('notify:group_contribution:member',e);}
+
+      // Notify the group's coordinator too, so they can track the cycle
+      if(coordinatorId){
+        try{
+          const coordArr=await sb(`users?id=eq.${coordinatorId}&select=name,email`);
+          const memberNameArr=await sb(`users?id=eq.${userId}&select=name`);
+          const memberName=(memberNameArr&&memberNameArr.length)?memberNameArr[0].name:'A member';
+          if(coordArr&&coordArr.length){
+            const coord=coordArr[0];
+            const title=`Contribution recorded in ${groupName}`;
+            const detail=`${memberName}'s contribution of ${fmt(amount)} for cycle ${cycle} in "${groupName}" has been recorded by the admin.`;
+            await addNotification(coordinatorId,title+': '+detail);
+            await notify({type:'contributor_action',to:coord.email,name:coord.name,title,detail});
+          }
+        }catch(e){logSystemError('notify:group_contribution:coordinator',e);}
+      }
+    })();
   }catch(e){alert('Error recording contribution: '+e.message);}
 }
 
