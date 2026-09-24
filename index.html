@@ -1045,6 +1045,49 @@ async function renderAdmin(){
       </div>`;
     pageContent.appendChild(statsRow);
 
+    // ── AJO GROUP SAVINGS SUMMARY ── (separate "purse" from regular contributions —
+    // Ajo money doesn't earn interest, so it's tracked here rather than folded into
+    // the Money card above, which would misleadingly imply it's growing.)
+    if(groupCount>0){
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+      const [ajoContribsAll, ajoPayoutsAll, ajoActiveMembers] = await Promise.all([
+        sb('group_contributions?status=eq.paid&select=amount,date').catch(()=>[]),
+        sb('group_payouts?status=eq.completed&select=amount,processed_at').catch(()=>[]),
+        sb('group_members?status=eq.active&select=id').catch(()=>[])
+      ]);
+      const ajoLifetimeInflow=(ajoContribsAll||[]).reduce((a,c)=>a+Number(c.amount),0);
+      const ajoMonthInflow=(ajoContribsAll||[]).filter(c=>c.date&&new Date(c.date)>=monthStart).reduce((a,c)=>a+Number(c.amount),0);
+      const ajoLifetimePayout=(ajoPayoutsAll||[]).reduce((a,p)=>a+Number(p.amount),0);
+      const ajoMonthPayout=(ajoPayoutsAll||[]).filter(p=>p.processed_at&&new Date(p.processed_at)>=monthStart).reduce((a,p)=>a+Number(p.amount),0);
+      const ajoHeld=ajoLifetimeInflow-ajoLifetimePayout;
+      const ajoMemberCount=(ajoActiveMembers||[]).length;
+
+      const ajoCard=document.createElement('div');
+      ajoCard.style.cssText='background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem';
+      ajoCard.innerHTML=`
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:36px;height:36px;background:#E8F5EE;border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="ti ti-users-group" style="color:#0F6E56;font-size:18px"></i></div>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#0D1F14">Group savings (Ajo)</div>
+              <div style="font-size:11px;color:#888">Separate from regular contributions — this money doesn't earn interest</div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:#888">${groupCount} active group${groupCount!==1?'s':''} &middot; ${ajoMemberCount} member${ajoMemberCount!==1?'s':''}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+          <div style="background:#E8F5EE;border-radius:10px;padding:10px"><div style="font-size:10px;color:#0F6E56">Inflow (Lifetime)</div><div style="font-size:15px;font-weight:700;color:#0F6E56">${fmt(ajoLifetimeInflow)}</div></div>
+          <div style="background:#F0FDF8;border-radius:10px;padding:10px"><div style="font-size:10px;color:#0F6E56">This month's inflow</div><div style="font-size:15px;font-weight:700;color:#0F6E56">${fmt(ajoMonthInflow)}</div></div>
+          <div style="background:#FDEDED;border-radius:10px;padding:10px"><div style="font-size:10px;color:#A32D2D">Payouts (Lifetime)</div><div style="font-size:15px;font-weight:700;color:#A32D2D">${fmt(ajoLifetimePayout)}</div></div>
+          <div style="background:#FDF2F2;border-radius:10px;padding:10px"><div style="font-size:10px;color:#A32D2D">This month's payouts</div><div style="font-size:15px;font-weight:700;color:#A32D2D">${fmt(ajoMonthPayout)}</div></div>
+          <div style="background:#FEF3C7;border-radius:10px;padding:10px"><div style="font-size:10px;color:#856404">Currently held</div><div style="font-size:15px;font-weight:700;color:#856404">${fmt(ajoHeld)}</div></div>
+        </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0ee">
+          <a onclick="setAdminTab('coordinators');renderAdmin();" style="font-size:12px;color:#0F6E56;cursor:pointer;font-weight:500">View Ajo groups →</a>
+        </div>`;
+      pageContent.appendChild(ajoCard);
+    }
+
     // ── UPCOMING BIRTHDAYS ──
     const bdayNow = new Date(); bdayNow.setHours(0,0,0,0);
     const upcomingBirthdays = (contributors||[]).map(c=>{
