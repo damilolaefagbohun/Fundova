@@ -4588,9 +4588,41 @@ async function buildAdminAjoGroupsSection(){
     </div>`;
   }).join('');
 
-  return`<div class="card">
+  // Pending payout requests — a coordinator's "Request payout" click lands here until
+  // admin approves or rejects it. Nothing is paid or promised to the member before that.
+  const groupMap={};groups.forEach(g=>{groupMap[g.id]=g;});
+  const memberMap={};(allMembers||[]).forEach(m=>{memberMap[m.id]=m;});
+  const pendingPayouts=(allPayouts||[]).filter(p=>p.status==='pending');
+  let pendingPayoutsHtml='';
+  if(pendingPayouts.length){
+    const rows=pendingPayouts.map(p=>{
+      const g=groupMap[p.group_id]||{};
+      const m=memberMap[p.recipient_id]||{};
+      const u=usersMap[m.user_id]||{name:'Unknown'};
+      return`<tr>
+        <td style="font-weight:500">${u.name}</td>
+        <td>${g.name||'—'}</td>
+        <td>${fmt(p.amount)}</td>
+        <td>Cycle ${p.cycle}</td>
+        <td style="font-size:12px;color:#888">${fmtDate(p.initiated_at||p.created_at)}</td>
+        <td><div style="display:flex;gap:5px">
+          <button class="btn btn-sm btn-primary" onclick="approveGroupPayout('${p.id}','${p.group_id}','${p.recipient_id}','${m.user_id||''}',${p.amount},${p.cycle},'${(g.name||'').replace(/'/g,"\\'")}','${(u.name||'').replace(/'/g,"\\'")}')"><i class="ti ti-check"></i> Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="rejectGroupPayout('${p.id}','${p.group_id}','${(u.name||'').replace(/'/g,"\\'")}','${(g.name||'').replace(/'/g,"\\'")}','${g.coordinator_id||''}')"><i class="ti ti-x"></i> Reject</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+    pendingPayoutsHtml=`<div class="card" style="margin-bottom:1.25rem;border:1px solid #FEF3C7;background:#FFFBEB">
+      <h3 style="display:flex;align-items:center;gap:8px"><i class="ti ti-clock" style="color:#856404"></i> Ajo payouts awaiting your approval (${pendingPayouts.length})</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Member</th><th>Group</th><th>Amount</th><th>Cycle</th><th>Requested</th><th></th></tr>
+        ${rows}
+      </table></div>
+    </div>`;
+  }
+
+  return`${pendingPayoutsHtml}<div class="card">
     <h3>Ajo groups — record contributions</h3>
-    <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:1rem">Only admin records member contributions. Coordinators handle payouts from their <code>/ajo</code> dashboard.</p>
+    <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:1rem">Only admin records member contributions. Coordinators request payouts from their <code>/ajo</code> dashboard; admin approves them above before anything is paid.</p>
     ${groupBlocks||'<div class="empty">No active group members yet.</div>'}
   </div>`;
 }
@@ -4895,6 +4927,7 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
   const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id&&m.status!=='removed').sort((a,b)=>a.payout_order-b.payout_order);
   const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
   const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+  const pendingPayoutIds=new Set(gPayouts.filter(p=>p.status==='pending').map(p=>p.recipient_id));
   const totalExpected=gMembers.reduce((a,m)=>a+Number(m.contribution_amount),0);
   const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
   const unpaidMembers=gMembers.filter(m=>!completedPayoutIds.has(m.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
@@ -4903,12 +4936,13 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
   const memberRows=gMembers.map(m=>{
     const u=membersMap[m.user_id]||{name:'Unknown'};
     const hasPaidOut=completedPayoutIds.has(m.id);
+    const hasPendingPayout=pendingPayoutIds.has(m.id);
     const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
     const hasPaid=gContribs.some(c=>c.status==='paid');
     const isNextInLine=!hasPaidOut&&m.id===nextPayoutMemberId;
     return`<tr style="${hasPaidOut?'opacity:0.5':''}">
       <td>
-        <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}${isNextInLine?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Next in line</span>':''}</div>
+        <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}${hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Awaiting admin approval</span>':''}${isNextInLine&&!hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Next in line</span>':''}</div>
         <div style="font-size:11px;color:#888">${u.phone||u.email||''}</div>
       </td>
       <td style="font-weight:500">${fmt(m.contribution_amount)}</td>
@@ -4917,8 +4951,9 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
         ?'<span class="status-pill pill-approved">Paid</span>'
         :'<span class="status-pill pill-pending">Pending</span>'}</td>
       <td><div style="display:flex;gap:4px;justify-content:flex-end">
-        ${!hasPaidOut&&isNextInLine?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Pay out</button>`:''}
-        ${!hasPaidOut&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Pay out</button><button class="btn btn-sm" title="Coordinator override: pay out of turn" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
+        ${!hasPaidOut&&hasPendingPayout?`<button class="btn btn-sm" disabled title="Waiting on admin approval" style="opacity:.5;cursor:not-allowed"><i class="ti ti-clock"></i> Awaiting approval</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Request payout</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button><button class="btn btn-sm" title="Coordinator override: request payout out of turn" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
         ${!hasPaidOut?`<button class="btn btn-sm btn-danger" title="Remove member" onclick="removeGroupMember('${m.id}','${g.id}')"><i class="ti ti-user-x"></i></button>`:''}
       </div></td>
     </tr>`;
@@ -5782,39 +5817,89 @@ async function calculateAndCreditCoordinatorBonus(groupId, coordinatorId, payout
   }catch(e){console.error('Coordinator bonus error:',e);}
 }
 
-// Update initiateGroupPayout to calculate and credit bonus
+// ─── ADMIN APPROVAL OF AJO PAYOUTS ─────────────────────────
+// A coordinator's "Pay out" click only creates a pending group_payouts row (see
+// initiateGroupPayout above). Nothing is paid, credited, or promised to anyone until
+// admin approves it here.
+
+async function approveGroupPayout(payoutId,groupId,memberId,recipientUserId,amount,cycle,groupName,memberName){
+  if(!confirm(`Approve payout of ${fmt(amount)} to ${memberName} for "${groupName}" (Cycle ${cycle})?`))return;
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    await sb(`group_payouts?id=eq.${payoutId}`,{method:'PATCH',body:JSON.stringify({status:'completed',processed_at:today})});
+
+    // Days the contribution sat in the group, for the coordinator's float bonus —
+    // recomputed here (at approval time) rather than at request time, since that's
+    // when the money actually moves.
+    const contributions=await sb(`group_contributions?group_id=eq.${groupId}&member_id=eq.${memberId}&cycle=eq.${cycle}&status=eq.paid&select=*`);
+    let daysHeld=5;
+    if(contributions&&contributions.length){
+      const contribDate=new Date(contributions[0].date);
+      daysHeld=Math.ceil(Math.abs(new Date(today)-contribDate)/(1000*60*60*24));
+    }
+    const groups=await sb(`savings_groups?id=eq.${groupId}&select=coordinator_id`);
+    if(groups&&groups.length){
+      await calculateAndCreditCoordinatorBonus(groupId,groups[0].coordinator_id,amount,daysHeld).catch(e=>logSystemError('coordinator_bonus:'+payoutId,e));
+    }
+
+    toast('<i class="ti ti-check"></i> Payout approved.');
+    await renderAdmin();
+
+    // Tell the recipient — email + bell — that their payout is approved and on the way
+    try{
+      const userArr=await sb(`users?id=eq.${recipientUserId}&select=name,email`);
+      if(userArr&&userArr.length){
+        const u=userArr[0];
+        const title=`Ajo payout approved — ${groupName}`;
+        const detail=`Your payout of ${fmt(amount)} from "${groupName}" (Cycle ${cycle}) has been approved. You will be credited within 24 hours or less.`;
+        await addNotification(recipientUserId,title+': '+detail);
+        await notify({type:'contributor_action',to:u.email,name:u.name,title,detail});
+      }
+    }catch(e){logSystemError('notify:group_payout_approved',e);}
+  }catch(e){alert('Error approving payout: '+e.message);}
+}
+
+async function rejectGroupPayout(payoutId,groupId,memberName,groupName,coordinatorId){
+  if(!confirm(`Reject this payout request for ${memberName}?`))return;
+  try{
+    await sb(`group_payouts?id=eq.${payoutId}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})});
+    toast('<i class="ti ti-x"></i> Payout request rejected.');
+    await renderAdmin();
+
+    if(coordinatorId){
+      try{
+        const coordArr=await sb(`users?id=eq.${coordinatorId}&select=name,email`);
+        if(coordArr&&coordArr.length){
+          const c=coordArr[0];
+          const title=`Payout request rejected — ${groupName}`;
+          const detail=`The payout request for ${memberName} in "${groupName}" was rejected by admin. Please check the group and resubmit if needed.`;
+          await addNotification(coordinatorId,title+': '+detail);
+          await notify({type:'contributor_action',to:c.email,name:c.name,title,detail});
+        }
+      }catch(e){logSystemError('notify:group_payout_rejected',e);}
+    }
+  }catch(e){alert('Error rejecting payout: '+e.message);}
+}
+
+// Coordinator initiates a payout — this now only creates a PENDING request. The bonus
+// credit and the "money is on its way" message both wait until admin approves (see
+// approveGroupPayout/rejectGroupPayout below), so nothing is promised to the member or
+// paid to the coordinator until a human at Fundova has actually signed off on it.
 async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle,override){
   const confirmMsg=override
-    ?`This member is not next in the payout order. Override and pay ${fmt(amount)} to ${memberName} out of turn for Cycle ${cycle}?`
-    :`Initiate payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle}?`;
+    ?`This member is not next in the payout order. Send an admin approval request to override and pay ${fmt(amount)} to ${memberName} out of turn for Cycle ${cycle}?`
+    :`Send a payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle} to admin for approval?`;
   if(!confirm(confirmMsg))return;
   try{
     const today = new Date().toISOString().split('T')[0];
-
-    // Find when this members contribution was recorded to calculate days held
-    const contributions = await sb(`group_contributions?group_id=eq.${groupId}&member_id=eq.${memberId}&cycle=eq.${cycle}&status=eq.paid&select=*`);
-    let daysHeld = 5; // default 5 days if no contribution record
-    if(contributions && contributions.length){
-      const contribDate = new Date(contributions[0].date);
-      const payoutDate = new Date(today);
-      const diffTime = Math.abs(payoutDate - contribDate);
-      daysHeld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    }
-
     await sb('group_payouts',{method:'POST',body:JSON.stringify({
       group_id:groupId,recipient_id:memberId,amount,cycle,
-      status:'completed',initiated_at:today,processed_at:today
+      status:'pending',initiated_at:today
     })});
 
-    // Get group to find coordinator
-    const groups = await sb(`savings_groups?id=eq.${groupId}&select=coordinator_id`);
-    if(groups && groups.length){
-      await calculateAndCreditCoordinatorBonus(groupId, groups[0].coordinator_id, amount, daysHeld);
-    }
-
-    toast('<i class="ti ti-check"></i> Payout recorded for '+memberName+'. Please process the bank transfer manually.');
+    toast('<i class="ti ti-check"></i> Payout request sent to admin for approval.');
     await (window.location.pathname==='/ajo'?renderAjoPage():renderContributor());
-  }catch(e){alert('Error initiating payout: '+e.message);}
+  }catch(e){alert('Error requesting payout: '+e.message);}
 }
 
 // ─── COORDINATOR EARNINGS DASHBOARD ───────────────────────
@@ -7306,7 +7391,7 @@ let adminNotifData = {};
 
 async function loadAdminNotifications(){
   try{
-    const [signups, withdrawals, kycPending, reservations, profiles, coordinators, deals, refunds] = await Promise.all([
+    const [signups, withdrawals, kycPending, reservations, profiles, coordinators, deals, refunds, ajoPayouts] = await Promise.all([
       sb('signup_requests?status=eq.pending&select=id,name,created_at'),
       sb('withdrawal_requests?status=eq.pending&select=id,user_id,amount,created_at'),
       sb('kyc_details?kyc_verified=eq.false&select=id,user_id,updated_at'),
@@ -7315,6 +7400,7 @@ async function loadAdminNotifications(){
       sb('coordinator_applications?status=eq.pending&select=id,user_id,created_at'),
       sb('deals?status=eq.pending&select=id,user_id,title,created_at'),
       sb('investment_refund_requests?status=eq.pending&select=id,user_id,investment_id,created_at'),
+      sb('group_payouts?status=eq.pending&select=id,group_id,recipient_id,amount,cycle,initiated_at'),
     ]);
 
     // Get user names for KYC items
@@ -7348,12 +7434,13 @@ async function loadAdminNotifications(){
       coordinators: coordinators||[],
       deals: deals||[],
       refunds: refunds||[],
+      ajoPayouts: ajoPayouts||[],
     };
 
     const total = adminNotifData.signups.length + adminNotifData.withdrawals.length +
       adminNotifData.kycPending.length + adminNotifData.reservations.length +
       adminNotifData.profiles.length + adminNotifData.coordinators.length +
-      adminNotifData.deals.length + adminNotifData.refunds.length;
+      adminNotifData.deals.length + adminNotifData.refunds.length + adminNotifData.ajoPayouts.length;
 
     const badge = document.getElementById('admin-notif-badge');
     if(badge){
@@ -7464,11 +7551,21 @@ function renderAdminNotifPanel(){
   }
 
   if(d.refunds&&d.refunds.length){
-    sections.push(`<div style="padding:10px 14px">
+    sections.push(`<div style="padding:10px 14px;border-bottom:1px solid #f0f0ee">
       <div onclick="closeAdminNotifPanel();setAdminTab('investments');renderAdmin();" style="padding:8px;cursor:pointer;background:#FEE2E2;border-radius:8px;display:flex;align-items:center;gap:8px">
         <i class="ti ti-refresh" style="color:#991B1B;font-size:18px"></i>
         <div style="flex:1;font-size:13px;font-weight:500;color:#991B1B">${d.refunds.length} refund request${d.refunds.length!==1?'s':''} to review</div>
         <i class="ti ti-arrow-right" style="color:#991B1B;font-size:14px"></i>
+      </div>
+    </div>`);
+  }
+
+  if(d.ajoPayouts&&d.ajoPayouts.length){
+    sections.push(`<div style="padding:10px 14px">
+      <div onclick="closeAdminNotifPanel();setAdminTab('coordinators');renderAdmin();" style="padding:8px;cursor:pointer;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;gap:8px">
+        <i class="ti ti-cash" style="color:#856404;font-size:18px"></i>
+        <div style="flex:1;font-size:13px;font-weight:500;color:#856404">${d.ajoPayouts.length} Ajo payout${d.ajoPayouts.length!==1?'s':''} awaiting approval</div>
+        <i class="ti ti-arrow-right" style="color:#856404;font-size:14px"></i>
       </div>
     </div>`);
   }
