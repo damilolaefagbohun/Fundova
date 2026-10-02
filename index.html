@@ -4562,27 +4562,43 @@ async function buildAdminAjoGroupsSection(){
     const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id&&m.status!=='removed').sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
     if(!gMembers.length)return'';
     const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
-    const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+    const gContribsAll=(allContribs||[]).filter(c=>c.group_id===g.id);
+    // The open period is purely calendar-driven now — it doesn't wait for any previous
+    // period's payout to be resolved. Past periods that collected contributions but
+    // never got a completed payout just sit in the backlog list below.
+    const openCycle=getOpenCycleKey(g);
+    const completedCycleKeys=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.cycle));
+    const closedCycleKeys=[...new Set(gContribsAll.filter(c=>c.status==='paid'&&c.cycle!==openCycle).map(c=>c.cycle))]
+      .filter(k=>!completedCycleKeys.has(k)).sort();
+
+    const backlogHtml=closedCycleKeys.map(ck=>{
+      const pooled=gContribsAll.filter(c=>c.cycle===ck&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+      return`<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#856404;display:flex;justify-content:space-between;align-items:center">
+        <span><i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled, awaiting payout</span>
+      </div>`;
+    }).join('');
+
     const rows=gMembers.map(m=>{
       const u=usersMap[m.user_id]||{name:'Unknown'};
-      const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+      const gContribs=gContribsAll.filter(c=>c.member_id===m.id&&c.cycle===openCycle);
       const hasPaid=gContribs.some(c=>c.status==='paid');
       return`<tr>
         <td style="font-weight:500">${u.name}</td>
         <td>${fmt(m.contribution_amount)}</td>
         <td>${hasPaid?'<span class="status-pill pill-approved">Recorded</span>':'<span class="status-pill pill-pending">Not yet</span>'}</td>
         <td>${!hasPaid?`<button class="btn btn-sm btn-primary"
-              data-mid="${m.id}" data-gid="${g.id}" data-amt="${m.contribution_amount}" data-cycle="${currentCycle}"
+              data-mid="${m.id}" data-gid="${g.id}" data-amt="${m.contribution_amount}" data-cycle="${openCycle}"
               data-uid="${m.user_id}" data-order="${m.payout_order||''}" data-total="${gMembers.length}"
               data-gname="${(g.name||'').replace(/"/g,'&quot;')}" data-coordid="${g.coordinator_id||''}"
-              onclick="adminRecordGroupContribution(this.dataset.mid,this.dataset.gid,Number(this.dataset.amt),Number(this.dataset.cycle),this.dataset.uid,this.dataset.order?Number(this.dataset.order):null,Number(this.dataset.total),this.dataset.gname,this.dataset.coordid)">
+              onclick="adminRecordGroupContribution(this.dataset.mid,this.dataset.gid,Number(this.dataset.amt),this.dataset.cycle,this.dataset.uid,this.dataset.order?Number(this.dataset.order):null,Number(this.dataset.total),this.dataset.gname,this.dataset.coordid)">
               <i class="ti ti-plus"></i> Record</button>`:'<span style="color:#aaa;font-size:12px">—</span>'}</td>
       </tr>`;
     }).join('');
     return`<div style="margin-bottom:1.25rem">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${g.name} <span style="font-weight:400;color:#888;font-size:12px">· Coordinator: ${coordMap[g.coordinator_id]||'—'} · Cycle ${currentCycle}</span></div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${g.name} <span style="font-weight:400;color:#888;font-size:12px">· Coordinator: ${coordMap[g.coordinator_id]||'—'} · ${g.rotation_frequency==='weekly'?'Weekly':'Monthly'} rotation · Now collecting: ${cycleLabel(openCycle,g.rotation_frequency)}</span></div>
+      ${backlogHtml}
       <div class="table-wrap"><table>
-        <tr><th>Member</th><th>Expected</th><th>This cycle</th><th></th></tr>
+        <tr><th>Member</th><th>Expected</th><th>This period</th><th></th></tr>
         ${rows}
       </table></div>
     </div>`;
@@ -4603,10 +4619,10 @@ async function buildAdminAjoGroupsSection(){
         <td style="font-weight:500">${u.name}</td>
         <td>${g.name||'—'}</td>
         <td>${fmt(p.amount)}</td>
-        <td>Cycle ${p.cycle}</td>
+        <td>${cycleLabel(p.cycle,g.rotation_frequency)}</td>
         <td style="font-size:12px;color:#888">${fmtDate(p.initiated_at||p.created_at)}</td>
         <td><div style="display:flex;gap:5px">
-          <button class="btn btn-sm btn-primary" onclick="approveGroupPayout('${p.id}','${p.group_id}','${p.recipient_id}','${m.user_id||''}',${p.amount},${p.cycle},'${(g.name||'').replace(/'/g,"\\'")}','${(u.name||'').replace(/'/g,"\\'")}')"><i class="ti ti-check"></i> Approve</button>
+          <button class="btn btn-sm btn-primary" onclick="approveGroupPayout('${p.id}','${p.group_id}','${p.recipient_id}','${m.user_id||''}',${p.amount},'${p.cycle}','${(g.name||'').replace(/'/g,"\\'")}','${(u.name||'').replace(/'/g,"\\'")}')"><i class="ti ti-check"></i> Approve</button>
           <button class="btn btn-sm btn-danger" onclick="rejectGroupPayout('${p.id}','${p.group_id}','${(u.name||'').replace(/'/g,"\\'")}','${(g.name||'').replace(/'/g,"\\'")}','${g.coordinator_id||''}')"><i class="ti ti-x"></i> Reject</button>
         </div></td>
       </tr>`;
@@ -4614,7 +4630,7 @@ async function buildAdminAjoGroupsSection(){
     pendingPayoutsHtml=`<div class="card" style="margin-bottom:1.25rem;border:1px solid #FEF3C7;background:#FFFBEB">
       <h3 style="display:flex;align-items:center;gap:8px"><i class="ti ti-clock" style="color:#856404"></i> Ajo payouts awaiting your approval (${pendingPayouts.length})</h3>
       <div class="table-wrap"><table>
-        <tr><th>Member</th><th>Group</th><th>Amount</th><th>Cycle</th><th>Requested</th><th></th></tr>
+        <tr><th>Member</th><th>Group</th><th>Amount</th><th>Period</th><th>Requested</th><th></th></tr>
         ${rows}
       </table></div>
     </div>`;
@@ -4622,7 +4638,7 @@ async function buildAdminAjoGroupsSection(){
 
   return`${pendingPayoutsHtml}<div class="card">
     <h3>Ajo groups — record contributions</h3>
-    <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:1rem">Only admin records member contributions. Coordinators request payouts from their <code>/ajo</code> dashboard; admin approves them above before anything is paid.</p>
+    <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:1rem">Only admin records member contributions. Each group's collection period opens automatically on the calendar — a new round starts even if a prior round's payout hasn't been resolved yet (see the amber "awaiting payout" rounds within each group below). Coordinators request payouts from their <code>/ajo</code> dashboard; admin approves them above before anything is paid.</p>
     ${groupBlocks||'<div class="empty">No active group members yet.</div>'}
   </div>`;
 }
@@ -4632,6 +4648,45 @@ function ordinal(n){
   if(!n||isNaN(n))return'';
   const s=['th','st','nd','rd'],v=n%100;
   return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+
+// ─── AJO CALENDAR CYCLES ───────────────────────────────────
+// A group's rotation period is now driven purely by the calendar, not by whether the
+// previous period's payout has been completed. Monthly groups open a new period on the
+// 1st of each month; weekly groups open a new period every Monday. Cycle keys are plain
+// strings ("2026-10" / "2026-W40") so they sort correctly as text and compare cleanly
+// against each other regardless of how far a group has advanced.
+
+function isoWeekKey(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const day=(d.getUTCDay()+6)%7; // Mon=0..Sun=6
+  d.setUTCDate(d.getUTCDate()-day+3); // nearest Thursday fixes ISO week/year edge cases
+  const isoYear=d.getUTCFullYear();
+  const jan4=new Date(Date.UTC(isoYear,0,4));
+  const week=1+Math.round(((d-jan4)/86400000-3+((jan4.getUTCDay()+6)%7))/7);
+  return `${isoYear}-W${String(week).padStart(2,'0')}`;
+}
+function monthKey(date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+function getOpenCycleKey(group,atDate){
+  const d=atDate||new Date();
+  return group&&group.rotation_frequency==='weekly'?isoWeekKey(d):monthKey(d);
+}
+function cycleLabel(key,frequency){
+  if(!key)return'—';
+  if(frequency==='weekly'||/-W\d{2}$/.test(key)){
+    const [y,w]=key.split('-W').map(Number);
+    // Monday of that ISO week
+    const jan4=new Date(Date.UTC(y,0,4));
+    const jan4Day=(jan4.getUTCDay()+6)%7;
+    const monday=new Date(jan4); monday.setUTCDate(jan4.getUTCDate()-jan4Day+(w-1)*7);
+    const sunday=new Date(monday); sunday.setUTCDate(monday.getUTCDate()+6);
+    const fmtOpt={month:'short',day:'numeric'};
+    return `Week of ${monday.toLocaleDateString('en-GB',fmtOpt)}–${sunday.toLocaleDateString('en-GB',fmtOpt)}, ${y}`;
+  }
+  const [y,m]=key.split('-').map(Number);
+  return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
 }
 
 async function adminRecordGroupContribution(memberId,groupId,amount,cycle,userId,payoutOrder,totalMembers,groupName,coordinatorId){
@@ -4926,29 +4981,51 @@ async function renderCoordinatorDashboard(){
 function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
   const gMembers=(allMembers||[]).filter(m=>m.group_id===g.id&&m.status!=='removed').sort((a,b)=>a.payout_order-b.payout_order);
   const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+  const gContribsAll=(allContribs||[]).filter(c=>c.group_id===g.id);
   const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
   const pendingPayoutIds=new Set(gPayouts.filter(p=>p.status==='pending').map(p=>p.recipient_id));
   const totalExpected=gMembers.reduce((a,m)=>a+Number(m.contribution_amount),0);
-  const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+
+  // The collection period is purely calendar-driven now — it opens automatically and
+  // doesn't wait for the previous period's payout to be resolved. A payout request
+  // targets the OLDEST closed period that collected contributions but hasn't been paid
+  // out yet (the backlog), never the period that's still open for collection.
+  const openCycle=getOpenCycleKey(g);
+  const completedCycleKeys=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.cycle));
+  const pendingCycleKeys=new Set(gPayouts.filter(p=>p.status==='pending').map(p=>p.cycle));
+  const closedCycleKeys=[...new Set(gContribsAll.filter(c=>c.status==='paid'&&c.cycle!==openCycle).map(c=>c.cycle))]
+    .filter(k=>!completedCycleKeys.has(k)).sort();
+  const payoutCycle=closedCycleKeys.length?closedCycleKeys[0]:null;
+  const payoutCyclePending=payoutCycle&&pendingCycleKeys.has(payoutCycle);
+  const backlogCount=closedCycleKeys.length;
+
   const unpaidMembers=gMembers.filter(m=>!completedPayoutIds.has(m.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
   const nextPayoutMemberId=unpaidMembers.length?unpaidMembers[0].id:null;
 
-  // The payout is the FULL POOL for this cycle — every member's contribution combined —
-  // not just the recipient's own contribution. An Ajo/rotating group pools everyone's
-  // money each cycle and pays the whole pot to whoever's turn it is; it's not a
-  // per-member payout of their own savings.
-  const cyclePaidContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.cycle===currentCycle&&c.status==='paid');
-  const cyclePooledAmount=cyclePaidContribs.reduce((a,c)=>a+Number(c.amount),0);
-  const allMembersPaidThisCycle=gMembers.every(m=>cyclePaidContribs.some(c=>c.member_id===m.id));
+  // The payout is the FULL POOL for the targeted cycle — every member's contribution
+  // combined — not just the recipient's own contribution. An Ajo/rotating group pools
+  // everyone's money each cycle and pays the whole pot to whoever's turn it is; it's not
+  // a per-member payout of their own savings.
+  const payoutCycleContribs=payoutCycle?gContribsAll.filter(c=>c.cycle===payoutCycle&&c.status==='paid'):[];
+  const cyclePooledAmount=payoutCycleContribs.reduce((a,c)=>a+Number(c.amount),0);
+  const allMembersPaidPayoutCycle=payoutCycle?gMembers.every(m=>payoutCycleContribs.some(c=>c.member_id===m.id)):false;
+  const canRequestPayout=!!(payoutCycle&&allMembersPaidPayoutCycle&&!payoutCyclePending);
+
+  const backlogHtml=closedCycleKeys.map(ck=>{
+    const pooled=gContribsAll.filter(c=>c.cycle===ck&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+    return`<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#856404">
+      <i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled${ck===payoutCycle?(payoutCyclePending?', payout requested — awaiting admin approval':', ready to request payout below'):', waiting its turn behind an earlier period'}
+    </div>`;
+  }).join('');
 
   const memberRows=gMembers.map(m=>{
     const u=membersMap[m.user_id]||{name:'Unknown'};
     const hasPaidOut=completedPayoutIds.has(m.id);
     const hasPendingPayout=pendingPayoutIds.has(m.id);
-    const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
-    const hasPaid=gContribs.some(c=>c.status==='paid');
+    const gContribsOpen=gContribsAll.filter(c=>c.member_id===m.id&&c.cycle===openCycle);
+    const hasPaidOpen=gContribsOpen.some(c=>c.status==='paid');
     const isNextInLine=!hasPaidOut&&m.id===nextPayoutMemberId;
-    const payoutBlocked=!allMembersPaidThisCycle;
+    const nameSafe=(u.name||'Unknown').replace(/"/g,'&quot;');
     return`<tr style="${hasPaidOut?'opacity:0.5':''}">
       <td>
         <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}${hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Awaiting admin approval</span>':''}${isNextInLine&&!hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Next in line</span>':''}</div>
@@ -4956,14 +5033,15 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
       </td>
       <td style="font-weight:500">${fmt(m.contribution_amount)}</td>
       <td>${m.payout_order||'—'}</td>
-      <td>${hasPaid
+      <td>${hasPaidOpen
         ?'<span class="status-pill pill-approved">Paid</span>'
         :'<span class="status-pill pill-pending">Pending</span>'}</td>
       <td><div style="display:flex;gap:4px;justify-content:flex-end">
         ${!hasPaidOut&&hasPendingPayout?`<button class="btn btn-sm" disabled title="Waiting on admin approval" style="opacity:.5;cursor:not-allowed"><i class="ti ti-clock"></i> Awaiting approval</button>`:''}
-        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&!payoutBlocked?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${cyclePooledAmount},${currentCycle})"><i class="ti ti-cash"></i> Request payout (${fmt(cyclePooledAmount)})</button>`:''}
-        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&payoutBlocked?`<button class="btn btn-sm" disabled title="Not everyone has contributed this cycle yet — pool isn't complete" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button>`:''}
-        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button><button class="btn btn-sm" title="Coordinator override: request payout out of turn (full pool: ${fmt(cyclePooledAmount)})" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${cyclePooledAmount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&canRequestPayout?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" data-gid="${g.id}" data-mid="${m.id}" data-name="${nameSafe}" data-amt="${cyclePooledAmount}" data-cycle="${payoutCycle}" onclick="initiateGroupPayout(this.dataset.gid,this.dataset.mid,this.dataset.name,Number(this.dataset.amt),this.dataset.cycle)"><i class="ti ti-cash"></i> Request payout (${fmt(cyclePooledAmount)})</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&!canRequestPayout?`<button class="btn btn-sm" disabled title="${payoutCycle?(payoutCyclePending?'A payout for that period is already awaiting admin approval':"Not everyone had contributed for that period — pool isn't complete"):'No completed collection period is awaiting payout yet'}" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine&&canRequestPayout?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button><button class="btn btn-sm" title="Coordinator override: request payout out of turn (full pool: ${fmt(cyclePooledAmount)})" data-gid="${g.id}" data-mid="${m.id}" data-name="${nameSafe}" data-amt="${cyclePooledAmount}" data-cycle="${payoutCycle}" onclick="initiateGroupPayout(this.dataset.gid,this.dataset.mid,this.dataset.name,Number(this.dataset.amt),this.dataset.cycle,true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine&&!canRequestPayout?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button>`:''}
         ${!hasPaidOut?`<button class="btn btn-sm btn-danger" title="Remove member" onclick="removeGroupMember('${m.id}','${g.id}')"><i class="ti ti-user-x"></i></button>`:''}
       </div></td>
     </tr>`;
@@ -4976,46 +5054,47 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div>
         <h3 style="font-size:15px;margin-bottom:4px">${g.name}</h3>
-        <div style="font-size:12px;color:#888">${g.description||''}</div>
+        <div style="font-size:12px;color:#888">${g.description||''} ${g.description?'· ':''}${g.rotation_frequency==='weekly'?'Weekly':'Monthly'} rotation · Now collecting: ${cycleLabel(openCycle,g.rotation_frequency)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-sm btn-edit" onclick="openEditGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
         ${gMembers.length>=g.max_members
           ?`<button class="btn btn-sm" disabled title="Group is full (${gMembers.length}/${g.max_members}). Edit the group to raise the member cap." style="opacity:.5;cursor:not-allowed"><i class="ti ti-users"></i> Group full</button>`
           :`<button class="btn btn-sm btn-primary" data-gid="${g.id}" data-gname="${g.name}" onclick="openInviteMember(this.dataset.gid,this.dataset.gname)"><i class="ti ti-user-plus"></i> Invite member</button>`}
-        ${unpaidMembers.length===0&&gMembers.length?`<button class="btn btn-sm" title="All members paid out — start a new cycle" onclick="resetGroupCycle('${g.id}')"><i class="ti ti-refresh"></i> Reset for new cycle</button>`:''}
+        ${unpaidMembers.length===0&&gMembers.length?`<button class="btn btn-sm" title="All members paid out — start a new rotation" onclick="resetGroupCycle('${g.id}')"><i class="ti ti-refresh"></i> Reset for new cycle</button>`:''}
         <button class="btn btn-sm btn-danger" title="Close group" onclick="closeAjoGroup('${g.id}')"><i class="ti ti-x"></i></button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Members</div><div style="font-size:15px;font-weight:600${gMembers.length>=g.max_members?';color:#856404':''}">${gMembers.length}/${g.max_members}${gMembers.length>=g.max_members?' <span style="font-size:10px;font-weight:600">(Full)</span>':''}</div></div>
-      <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Awaiting payout</div><div style="font-size:15px;font-weight:600${backlogCount?';color:#856404':''}">${backlogCount} period${backlogCount===1?'':'s'}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
-      <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
-      <div class="stat" style="padding:10px 12px"><div class="stat-label">Pooled this cycle</div><div style="font-size:15px;font-weight:600;color:${allMembersPaidThisCycle?'#0F6E56':'#856404'}">${fmt(cyclePooledAmount)}${!allMembersPaidThisCycle?' <span style="font-size:10px;font-weight:600">(incomplete)</span>':''}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/period</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">${payoutCycle?'Next payout pool':'Pooled, open period'}</div><div style="font-size:15px;font-weight:600;color:${payoutCycle?(allMembersPaidPayoutCycle?'#0F6E56':'#856404'):'#888'}">${payoutCycle?fmt(cyclePooledAmount):fmt(gContribsAll.filter(c=>c.cycle===openCycle&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0))}</div></div>
     </div>
     ${goalPct!==null?`
     <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
       <div style="height:100%;background:#1D9E75;width:${goalPct}%"></div>
     </div>
     <div style="font-size:11px;color:#888;margin-bottom:12px">${goalPct}% of group goal ${fmt(g.savings_goal)}</div>`:''}
+    ${backlogHtml}
     ${gMembers.length?`<div class="table-wrap"><table>
-      <tr><th>Member</th><th>Contribution</th><th>Payout order</th><th>This cycle</th><th></th></tr>
+      <tr><th>Member</th><th>Contribution</th><th>Payout order</th><th>Open period</th><th></th></tr>
       ${memberRows}
     </table></div>`:'<div class="empty" style="padding:1rem">No members yet. Invite your first members!</div>'}
     ${gPayouts.length?`
     <div style="margin-top:12px">
       <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:8px">Payout history</div>
       <div class="table-wrap"><table>
-        <tr><th>Recipient</th><th>Amount</th><th>Cycle</th><th>Status</th><th>Date</th></tr>
+        <tr><th>Recipient</th><th>Amount</th><th>Period</th><th>Status</th><th>Date</th></tr>
         ${gPayouts.map(p=>{
           const m=gMembers.find(gm=>gm.id===p.recipient_id);
           const u=m?membersMap[m.user_id]:{name:'Unknown'};
           return`<tr style="${p.status==='completed'?'opacity:0.6':''}">
             <td style="font-weight:500">${u.name} ${p.status==='completed'?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Done</span>':''}</td>
             <td>${fmt(p.amount)}</td>
-            <td>Cycle ${p.cycle}</td>
-            <td>${p.status==='completed'?'<span class="status-pill pill-approved">Completed</span>':'<span class="status-pill pill-pending">Pending</span>'}</td>
+            <td>${cycleLabel(p.cycle,g.rotation_frequency)}</td>
+            <td>${p.status==='completed'?'<span class="status-pill pill-approved">Completed</span>':(p.status==='rejected'?'<span class="status-pill pill-rejected">Rejected</span>':'<span class="status-pill pill-pending">Pending</span>')}</td>
             <td>${p.processed_at?fmtDate(p.processed_at):'—'}</td>
           </tr>`;
         }).join('')}
@@ -5156,12 +5235,17 @@ async function buildAjoMemberView(activeMemberships){
     if(!g)return'';
     const gMembers=(allMembers||[]).filter(mm=>mm.group_id===g.id&&mm.status!=='removed').sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
     const gPayouts=(allPayouts||[]).filter(p=>p.group_id===g.id);
+    const gContribsAll=(allContribs||[]).filter(c=>c.group_id===g.id);
     const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
-    const currentCycle=gPayouts.filter(p=>p.status==='completed').length+1;
+    // Collection periods are calendar-driven — this doesn't wait on a prior period's payout.
+    const openCycle=getOpenCycleKey(g);
+    const completedCycleKeys=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.cycle));
+    const backlogCount=[...new Set(gContribsAll.filter(c=>c.status==='paid'&&c.cycle!==openCycle).map(c=>c.cycle))]
+      .filter(k=>!completedCycleKeys.has(k)).length;
     const unpaidMembers=gMembers.filter(mm=>!completedPayoutIds.has(mm.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
     const myUnpaidRank=unpaidMembers.findIndex(mm=>mm.id===m.id);
     const hasPaidOut=completedPayoutIds.has(m.id);
-    const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
+    const gContribs=gContribsAll.filter(c=>c.member_id===m.id&&c.cycle===openCycle);
     const hasPaidThisCycle=gContribs.some(c=>c.status==='paid');
 
     let payoutStatusHtml;
@@ -5181,14 +5265,15 @@ async function buildAjoMemberView(activeMemberships){
           <h3 style="font-size:15px;margin-bottom:2px">${g.name}</h3>
           <div style="font-size:12px;color:#888">Coordinated by ${coordMap[g.coordinator_id]||'—'}</div>
         </div>
-        <span class="status-pill ${hasPaidThisCycle?'pill-approved':'pill-pending'}">${hasPaidThisCycle?'Paid this cycle':'Pending'}</span>
+        <span class="status-pill ${hasPaidThisCycle?'pill-approved':'pill-pending'}">${hasPaidThisCycle?'Paid this period':'Pending'}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px">
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Your position</div><div style="font-size:15px;font-weight:600">${m.payout_order||'—'}</div></div>
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Your contribution</div><div style="font-size:15px;font-weight:600">${fmt(m.contribution_amount)}</div></div>
-        <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Now collecting</div><div style="font-size:13px;font-weight:600">${cycleLabel(openCycle,g.rotation_frequency)}</div></div>
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Payout when it's your turn</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(gMembers.reduce((a,mm)=>a+Number(mm.contribution_amount),0))}</div></div>
       </div>
+      ${backlogCount>0?`<div style="background:#FFFBEB;color:#856404;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:8px"><i class="ti ti-clock"></i> ${backlogCount} earlier period${backlogCount===1?'':'s'} ${backlogCount===1?'has':'have'} finished collecting and ${backlogCount===1?'is':'are'} waiting on your coordinator to request its payout.</div>`:''}
       ${payoutStatusHtml}
     </div>`;
   }).join('');
@@ -5205,6 +5290,12 @@ function openCreateGroup(){
   <div class="field"><label>Group name</label><input id="cg-name" placeholder="e.g. Ajo December 2026"></div>
   <div class="field"><label>Description</label><input id="cg-desc" placeholder="Brief description"></div>
   <div class="field"><label>Maximum members</label><input id="cg-max" type="number" min="2" value="20" placeholder="e.g. 20"></div>
+  <div class="field"><label>Rotation frequency</label>
+    <select id="cg-freq">
+      <option value="monthly">Monthly — a new round opens on the 1st of each month</option>
+      <option value="weekly">Weekly — a new round opens every Monday</option>
+    </select>
+  </div>
   <div class="field"><label>Group savings goal (optional)</label><input id="cg-goal" type="number" placeholder="e.g. 1000000"></div>
   <div class="error" id="cg-err"></div>
   <div class="modal-footer">
@@ -5217,6 +5308,7 @@ async function saveGroup(id){
   const name=document.getElementById('cg-name').value.trim();
   const description=document.getElementById('cg-desc').value.trim();
   const max_members=parseInt(document.getElementById('cg-max').value)||20;
+  const rotation_frequency=document.getElementById('cg-freq').value==='weekly'?'weekly':'monthly';
   const savings_goal=parseFloat(document.getElementById('cg-goal').value)||null;
   const err=document.getElementById('cg-err');
   const btn=document.getElementById('cg-btn');
@@ -5224,9 +5316,9 @@ async function saveGroup(id){
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
     if(id){
-      await sb(`savings_groups?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name,description,max_members,savings_goal})});
+      await sb(`savings_groups?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name,description,max_members,rotation_frequency,savings_goal})});
     } else {
-      await sb('savings_groups',{method:'POST',body:JSON.stringify({coordinator_id:currentUser.id,name,description,max_members,savings_goal,status:'active'})});
+      await sb('savings_groups',{method:'POST',body:JSON.stringify({coordinator_id:currentUser.id,name,description,max_members,rotation_frequency,savings_goal,status:'active'})});
     }
     closeModal();
     toast('<i class="ti ti-check"></i> Group '+(id?'updated':'created')+'!');
@@ -5242,6 +5334,12 @@ async function openEditGroup(id){
   <div class="field"><label>Group name</label><input id="cg-name" value="${g.name}"></div>
   <div class="field"><label>Description</label><input id="cg-desc" value="${g.description||''}"></div>
   <div class="field"><label>Maximum members</label><input id="cg-max" type="number" value="${g.max_members}"></div>
+  <div class="field"><label>Rotation frequency</label>
+    <select id="cg-freq">
+      <option value="monthly" ${(g.rotation_frequency||'monthly')==='monthly'?'selected':''}>Monthly — a new round opens on the 1st of each month</option>
+      <option value="weekly" ${g.rotation_frequency==='weekly'?'selected':''}>Weekly — a new round opens every Monday</option>
+    </select>
+  </div>
   <div class="field"><label>Group savings goal</label><input id="cg-goal" type="number" value="${g.savings_goal||''}"></div>
   <div class="error" id="cg-err"></div>
   <div class="modal-footer">
@@ -5301,7 +5399,7 @@ async function removeGroupMember(memberId,groupId){
 }
 
 async function resetGroupCycle(groupId){
-  if(!confirm('Reset this group for a new cycle? All contribution and payout history for this group will be cleared and the cycle count will restart at 1. Members stay in the group. This cannot be undone.'))return;
+  if(!confirm('Reset this group for a new rotation? All contribution and payout history for this group will be cleared. Members stay in the group. This cannot be undone.'))return;
   try{
     await sb(`group_contributions?group_id=eq.${groupId}`,{method:'DELETE'});
     await sb(`group_payouts?group_id=eq.${groupId}`,{method:'DELETE'});
@@ -5835,7 +5933,7 @@ async function calculateAndCreditCoordinatorBonus(groupId, coordinatorId, payout
 // admin approves it here.
 
 async function approveGroupPayout(payoutId,groupId,memberId,recipientUserId,amount,cycle,groupName,memberName){
-  if(!confirm(`Approve payout of ${fmt(amount)} to ${memberName} for "${groupName}" (Cycle ${cycle})?`))return;
+  if(!confirm(`Approve payout of ${fmt(amount)} to ${memberName} for "${groupName}" (period ${cycle})?`))return;
   try{
     const today=new Date().toISOString().split('T')[0];
     await sb(`group_payouts?id=eq.${payoutId}`,{method:'PATCH',body:JSON.stringify({status:'completed',processed_at:today})});
@@ -5863,7 +5961,7 @@ async function approveGroupPayout(payoutId,groupId,memberId,recipientUserId,amou
       if(userArr&&userArr.length){
         const u=userArr[0];
         const title=`Ajo payout approved — ${groupName}`;
-        const detail=`Your payout of ${fmt(amount)} from "${groupName}" (Cycle ${cycle}) has been approved. You will be credited within 24 hours or less.`;
+        const detail=`Your payout of ${fmt(amount)} from "${groupName}" (period ${cycle}) has been approved. You will be credited within 24 hours or less.`;
         await addNotification(recipientUserId,title+': '+detail);
         await notify({type:'contributor_action',to:u.email,name:u.name,title,detail});
       }
@@ -5899,8 +5997,8 @@ async function rejectGroupPayout(payoutId,groupId,memberName,groupName,coordinat
 // paid to the coordinator until a human at Fundova has actually signed off on it.
 async function initiateGroupPayout(groupId,memberId,memberName,amount,cycle,override){
   const confirmMsg=override
-    ?`This member is not next in the payout order. Send an admin approval request to override and pay ${fmt(amount)} to ${memberName} out of turn for Cycle ${cycle}?`
-    :`Send a payout of ${fmt(amount)} to ${memberName} for Cycle ${cycle} to admin for approval?`;
+    ?`This member is not next in the payout order. Send an admin approval request to override and pay ${fmt(amount)} to ${memberName} out of turn for period ${cycle}?`
+    :`Send a payout of ${fmt(amount)} to ${memberName} for period ${cycle} to admin for approval?`;
   if(!confirm(confirmMsg))return;
   try{
     const today = new Date().toISOString().split('T')[0];
