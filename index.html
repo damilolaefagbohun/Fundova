@@ -4568,15 +4568,50 @@ async function buildAdminAjoGroupsSection(){
     // never got a completed payout just sit in the backlog list below.
     const openCycle=getOpenCycleKey(g);
     const completedCycleKeys=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.cycle));
+    const pendingCycleKeys=new Set(gPayouts.filter(p=>p.status==='pending').map(p=>p.cycle));
     const closedCycleKeys=[...new Set(gContribsAll.filter(c=>c.status==='paid'&&c.cycle!==openCycle).map(c=>c.cycle))]
       .filter(k=>!completedCycleKeys.has(k)).sort();
 
+    // Figure out WHY a backlog period hasn't been paid out, so admin doesn't have to
+    // dig for it: a request is already sitting with admin, the rotation's next member
+    // hasn't had a payout requested for them yet, the group isn't fully set up (not
+    // enough members, or some members have no payout order assigned), or the whole
+    // rotation is actually done and just needs resetting.
+    const completedPayoutIds=new Set(gPayouts.filter(p=>p.status==='completed').map(p=>p.recipient_id));
+    const unpaidMembersSorted=gMembers.filter(m=>!completedPayoutIds.has(m.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
+    const nextPayoutMember=unpaidMembersSorted.length?unpaidMembersSorted[0]:null;
+    const membersMissingOrder=gMembers.some(m=>!m.payout_order);
+    const groupIncomplete=gMembers.length<g.max_members||membersMissingOrder;
+
     const backlogHtml=closedCycleKeys.map(ck=>{
       const pooled=gContribsAll.filter(c=>c.cycle===ck&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+      let reason;
+      if(pendingCycleKeys.has(ck)){
+        reason='a payout has been requested for this period and is awaiting your approval';
+      } else if(!nextPayoutMember){
+        reason='every member has already received a payout this rotation — reset the group to start a new one';
+      } else {
+        const nextName=(usersMap[nextPayoutMember.user_id]||{}).name||'the next member';
+        reason=groupIncomplete
+          ?`group isn't fully set up yet (${gMembers.length}/${g.max_members} members${membersMissingOrder?', payout order not set for everyone':''}) — once ready, it's ${nextName}'s turn`
+          :`it's ${nextName}'s turn — the coordinator hasn't requested this payout yet`;
+      }
       return`<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#856404;display:flex;justify-content:space-between;align-items:center">
-        <span><i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled, awaiting payout</span>
+        <span><i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled, awaiting payout — ${reason}</span>
       </div>`;
     }).join('');
+
+    // A quick note for cycles that HAVE already been paid out, so admin can see at a
+    // glance who got paid for which period without opening payout history separately.
+    const completedPayoutsHtml=gPayouts.filter(p=>p.status==='completed')
+      .sort((a,b)=>String(a.cycle).localeCompare(String(b.cycle)))
+      .map(p=>{
+        const recipMember=(allMembers||[]).find(m=>m.id===p.recipient_id);
+        const recipName=recipMember?(usersMap[recipMember.user_id]||{}).name:null;
+        return`<div style="background:#ECFDF5;border:1px solid #D1FAE5;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#065F46">
+          <i class="ti ti-check"></i> ${cycleLabel(p.cycle,g.rotation_frequency)} payout of ${fmt(p.amount)} made to ${recipName||'a member no longer on this list'}${p.processed_at?' on '+fmtDate(p.processed_at):''}
+        </div>`;
+      }).join('');
 
     const rows=gMembers.map(m=>{
       const u=usersMap[m.user_id]||{name:'Unknown'};
@@ -4596,6 +4631,7 @@ async function buildAdminAjoGroupsSection(){
     }).join('');
     return`<div style="margin-bottom:1.25rem">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px">${g.name} <span style="font-weight:400;color:#888;font-size:12px">· Coordinator: ${coordMap[g.coordinator_id]||'—'} · ${g.rotation_frequency==='weekly'?'Weekly':'Monthly'} rotation · Now collecting: ${cycleLabel(openCycle,g.rotation_frequency)}</span></div>
+      ${completedPayoutsHtml}
       ${backlogHtml}
       <div class="table-wrap"><table>
         <tr><th>Member</th><th>Expected</th><th>This period</th><th></th></tr>
@@ -4675,7 +4711,8 @@ function getOpenCycleKey(group,atDate){
 }
 function cycleLabel(key,frequency){
   if(!key)return'—';
-  if(frequency==='weekly'||/-W\d{2}$/.test(key)){
+  key=String(key);
+  if(/^\d{4}-W\d{2}$/.test(key)){
     const [y,w]=key.split('-W').map(Number);
     // Monday of that ISO week
     const jan4=new Date(Date.UTC(y,0,4));
@@ -4685,8 +4722,14 @@ function cycleLabel(key,frequency){
     const fmtOpt={month:'short',day:'numeric'};
     return `Week of ${monday.toLocaleDateString('en-GB',fmtOpt)}–${sunday.toLocaleDateString('en-GB',fmtOpt)}, ${y}`;
   }
-  const [y,m]=key.split('-').map(Number);
-  return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  if(/^\d{4}-\d{2}$/.test(key)){
+    const [y,m]=key.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  }
+  // Legacy cycle value from before calendar-based cycles (a plain number like "1", "2")
+  // — not a date at all, so just label it plainly instead of trying (and failing) to
+  // parse it as one.
+  return `Cycle ${key}`;
 }
 
 async function adminRecordGroupContribution(memberId,groupId,amount,cycle,userId,payoutOrder,totalMembers,groupName,coordinatorId){
@@ -5011,10 +5054,24 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
   const allMembersPaidPayoutCycle=payoutCycle?gMembers.every(m=>payoutCycleContribs.some(c=>c.member_id===m.id)):false;
   const canRequestPayout=!!(payoutCycle&&allMembersPaidPayoutCycle&&!payoutCyclePending);
 
+  const membersMissingOrder=gMembers.some(m=>!m.payout_order);
+  const groupIncomplete=gMembers.length<g.max_members||membersMissingOrder;
   const backlogHtml=closedCycleKeys.map(ck=>{
     const pooled=gContribsAll.filter(c=>c.cycle===ck&&c.status==='paid').reduce((a,c)=>a+Number(c.amount),0);
+    let reason;
+    if(ck!==payoutCycle){
+      reason='waiting its turn behind an earlier period';
+    } else if(payoutCyclePending){
+      reason='payout requested — awaiting admin approval';
+    } else if(!allMembersPaidPayoutCycle){
+      reason=groupIncomplete
+        ?`group isn't fully set up yet (${gMembers.length}/${g.max_members} members${membersMissingOrder?', payout order not set for everyone':''}) — not everyone has contributed this period`
+        :"not everyone has contributed this period yet — pool isn't complete";
+    } else {
+      reason='ready to request payout below';
+    }
     return`<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#856404">
-      <i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled${ck===payoutCycle?(payoutCyclePending?', payout requested — awaiting admin approval':', ready to request payout below'):', waiting its turn behind an earlier period'}
+      <i class="ti ti-clock"></i> ${cycleLabel(ck,g.rotation_frequency)} — ${fmt(pooled)} pooled, ${reason}
     </div>`;
   }).join('');
 
