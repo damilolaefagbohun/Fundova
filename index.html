@@ -4933,6 +4933,14 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
   const unpaidMembers=gMembers.filter(m=>!completedPayoutIds.has(m.id)).sort((a,b)=>(a.payout_order||999)-(b.payout_order||999));
   const nextPayoutMemberId=unpaidMembers.length?unpaidMembers[0].id:null;
 
+  // The payout is the FULL POOL for this cycle — every member's contribution combined —
+  // not just the recipient's own contribution. An Ajo/rotating group pools everyone's
+  // money each cycle and pays the whole pot to whoever's turn it is; it's not a
+  // per-member payout of their own savings.
+  const cyclePaidContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.cycle===currentCycle&&c.status==='paid');
+  const cyclePooledAmount=cyclePaidContribs.reduce((a,c)=>a+Number(c.amount),0);
+  const allMembersPaidThisCycle=gMembers.every(m=>cyclePaidContribs.some(c=>c.member_id===m.id));
+
   const memberRows=gMembers.map(m=>{
     const u=membersMap[m.user_id]||{name:'Unknown'};
     const hasPaidOut=completedPayoutIds.has(m.id);
@@ -4940,6 +4948,7 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
     const gContribs=(allContribs||[]).filter(c=>c.group_id===g.id&&c.member_id===m.id&&c.cycle===currentCycle);
     const hasPaid=gContribs.some(c=>c.status==='paid');
     const isNextInLine=!hasPaidOut&&m.id===nextPayoutMemberId;
+    const payoutBlocked=!allMembersPaidThisCycle;
     return`<tr style="${hasPaidOut?'opacity:0.5':''}">
       <td>
         <div style="font-weight:500">${u.name} ${hasPaidOut?'<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:10px">Paid out</span>':''}${hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Awaiting admin approval</span>':''}${isNextInLine&&!hasPendingPayout?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:1px 6px;border-radius:10px;margin-left:4px">Next in line</span>':''}</div>
@@ -4952,8 +4961,9 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
         :'<span class="status-pill pill-pending">Pending</span>'}</td>
       <td><div style="display:flex;gap:4px;justify-content:flex-end">
         ${!hasPaidOut&&hasPendingPayout?`<button class="btn btn-sm" disabled title="Waiting on admin approval" style="opacity:.5;cursor:not-allowed"><i class="ti ti-clock"></i> Awaiting approval</button>`:''}
-        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle})"><i class="ti ti-cash"></i> Request payout</button>`:''}
-        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button><button class="btn btn-sm" title="Coordinator override: request payout out of turn" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${m.contribution_amount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&!payoutBlocked?`<button class="btn btn-sm" style="background:#0F6E56;color:#fff" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${cyclePooledAmount},${currentCycle})"><i class="ti ti-cash"></i> Request payout (${fmt(cyclePooledAmount)})</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&isNextInLine&&payoutBlocked?`<button class="btn btn-sm" disabled title="Not everyone has contributed this cycle yet — pool isn't complete" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button>`:''}
+        ${!hasPaidOut&&!hasPendingPayout&&!isNextInLine?`<button class="btn btn-sm" disabled title="Not this member's turn yet" style="opacity:.4;cursor:not-allowed"><i class="ti ti-cash"></i> Request payout</button><button class="btn btn-sm" title="Coordinator override: request payout out of turn (full pool: ${fmt(cyclePooledAmount)})" onclick="initiateGroupPayout('${g.id}','${m.id}','${u.name.replace(/'/g,"\'")}',${cyclePooledAmount},${currentCycle},true)" style="color:#856404"><i class="ti ti-alert-triangle"></i></button>`:''}
         ${!hasPaidOut?`<button class="btn btn-sm btn-danger" title="Remove member" onclick="removeGroupMember('${m.id}','${g.id}')"><i class="ti ti-user-x"></i></button>`:''}
       </div></td>
     </tr>`;
@@ -4982,6 +4992,7 @@ function buildAjoGroupCard(g,allMembers,allContribs,allPayouts,membersMap){
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Total saved</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(totalSaved)}</div></div>
       <div class="stat" style="padding:10px 12px"><div class="stat-label">Expected/cycle</div><div style="font-size:15px;font-weight:600">${fmt(totalExpected)}</div></div>
+      <div class="stat" style="padding:10px 12px"><div class="stat-label">Pooled this cycle</div><div style="font-size:15px;font-weight:600;color:${allMembersPaidThisCycle?'#0F6E56':'#856404'}">${fmt(cyclePooledAmount)}${!allMembersPaidThisCycle?' <span style="font-size:10px;font-weight:600">(incomplete)</span>':''}</div></div>
     </div>
     ${goalPct!==null?`
     <div style="background:#f5f5f3;border-radius:8px;height:6px;overflow:hidden;margin-bottom:4px">
@@ -5176,6 +5187,7 @@ async function buildAjoMemberView(activeMemberships){
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Your position</div><div style="font-size:15px;font-weight:600">${m.payout_order||'—'}</div></div>
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Your contribution</div><div style="font-size:15px;font-weight:600">${fmt(m.contribution_amount)}</div></div>
         <div class="stat" style="padding:10px 12px"><div class="stat-label">Current cycle</div><div style="font-size:15px;font-weight:600">${currentCycle}</div></div>
+        <div class="stat" style="padding:10px 12px"><div class="stat-label">Payout when it's your turn</div><div style="font-size:15px;font-weight:600;color:#0F6E56">${fmt(gMembers.reduce((a,mm)=>a+Number(mm.contribution_amount),0))}</div></div>
       </div>
       ${payoutStatusHtml}
     </div>`;
