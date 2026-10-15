@@ -151,7 +151,6 @@ tr:hover td{background:#fafafa}
 <script>
 const SB_URL='https://btcpkjlyifwvsybscpxz.supabase.co'; // kept for storage uploads only
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Y3Bramx5aWZ3dnN5YnNjcHh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxNTA1NTUsImV4cCI6MjA5OTcyNjU1NX0.tDcHjN69-rvp0LTItWRbmfW8OO6Y8-abQYYyqOzcAdg'; // legacy anon/public JWT key — required for direct Supabase Storage uploads (the newer sb_publishable_ format isn't accepted here)
-const RESEND_KEY='re_6PaHpCMk_F9WEsuSJKdg4FZhZWouLNTDj';
 const SITE_URL='https://www.fundova.africa';
 const RATE=0.10;
 const WEEKDAYS_PER_YEAR=261;
@@ -228,6 +227,14 @@ function countWeekdays(startDate,endDate){
   d.setHours(0,0,0,0);end.setHours(0,0,0,0);
   while(d<end){const day=d.getDay();if(day!==0&&day!==6)count++;d.setDate(d.getDate()+1);}
   return count;
+}
+// Interest earned "today": 0 on weekends; payments made today haven't started accruing yet.
+function interestForToday(pays){
+  const now=new Date();
+  const dow=now.getDay();
+  if(dow===0||dow===6)return 0;
+  const todayStr=now.toDateString();
+  return (pays||[]).filter(p=>new Date(p.date).toDateString()!==todayStr).reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
 }
 function calcAccruedInterest(amount,payDate,withdrawnAt){
   const today=new Date();today.setHours(0,0,0,0);
@@ -990,7 +997,7 @@ async function renderAdmin(){
     // Only count interest on payments that have actually started accruing — a payment made
     // TODAY hasn't earned anything yet (accrual starts the day after), so it must be excluded
     // here or adding a new contribution would falsely bump "today's interest" instantly.
-    const todayInterest = payments.filter(p=>new Date(p.date).toDateString()!==todayStr).reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
+    const todayInterest = interestForToday(payments);
     const todayApps = (signups||[]).filter(s=>new Date(s.created_at).toDateString()===todayStr).length;
     const todayKycVerifications = (kycAll||[]).filter(k=>k.verified_at&&new Date(k.verified_at).toDateString()===todayStr).length;
     const [todayProfileRequests,pendingProfileRequests] = await Promise.all([
@@ -1538,6 +1545,8 @@ async function updateRequest(id,status){
       // money must never be touched by a regular withdrawal approval
       const payments=await sb(`payments?user_id=eq.${req.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
       if(!payments||!payments.length)throw new Error('No active payments found');
+      const availableTotal=payments.reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date,null),0);
+      if(availableTotal+0.01<remaining)throw new Error('Insufficient balance: member has '+fmt(availableTotal)+' available, request is '+fmt(remaining));
 
       const today=new Date().toISOString().split('T')[0];
 
@@ -1664,6 +1673,91 @@ function renderClosurePendingScreen(closureReq){
 
 
 // ─── CONTRIBUTOR DASHBOARD ────────────────────────────────
+// ─── STATEMENT OF ACCOUNT ───────────────────────────────────
+// Read-only, full history: every contribution (withdrawn or not) and every withdrawal.
+// Display only — never touches balances or interest.
+function _stEsc(t){return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function openStatement(){
+  openModal('<div style="padding:2rem;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;display:inline-block"></div> Preparing your statement…</div>');
+  try{
+    const uid=currentUser.id;
+    const [pays,reqs,res]=await Promise.all([
+      sb(`payments?user_id=eq.${uid}&select=*&order=date.asc`),
+      sb(`withdrawal_requests?user_id=eq.${uid}&status=eq.approved&select=*`),
+      sb(`investment_reservations?user_id=eq.${uid}&status=eq.payment_confirmed&payment_method=eq.savings&select=*`).catch(()=>[])
+    ]);
+    let invMap={};
+    if(res&&res.length){
+      try{
+        const ids=[...new Set(res.map(r=>r.investment_id))];
+        const invs=await sb(`investments?id=in.(${ids.join(',')})&select=id,title,unit_price`);
+        (invs||[]).forEach(i=>invMap[i.id]=i);
+      }catch(e){}
+    }
+    const rows=[];
+    let totalIn=0,totalOut=0,totalUsed=0;
+    (pays||[]).forEach(p=>{
+      const amt=Number(p.amount);
+      if(p.is_transfer){
+        // internal relabeling — except food scheme deductions, which are real money used
+        if(amt<0&&p.purpose){rows.push({d:p.date,t:'used',desc:p.purpose,amt:Math.abs(amt)});totalUsed+=Math.abs(amt);}
+        return;
+      }
+      if(amt>0){rows.push({d:p.date,t:'in',desc:p.purpose||'Savings contribution',amt});totalIn+=amt;}
+    });
+    (reqs||[]).forEach(r=>{
+      const amt=Number(r.amount);
+      rows.push({d:r.approved_at||r.created_at,t:'out',desc:r.is_account_closure?'Account closure withdrawal':(r.note||'Withdrawal'),amt});
+      totalOut+=amt;
+    });
+    (res||[]).forEach(r=>{
+      const inv=invMap[r.investment_id];
+      if(!inv)return;
+      const amt=r.units*inv.unit_price;
+      rows.push({d:r.updated_at||r.created_at,t:'used',desc:'Investment: '+inv.title,amt});
+      totalUsed+=amt;
+    });
+    rows.sort((a,b)=>new Date(b.d)-new Date(a.d));
+    const held=(pays||[]).filter(p=>!p.withdrawn&&!p.moved_at).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date),0);
+    const tag={in:['Contribution','#0F6E56'],out:['Withdrawal','#A32D2D'],used:['Applied','#856404']};
+    const tbl=rows.length?rows.map(r=>`<tr>
+      <td style="white-space:nowrap">${fmtDate(r.d)}</td>
+      <td style="font-size:12px;color:#555">${_stEsc(r.desc)}</td>
+      <td style="font-size:11px;font-weight:600;color:${tag[r.t][1]}">${tag[r.t][0]}</td>
+      <td style="text-align:right;font-weight:600;color:${tag[r.t][1]};white-space:nowrap">${r.t==='in'?'+':'-'}${fmt(r.amt)}</td>
+    </tr>`).join(''):'<tr><td colspan="4" class="empty">No transactions yet.</td></tr>';
+    window._stRows=rows;
+    openModal(`
+    <h3 style="margin-bottom:2px">Statement of account</h3>
+    <p style="font-size:12px;color:#888;margin:0 0 12px">${_stEsc(currentUser.name)} &middot; as at ${fmtDate(new Date())}</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">
+      <div style="background:#E8F5EE;border-radius:10px;padding:10px"><div style="font-size:10px;font-weight:600;color:#0F6E56;text-transform:uppercase">Total contributed</div><div style="font-size:16px;font-weight:800;color:#0F6E56">${fmt(totalIn)}</div></div>
+      <div style="background:#FDECEC;border-radius:10px;padding:10px"><div style="font-size:10px;font-weight:600;color:#A32D2D;text-transform:uppercase">Total withdrawn</div><div style="font-size:16px;font-weight:800;color:#A32D2D">${fmt(totalOut)}</div></div>
+      <div style="background:#f5f5f3;border-radius:10px;padding:10px"><div style="font-size:10px;font-weight:600;color:#555;text-transform:uppercase">Currently with Fundova</div><div style="font-size:16px;font-weight:800;color:#0D1F14">${fmt(held)}</div></div>
+    </div>
+    ${totalUsed>0?`<p style="font-size:12px;color:#856404;margin:0 0 10px">Applied to investments / food scheme from your savings: ${fmt(totalUsed)}</p>`:''}
+    <div class="table-wrap" style="max-height:340px;overflow-y:auto"><table>
+      <tr><th>Date</th><th>Details</th><th>Type</th><th style="text-align:right">Amount</th></tr>
+      ${tbl}
+    </table></div>
+    <p style="font-size:11px;color:#aaa;margin:10px 0 0">Contributions include all money you have paid in, whether it is still saved or has since been withdrawn. Interest is shown on your dashboard and is not part of these totals. This statement is for information only and does not change your balance.</p>
+    <div class="modal-footer">
+      <button class="btn" onclick="printStatement()"><i class="ti ti-printer"></i> Print / save PDF</button>
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>`);
+  }catch(e){
+    openModal('<h3>Statement of account</h3><div class="error" style="display:block">Could not load your statement: '+_stEsc(e.message)+'</div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal()">Close</button></div>');
+  }
+}
+function printStatement(){
+  const body=document.getElementById('modal-content').innerHTML;
+  const w=window.open('','_blank');
+  if(!w){alert('Please allow pop-ups to print your statement.');return;}
+  w.document.write('<html><head><title>Fundova statement</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#0D1F14}table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border-bottom:1px solid #ddd;font-size:12px;text-align:left}.modal-footer,button{display:none}.table-wrap{max-height:none!important;overflow:visible!important}</style></head><body><h2>Fundova Multipurpose Cooperative Society Ltd</h2>'+body+'</body></html>');
+  w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
+
+
 async function renderContributor(){
   setHTML(`<div class="loading-full"><div class="spinner spinner-dark" style="width:20px;height:20px"></div> Loading…</div>`);
   try{
@@ -1745,7 +1839,7 @@ async function renderContributor(){
             {icon:'ti-home',label:'Dashboard',id:'dash'},
             {icon:'ti-chart-bar',label:'Transactions',id:'txn'},
             {icon:'ti-cash',label:'Withdrawals',id:'wdw'},
-            {icon:'ti-file-text',label:'Statements',id:'txn'},
+            {icon:'ti-file-text',label:'Statement of account',action:'openStatement()'},
           ]},
           {section:'Save & Grow', items:[
             {icon:'ti-target',label:'Savings Goals',id:'goals'},
@@ -1827,7 +1921,7 @@ async function renderContributor(){
         </div>
         <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#C9961A;font-weight:600;margin-bottom:1.25rem">
           <i class="ti ti-trending-up" style="font-size:14px"></i>
-          +₦${[...payments,...(goalPayments||[])].reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0).toLocaleString('en-NG',{minimumFractionDigits:2})} earned today
+          +₦${interestForToday([...payments,...(goalPayments||[])]).toLocaleString('en-NG',{minimumFractionDigits:2})} earned today
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:${goals&&goals.length?'1.25rem':'0'}">
           <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="scrollToSection('goals')">
@@ -1970,6 +2064,7 @@ async function renderContributor(){
       <div id="txn" style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.25rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
           <div style="font-size:15px;font-weight:600;color:#0D1F14">Recent transactions</div>
+          <button class="btn btn-sm" onclick="openStatement()"><i class="ti ti-file-text"></i> Statement of account</button>
         </div>
         ${payments.length?`<div class="table-wrap"><table>
           <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest accrued</th></tr>
@@ -3020,6 +3115,8 @@ async function updateReservation(resId,status,invId){
         const totalCost=res.units*inv.unit_price;
         const pays=await sb(`payments?user_id=eq.${res.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
         let remaining=totalCost;
+        const availableTotal=pays.reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date,null),0);
+        if(availableTotal+0.01<totalCost)throw new Error('Insufficient savings balance: member has '+fmt(availableTotal)+', investment costs '+fmt(totalCost));
         const today=new Date().toISOString().split('T')[0];
         for(const p of pays){
           if(remaining<=0)break;
@@ -3138,6 +3235,14 @@ async function renderContributorInvestments(){
     const open=investments.filter(i=>i.status==='open');
     const comingSoon=investments.filter(i=>i.status==='coming_soon');
     const myConfirmedInvIds=new Set(myConfirmed.map(r=>r.investment_id));
+    // Total confirmed units per investment across ALL investors (needed for correct income share / progress)
+    const confirmedUnitsByInv={};
+    if(myConfirmedInvIds.size){
+      try{
+        const allConf=await sb(`investment_reservations?investment_id=in.(${[...myConfirmedInvIds].join(',')})&status=eq.payment_confirmed&select=investment_id,units`);
+        (allConf||[]).forEach(x=>{confirmedUnitsByInv[x.investment_id]=(confirmedUnitsByInv[x.investment_id]||0)+Number(x.units||0);});
+      }catch(e){}
+    }
     const openNotInvested=open.filter(inv=>!myConfirmedInvIds.has(inv.id));
 
     // Fetch confirmed reservations for funding progress on available investments
@@ -3209,7 +3314,7 @@ async function renderContributorInvestments(){
       let totalIncomeReceived=0;
       myConfirmed.forEach(r=>{
         const invIncome=allIncome.filter(inc=>inc.investment_id===r.investment_id);
-        const totalConfirmedUnits=myReservations.filter(x=>x.investment_id===r.investment_id&&x.status==='confirmed').reduce((a,x)=>a+x.units,0);
+        const totalConfirmedUnits=Math.max(confirmedUnitsByInv[r.investment_id]||0,r.units);
         invIncome.forEach(inc=>{
           totalIncomeReceived+=r.units/Math.max(totalConfirmedUnits,1)*inc.net_income;
         });
@@ -3243,7 +3348,7 @@ async function renderContributorInvestments(){
         const inv=investments.find(i=>i.id===r.investment_id);
         if(!inv)return;
         const amountInvested=r.units*inv.unit_price;
-        const totalConfirmedUnits=myReservations.filter(x=>x.investment_id===r.investment_id&&x.status==='confirmed').reduce((a,x)=>a+x.units,0);
+        const totalConfirmedUnits=Math.max(confirmedUnitsByInv[r.investment_id]||0,r.units);
         const ownershipPct=((r.units/inv.total_units)*100).toFixed(2);
         const invIncome=allIncome.filter(inc=>inc.investment_id===r.investment_id);
         const myIncome=+invIncome.reduce((a,inc)=>a+r.units/Math.max(totalConfirmedUnits,1)*inc.net_income,0).toFixed(2);
@@ -5760,7 +5865,8 @@ function openSurplusDistribution(){
     <button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="sd-btn" onclick="processSurplusDistribution()"><i class="ti ti-gift"></i> Distribute surplus</button>
   </div>`);
-  // Load contributor count and total savings
+  // Always reload fresh balances — a cached list from an earlier open would be stale
+  surplusContributors = []; surplusTotalSavings = 0;
   previewSurplus();
 }
 
@@ -5886,6 +5992,7 @@ async function rollBonusToSavings(){
   try{
     const bonuses = await sb(`cooperative_bonuses?user_id=eq.${currentUser.id}&status=eq.available&select=*`);
     const total = (bonuses||[]).reduce((a,b)=>a+Number(b.amount),0);
+    if(!(total>0)){alert('No available bonus to add.');return;}
     const today = new Date().toISOString().split('T')[0];
     // Credit to savings
     await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:total,date:today,withdrawn:false})});
@@ -6597,9 +6704,10 @@ async function buildAnalyticsTab(){
 // ─── ANALYTICS SECTION LOADERS (investment / Ajo / food scheme / cooperative health) ──
 async function loadAnalyticsSections(){
   try{
-    const [invReservations, invIncome, groups, groupContribs, groupPayouts, coordEarnings, foodEnrollments, foodOptions, kyc, allPay, contributors] = await Promise.all([
+    const [invReservations, invIncome, invList, groups, groupContribs, groupPayouts, coordEarnings, foodEnrollments, foodOptions, kyc, allPay, contributors] = await Promise.all([
       sb('investment_reservations?select=*'),
       sb('investment_income?select=*'),
+      sb('investments?select=id,unit_price'),
       sb('savings_groups?select=*'),
       sb('group_contributions?select=*'),
       sb('group_payouts?select=*'),
@@ -6614,10 +6722,12 @@ async function loadAnalyticsSections(){
     // Investment analytics
     const invEl = document.getElementById('inv-analytics');
     if(invEl){
-      const totalRaised = (invReservations||[]).filter(r=>r.status==='confirmed'||r.status==='payment_made').reduce((a,r)=>a+Number(r.amount||0),0);
-      const activeInvCount = new Set((invReservations||[]).filter(r=>r.status==='confirmed').map(r=>r.investment_id)).size;
-      const totalIncome = (invIncome||[]).reduce((a,i)=>a+Number(i.amount||0),0);
-      const totalUnits = (invReservations||[]).filter(r=>r.status==='confirmed').reduce((a,r)=>a+Number(r.units||0),0);
+      const priceOf = id => Number(((invList||[]).find(i=>i.id===id)||{}).unit_price||0);
+      const confirmedRes = (invReservations||[]).filter(r=>r.status==='payment_confirmed');
+      const totalRaised = confirmedRes.reduce((a,r)=>a+Number(r.units||0)*priceOf(r.investment_id),0);
+      const activeInvCount = new Set(confirmedRes.map(r=>r.investment_id)).size;
+      const totalIncome = (invIncome||[]).reduce((a,i)=>a+Number(i.net_income||0),0);
+      const totalUnits = confirmedRes.reduce((a,r)=>a+Number(r.units||0),0);
       invEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><h3 style="margin:0">Investment analytics</h3></div>'+
         (totalRaised===0?'<div class="empty">No investment data yet.</div>':
         '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">'+
@@ -6633,8 +6743,8 @@ async function loadAnalyticsSections(){
     if(ajoEl){
       const activeGroups = (groups||[]).filter(g=>g.status==='active').length;
       const totalAjoFunds = (groupContribs||[]).reduce((a,c)=>a+Number(c.amount||0),0);
-      const totalAjoPayouts = (groupPayouts||[]).reduce((a,p)=>a+Number(p.amount||0),0);
-      const totalCoordEarnings = (coordEarnings||[]).reduce((a,e)=>a+Number(e.amount||0),0);
+      const totalAjoPayouts = (groupPayouts||[]).filter(p=>p.status==='completed').reduce((a,p)=>a+Number(p.amount||0),0);
+      const totalCoordEarnings = (coordEarnings||[]).reduce((a,e)=>a+Number(e.bonus_amount||0),0);
       ajoEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><h3 style="margin:0">Ajo group analytics</h3></div>'+
         (activeGroups===0?'<div class="empty">No active Ajo groups yet.</div>':
         '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">'+
@@ -6674,7 +6784,7 @@ async function loadAnalyticsSections(){
       const totalPrincipal = (allPay||[]).reduce((a,p)=>a+Number(p.amount),0);
       const totalInterestAll = (allPay||[]).reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
       const totalMemberValue = totalPrincipal + totalInterestAll;
-      const totalAjoHeld = Math.max(0,(groupContribs||[]).reduce((a,c)=>a+Number(c.amount||0),0)-(groupPayouts||[]).reduce((a,p)=>a+Number(p.amount||0),0));
+      const totalAjoHeld = Math.max(0,(groupContribs||[]).reduce((a,c)=>a+Number(c.amount||0),0)-(groupPayouts||[]).filter(p=>p.status==='completed').reduce((a,p)=>a+Number(p.amount||0),0));
       const totalObligation = totalMemberValue + totalAjoHeld;
       const kycVerified = (kyc||[]).filter(k=>k.kyc_verified).length;
       const totalMembers = (contributors||[]).length;
