@@ -234,7 +234,25 @@ function interestForToday(pays){
   const dow=now.getDay();
   if(dow===0||dow===6)return 0;
   const todayStr=now.toDateString();
-  return (pays||[]).filter(p=>new Date(p.date).toDateString()!==todayStr).reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
+  return (pays||[]).filter(p=>!p.is_interest&&new Date(p.date).toDateString()!==todayStr).reduce((a,p)=>a+Number(p.amount)*RATE/WEEKDAYS_PER_YEAR,0);
+}
+// ── Row-aware helpers: is_interest rows hold already-earned interest carried forward and
+// earn nothing themselves, so interest is never earned on interest. ──
+function rowInterest(p,end){ return p.is_interest?0:calcAccruedInterest(Number(p.amount),p.date,end==null?null:end); }
+function rowIntTotal(p,end){ return p.is_interest?Number(p.amount):rowInterest(p,end); }
+function rowPrincipal(p){ return p.is_interest?0:Number(p.amount); }
+function rowValue(p,end){ return Number(p.amount)+rowInterest(p,end); }
+function lotParts(p,end){ return p.is_interest?{P:0,I:Number(p.amount)}:{P:Number(p.amount),I:rowInterest(p,end)}; }
+// Take `take` out of a lot, interest first, then principal.
+function splitLot(parts,take){
+  const iT=Math.min(take,parts.I), pT=Math.max(0,take-iT);
+  return {takeI:+iT.toFixed(2),takeP:+pT.toFixed(2),leftI:+Math.max(0,parts.I-iT).toFixed(2),leftP:+Math.max(0,parts.P-pT).toFixed(2)};
+}
+// Carry a remainder forward as a principal row + a separate non-earning interest row, dated today.
+async function postCarryRows(userId,principal,interest,goalId,label){
+  const today=new Date().toISOString().split('T')[0];
+  if(principal>0.004)await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount:+principal.toFixed(2),date:today,withdrawn:false,goal_id:goalId||null,is_transfer:true,purpose:label})});
+  if(interest>0.004)await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount:+interest.toFixed(2),date:today,withdrawn:false,goal_id:goalId||null,is_transfer:true,is_interest:true,purpose:'Interest earned (carried forward)'})});
 }
 function calcAccruedInterest(amount,payDate,withdrawnAt){
   const today=new Date();today.setHours(0,0,0,0);
@@ -859,8 +877,8 @@ async function renderAdmin(){
     renderAdminChart(allPayments);
   }, 100);
   const pendingSignups=(signups||[]).filter(s=>s.status==='pending').length;
-    const totalPrincipal=payments.reduce((a,p)=>a+Number(p.amount),0);
-    const totalInterest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const totalPrincipal=payments.reduce((a,p)=>a+rowPrincipal(p),0);
+    const totalInterest=payments.reduce((a,p)=>a+rowIntTotal(p),0);
   const totalValue=totalPrincipal+totalInterest;
   checkMilestones(totalValue).catch(()=>{});
   checkBirthday().catch(()=>{});
@@ -1188,8 +1206,8 @@ async function renderAdmin(){
     const addBtn = !isViewOnly() ? '<button class="btn btn-sm btn-primary" onclick="openAddContributor()"><i class="ti ti-plus"></i> Add contributor</button>' : '';
     const contribRows = (contributors||[]).map(c => {
       const cP = payments.filter(p=>p.user_id===c.id);
-      const prin = cP.reduce((a,p)=>a+Number(p.amount),0);
-      const int = cP.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+      const prin = cP.reduce((a,p)=>a+rowPrincipal(p),0);
+      const int = cP.reduce((a,p)=>a+rowIntTotal(p),0);
       const tot = prin+int;
       const lastP = [...cP].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
       const gp = c.savings_goal ? Math.min(100,Math.round((tot/c.savings_goal)*100)) : null;
@@ -1281,8 +1299,8 @@ function buildContributorsTab(contributors,payments,kycMap={}){
 
   const rows=contributors.map(c=>{
     const pays=payments.filter(p=>p.user_id===c.id);
-    const principal=pays.reduce((a,p)=>a+Number(p.amount),0);
-    const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const principal=pays.reduce((a,p)=>a+rowPrincipal(p),0);
+    const interest=pays.reduce((a,p)=>a+rowIntTotal(p),0);
     return`<tr>
       <td><div style="display:flex;align-items:center;gap:9px"><div class="avatar">${initials(c.name)}</div><div><div style="font-weight:500">${c.name}</div><div style="font-size:11px;color:#888">${c.email}</div></div></div></td>
       <td>${kycBadgeHTML(kycMap[c.id])}</td>
@@ -1316,7 +1334,7 @@ function buildPaymentsTab(payments,contributors){
   const today=new Date();today.setHours(0,0,0,0);
   const rows=sorted.map(p=>{
     const user=contributors.find(u=>u.id===p.user_id);
-    const interest=calcAccruedInterest(p.amount,p.date,p.withdrawn_at);
+    const interest=rowInterest(p,p.withdrawn_at);
     const endDate=p.withdrawn_at?new Date(p.withdrawn_at):today;
     const start=new Date(p.date);start.setHours(0,0,0,0);
     const weekdays=countWeekdays(start,endDate);
@@ -1545,15 +1563,14 @@ async function updateRequest(id,status){
       // money must never be touched by a regular withdrawal approval
       const payments=await sb(`payments?user_id=eq.${req.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
       if(!payments||!payments.length)throw new Error('No active payments found');
-      const availableTotal=payments.reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date,null),0);
+      const availableTotal=payments.reduce((a,p)=>a+rowValue(p,null),0);
       if(availableTotal+0.01<remaining)throw new Error('Insufficient balance: member has '+fmt(availableTotal)+' available, request is '+fmt(remaining));
 
       const today=new Date().toISOString().split('T')[0];
 
       for(const p of payments){
         if(remaining<=0)break;
-        const principal=Number(p.amount);
-        const interest=calcAccruedInterest(principal,p.date,null);
+        const lp=lotParts(p,null);const principal=lp.P;const interest=lp.I;
         const totalValue=+(principal+interest).toFixed(2);
 
         if(totalValue<=remaining){
@@ -1565,17 +1582,9 @@ async function updateRequest(id,status){
           // Mark original as withdrawn
           await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
           // Calculate leftover and create new active payment dated today
-          const leftover=+(totalValue-remaining).toFixed(2);
+          const sp=splitLot({P:principal,I:interest},remaining);
           remaining=0;
-          if(leftover>0){
-            await sb('payments',{method:'POST',body:JSON.stringify({
-              user_id:req.user_id,
-              amount:leftover,
-              date:today,
-              withdrawn:false,
-              is_transfer:true
-            })});
-          }
+          await postCarryRows(req.user_id,sp.leftP,sp.leftI,null,'Balance carried forward after withdrawal');
         }
       }
     }
@@ -1631,11 +1640,10 @@ async function requestAccountClosure(){
     const goals=await sb(`goals?user_id=eq.${currentUser.id}&archived=eq.false&select=*`);
     for(const g of (goals||[])){
       const gPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${g.id}&moved_at=is.null&select=*&order=date.asc`);
-      const gBalance=(gPayments||[]).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(p.amount,p.date),0);
+      const gBalance=(gPayments||[]).reduce((a,p)=>a+rowValue(p),0);
       if(gBalance>0.5){
-        await consumePaymentsFIFO(gPayments,gBalance,g.id);
-        const todayDateOnly=new Date().toISOString().split('T')[0];
-        await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+gBalance.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null,is_transfer:true})});
+        const moved=await consumePaymentsFIFO(gPayments,gBalance,g.id);
+        await postCarryRows(currentUser.id,moved.principal,moved.interest,null,'Moved back to savings');
       }
     }
     // 2. Freeze every remaining general-savings payment right now — this is a real
@@ -1644,7 +1652,7 @@ async function requestAccountClosure(){
     const nowIso=new Date().toISOString();
     let frozenTotal=0;
     for(const p of (generalPayments||[])){
-      frozenTotal+=Number(p.amount)+calcAccruedInterest(p.amount,p.date);
+      frozenTotal+=rowValue(p);
       await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:nowIso})});
     }
     frozenTotal=+frozenTotal.toFixed(2);
@@ -1718,7 +1726,7 @@ async function openStatement(){
       totalUsed+=amt;
     });
     rows.sort((a,b)=>new Date(b.d)-new Date(a.d));
-    const held=(pays||[]).filter(p=>!p.withdrawn&&!p.moved_at).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date),0);
+    const held=(pays||[]).filter(p=>!p.withdrawn&&!p.moved_at).reduce((a,p)=>a+rowValue(p),0);
     const tag={in:['Contribution','#0F6E56'],out:['Withdrawal','#A32D2D'],used:['Applied','#856404']};
     const tbl=rows.length?rows.map(r=>`<tr>
       <td style="white-space:nowrap">${fmtDate(r.d)}</td>
@@ -1784,21 +1792,21 @@ async function renderContributor(){
       return dob.getMonth()===now.getMonth() && dob.getDate()===now.getDate();
     })();
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
-    const principal=payments.reduce((a,p)=>a+Number(p.amount),0);
-    const interest=payments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const principal=payments.reduce((a,p)=>a+rowPrincipal(p),0);
+    const interest=payments.reduce((a,p)=>a+rowIntTotal(p),0);
     const currentTotal=+(principal+interest).toFixed(2);
     const totalPrincipal=principal; // unallocated/general savings only — this is what backs the withdrawal cap, unchanged behavior
     const totalInterest=interest;
     // Goals totals — additive, doesn't touch anything the withdrawal flow relies on
-    const goalsPrincipal=(goalPayments||[]).reduce((a,p)=>a+Number(p.amount),0);
-    const goalsInterest=(goalPayments||[]).reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const goalsPrincipal=(goalPayments||[]).reduce((a,p)=>a+rowPrincipal(p),0);
+    const goalsInterest=(goalPayments||[]).reduce((a,p)=>a+rowIntTotal(p),0);
     const combinedPrincipal=totalPrincipal+goalsPrincipal;
     const combinedInterest=totalInterest+goalsInterest;
     const today=new Date();today.setHours(0,0,0,0);
     const hasPending=(requests||[]).some(r=>r.status==='pending');
 
     const rows=payments.map(p=>{
-      const int=calcAccruedInterest(p.amount,p.date);
+      const int=rowInterest(p);
       const start=new Date(p.date);start.setHours(0,0,0,0);
       const weekdays=countWeekdays(start,today);
       return`<tr>
@@ -2067,14 +2075,14 @@ async function renderContributor(){
           <button class="btn btn-sm" onclick="openStatement()"><i class="ti ti-file-text"></i> Statement of account</button>
         </div>
         ${payments.length?`<div class="table-wrap"><table>
-          <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest accrued</th></tr>
-          ${payments.slice(0,5).map(p=>{
+          <tr><th>Date</th><th>Amount</th><th>Details</th><th>Weekdays</th><th>Interest accrued</th></tr>
+          ${[...payments].reverse().slice(0,5).map(p=>{
             const wd=countWeekdays(new Date(p.date),new Date());
-            const interest=calcAccruedInterest(p.amount,p.date);
+            const interest=rowInterest(p);
             return`<tr>
               <td style="font-weight:500">${fmtDate(p.date)}</td>
               <td style="color:${Number(p.amount)<0?'#A32D2D':'#0F6E56'};font-weight:600">${Number(p.amount)<0?'-':'+'}${fmt(Math.abs(p.amount))}</td>
-              <td style="font-size:12px;color:#888">${p.purpose||'Savings contribution'}</td>
+              <td style="font-size:12px;color:#888">${p.purpose||(p.is_transfer?'Balance carried forward':'Savings contribution')}</td>
               <td>${wd} days</td>
               <td style="color:#C9961A">${Number(p.amount)>0?fmt(interest):'—'}</td>
             </tr>`;
@@ -2233,32 +2241,31 @@ function notifyContributorAction(title, detail){
 // fully consumed, false if the source bucket didn't have enough to cover it (nothing is
 // changed in that case — caller should check before writing the destination payment).
 async function consumePaymentsFIFO(sourcePayments, amountNeeded, sourceGoalId){
-  const totalAvailable=(sourcePayments||[]).reduce((a,p)=>{
-    const endDate=p.withdrawn_at||p.moved_at||null;
-    return a+Number(p.amount)+calcAccruedInterest(p.amount,p.date,endDate);
-  },0);
+  // Moves value between buckets. Each lot is consumed interest-first; any leftover of a partly
+  // used lot is carried forward as a principal row + a separate non-earning interest row so
+  // interest is never earned on interest. Returns {principal,interest} actually moved, or false.
+  const totalAvailable=(sourcePayments||[]).reduce((a,p)=>a+rowValue(p,p.withdrawn_at||p.moved_at||null),0);
   if(totalAvailable+0.005<amountNeeded)return false;
 
-  let remaining=amountNeeded;
+  let remaining=amountNeeded, movedP=0, movedI=0;
   const nowIso=new Date().toISOString();
-  const todayDateOnly=nowIso.split('T')[0];
   for(const p of sourcePayments){
     if(remaining<=0.005)break;
-    const endDate=p.withdrawn_at||p.moved_at||null;
-    const currentValue=Number(p.amount)+calcAccruedInterest(p.amount,p.date,endDate);
+    const parts=lotParts(p,p.withdrawn_at||p.moved_at||null);
+    const currentValue=parts.P+parts.I;
     if(currentValue<=remaining+0.005){
       await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({moved_at:nowIso})});
+      movedP+=parts.P; movedI+=parts.I;
       remaining-=currentValue;
     } else {
-      const leftover=+(currentValue-remaining).toFixed(2);
+      const sp=splitLot(parts,remaining);
       await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({moved_at:nowIso})});
-      await sb('payments',{method:'POST',body:JSON.stringify({
-        user_id:currentUser.id,amount:leftover,date:todayDateOnly,withdrawn:false,goal_id:sourceGoalId||null,is_transfer:true
-      })});
+      await postCarryRows(currentUser.id,sp.leftP,sp.leftI,sourceGoalId||null,'Balance carried forward');
+      movedP+=sp.takeP; movedI+=sp.takeI;
       remaining=0;
     }
   }
-  return true;
+  return {principal:+movedP.toFixed(2),interest:+movedI.toFixed(2)};
 }
 
 function openCreateGoal(){
@@ -2332,7 +2339,7 @@ async function archiveGoal(goalId,goalName){
   if(!confirm(`Archive "${goalName}"? You can only archive a goal once its balance is ₦0 — move any money back to your savings first.`))return;
   try{
     const gPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${goalId}&moved_at=is.null&select=*`);
-    const balance=(gPayments||[]).reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(p.amount,p.date),0);
+    const balance=(gPayments||[]).reduce((a,p)=>a+rowValue(p),0);
     if(balance>0.5){alert(`This goal still has ${fmt(balance)} in it. Move it back to your savings first, then archive.`);return;}
     await sb(`goals?id=eq.${goalId}`,{method:'PATCH',body:JSON.stringify({archived:true})});
     notifyContributorAction('Goal archived: '+goalName, 'You archived your goal "'+goalName+'". It no longer appears on your dashboard.');
@@ -2363,8 +2370,7 @@ async function assignToGoal(goalId,goalName){
     const generalPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
     const ok=await consumePaymentsFIFO(generalPayments,amount,null);
     if(!ok){err.textContent='That\'s more than your unallocated savings — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-right"></i> Add to goal';btn.disabled=false;return;}
-    const todayDateOnly=new Date().toISOString().split('T')[0];
-    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:goalId,is_transfer:true})});
+    await postCarryRows(currentUser.id,ok.principal,ok.interest,goalId,'Moved to goal');
     notifyContributorAction('Money added to '+goalName, 'You moved '+fmt(amount)+' from your unallocated savings into "'+goalName+'". It\'s now earning interest under this goal.');
     closeModal();
     toast('<i class="ti ti-check"></i> Added to '+goalName+'!');
@@ -2394,8 +2400,7 @@ async function moveGoalToGeneral(goalId,goalName){
     const goalPayments=await sb(`payments?user_id=eq.${currentUser.id}&withdrawn=eq.false&goal_id=eq.${goalId}&moved_at=is.null&select=*&order=date.asc`);
     const ok=await consumePaymentsFIFO(goalPayments,amount,goalId);
     if(!ok){err.textContent='That\'s more than this goal currently holds — nothing was moved.';btn.innerHTML='<i class="ti ti-arrow-left"></i> Move to savings';btn.disabled=false;return;}
-    const todayDateOnly=new Date().toISOString().split('T')[0];
-    await sb('payments',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:+amount.toFixed(2),date:todayDateOnly,withdrawn:false,goal_id:null,is_transfer:true})});
+    await postCarryRows(currentUser.id,ok.principal,ok.interest,null,'Moved back to savings');
     notifyContributorAction('Money moved from '+goalName, 'You moved '+fmt(amount)+' from "'+goalName+'" back into your unallocated savings. You can now request a withdrawal on it if you\'d like.');
     closeModal();
     toast('<i class="ti ti-check"></i> Moved back to your savings!');
@@ -2433,8 +2438,8 @@ function buildGoalCarouselCard(item){
 function buildGoalsCarouselSection(goals,goalPayments){
   const items=(goals||[]).map(g=>{
     const gPays=(goalPayments||[]).filter(p=>p.goal_id===g.id);
-    const gPrincipal=gPays.reduce((a,p)=>a+Number(p.amount),0);
-    const gInterest=gPays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const gPrincipal=gPays.reduce((a,p)=>a+rowPrincipal(p),0);
+    const gInterest=gPays.reduce((a,p)=>a+rowIntTotal(p),0);
     const gTotal=gPrincipal+gInterest;
     const pct=g.target_amount?Math.min(100,Math.round((gTotal/g.target_amount)*100)):null;
     return{g,gTotal,pct};
@@ -2726,11 +2731,11 @@ async function openViewContributor(userId,userName){
       sb(`bank_details?user_id=eq.${userId}&select=*`)
     ]);
     const bank=bankArr&&bankArr.length?bankArr[0]:null;
-    const principal=pays.reduce((a,p)=>a+Number(p.amount),0);
-    const interest=pays.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const principal=pays.reduce((a,p)=>a+rowPrincipal(p),0);
+    const interest=pays.reduce((a,p)=>a+rowIntTotal(p),0);
     const today=new Date();today.setHours(0,0,0,0);
     const rows=pays.length?pays.map(p=>{
-      const int=calcAccruedInterest(p.amount,p.date);
+      const int=rowInterest(p);
       const start=new Date(p.date);start.setHours(0,0,0,0);
       const weekdays=countWeekdays(start,today);
       return`<tr>
@@ -3115,22 +3120,21 @@ async function updateReservation(resId,status,invId){
         const totalCost=res.units*inv.unit_price;
         const pays=await sb(`payments?user_id=eq.${res.user_id}&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc`);
         let remaining=totalCost;
-        const availableTotal=pays.reduce((a,p)=>a+Number(p.amount)+calcAccruedInterest(Number(p.amount),p.date,null),0);
+        const availableTotal=pays.reduce((a,p)=>a+rowValue(p,null),0);
         if(availableTotal+0.01<totalCost)throw new Error('Insufficient savings balance: member has '+fmt(availableTotal)+', investment costs '+fmt(totalCost));
         const today=new Date().toISOString().split('T')[0];
         for(const p of pays){
           if(remaining<=0)break;
-          const principal=Number(p.amount);
-          const interest=calcAccruedInterest(principal,p.date,null);
+          const lp=lotParts(p,null);const principal=lp.P;const interest=lp.I;
           const totalValue=+(principal+interest).toFixed(2);
           if(totalValue<=remaining){
             await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
             remaining=+(remaining-totalValue).toFixed(2);
           } else {
             await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
-            const leftover=+(totalValue-remaining).toFixed(2);
+            const sp=splitLot({P:principal,I:interest},remaining);
             remaining=0;
-            if(leftover>0){await sb('payments',{method:'POST',body:JSON.stringify({user_id:res.user_id,amount:leftover,date:today,withdrawn:false,is_transfer:true})});}
+            await postCarryRows(res.user_id,sp.leftP,sp.leftI,null,'Balance carried forward after investment');
           }
         }
       }
@@ -5884,12 +5888,12 @@ async function previewSurplus(){
     try{
       const [contributors, payments] = await Promise.all([
         sb('users?role=eq.contributor&select=id,name,email'),
-        sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount')
+        sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount,is_interest')
       ]);
       surplusContributors = contributors || [];
       // Calculate each contributor's savings
       surplusContributors = surplusContributors.map(c => {
-        const cPayments = (payments||[]).filter(p => p.user_id === c.id);
+        const cPayments = (payments||[]).filter(p => p.user_id === c.id && !p.is_interest);
         const savings = cPayments.reduce((a,p) => a + Number(p.amount), 0);
         return {...c, savings};
       }).filter(c => c.savings > 0);
@@ -6559,11 +6563,11 @@ async function buildAnalyticsTab(){
 
     const totalMembers = (contributors||[]).length;
     const activePayments = (allPayments||[]).filter(p=>!p.withdrawn && !p.moved_at);
-    const totalSavings = activePayments.reduce((a,p)=>a+Number(p.amount),0);
+    const totalSavings = activePayments.reduce((a,p)=>a+rowPrincipal(p),0);
     const lifetimeInflow = (allPayments||[]).filter(p=>!p.is_transfer).reduce((a,p)=>a+Number(p.amount),0);
     const totalWithdrawn = (requests||[]).filter(r=>r.status==='approved').reduce((a,r)=>a+Number(r.amount),0);
     const pendingWithdrawals = (requests||[]).filter(r=>r.status==='pending').length;
-    const totalInterest = activePayments.reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+    const totalInterest = activePayments.reduce((a,p)=>a+rowIntTotal(p),0);
 
     // Monthly inflow data (last 6 months)
     const months = [];
@@ -6715,7 +6719,7 @@ async function loadAnalyticsSections(){
       sb('food_scheme_enrollments?select=*'),
       sb('food_scheme_options?select=*'),
       sb('kyc_details?select=user_id,kyc_verified'),
-      sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount,date'),
+      sb('payments?withdrawn=eq.false&moved_at=is.null&select=user_id,amount,date,is_interest'),
       sb('users?role=eq.contributor&select=id')
     ]);
 
@@ -6781,8 +6785,8 @@ async function loadAnalyticsSections(){
     // Cooperative health
     const coopEl = document.getElementById('coop-health');
     if(coopEl){
-      const totalPrincipal = (allPay||[]).reduce((a,p)=>a+Number(p.amount),0);
-      const totalInterestAll = (allPay||[]).reduce((a,p)=>a+calcAccruedInterest(p.amount,p.date),0);
+      const totalPrincipal = (allPay||[]).reduce((a,p)=>a+rowPrincipal(p),0);
+      const totalInterestAll = (allPay||[]).reduce((a,p)=>a+rowIntTotal(p),0);
       const totalMemberValue = totalPrincipal + totalInterestAll;
       const totalAjoHeld = Math.max(0,(groupContribs||[]).reduce((a,c)=>a+Number(c.amount||0),0)-(groupPayouts||[]).filter(p=>p.status==='completed').reduce((a,p)=>a+Number(p.amount||0),0));
       const totalObligation = totalMemberValue + totalAjoHeld;
