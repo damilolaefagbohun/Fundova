@@ -8366,6 +8366,7 @@ async function openFoodScheme(){
   const isPastDeadline = deadline && new Date() > deadline;
   const isDeducted = enrollment && enrollment.status === 'deducted';
 
+  window._dashFoodOptions = options||window._dashFoodOptions||[];
   const buildCarousel = (idx, opts, enr) => buildFoodPackageCard(idx, opts, enr, isPastDeadline, isDeducted);
 
   openModal(`
@@ -8444,6 +8445,10 @@ function dashFoodCarouselNav(dir){
 }
 
 async function optInFoodScheme(optionId, packageName){
+  // second confirmation so nobody opts in by accident
+  const _o=(window._dashFoodOptions||[]).find(x=>String(x.id)===String(optionId));
+  const _price=_o&&_o.price!=null?' (₦'+Number(_o.price).toLocaleString()+')':'';
+  if(!confirm('Please confirm: opt in to the Food Scheme — '+packageName+_price+'?\n\nThe cost will be deducted from your savings when the scheme is processed. You can opt out or change package before the deadline.')) return;
   try{
     const existing = await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=id');
     if(existing&&existing.length){
@@ -8464,7 +8469,17 @@ async function optInFoodScheme(optionId, packageName){
 async function optOutFoodScheme(){
   if(!confirm('Are you sure you want to opt out of the food scheme?')) return;
   try{
+    const ex = await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=id,status,option_id');
+    const cur = ex&&ex.length?ex[0]:null;
+    if(cur&&cur.status==='deducted'){ alert('Your food scheme payment has already been processed, so you can no longer opt out. Please contact Fundova if you need help.'); return; }
+    let pkgName = 'the Food Scheme';
+    if(cur&&cur.option_id){ try{ const o = await sb('food_scheme_options?id=eq.'+cur.option_id+'&select=name'); if(o&&o.length) pkgName = o[0].name; }catch(e){} }
     await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'DELETE'});
+    await addNotification(currentUser.id, '🧺 You have opted out of the Fundova Food Scheme. Nothing will be deducted from your savings.');
+    notify({type:'broadcast', to:currentUser.email, name:currentUser.name,
+      subject:'Food Scheme — You have opted out',
+      body:'You have opted out of the Fundova Food Scheme ('+pkgName+'). Nothing will be deducted from your savings. If this was a mistake, you can opt in again before the deadline. Fundova Limited'
+    }).catch(()=>{});
     closeModal();
     toast('<i class="ti ti-check"></i> Opted out of food scheme.');
   }catch(e){ alert('Error: '+e.message); }
