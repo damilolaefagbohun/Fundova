@@ -254,6 +254,69 @@ async function postCarryRows(userId,principal,interest,goalId,label){
   if(principal>0.004)await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount:+principal.toFixed(2),date:today,withdrawn:false,goal_id:goalId||null,is_transfer:true,purpose:label})});
   if(interest>0.004)await sb('payments',{method:'POST',body:JSON.stringify({user_id:userId,amount:+interest.toFixed(2),date:today,withdrawn:false,goal_id:goalId||null,is_transfer:true,is_interest:true,purpose:'Interest earned (carried forward)'})});
 }
+// CAPITAL FIRST: take `amount` out of the member's active unallocated lots (already fetched, oldest first).
+// Capital is used first, oldest lot first. Accrued interest is never touched until capital is used up.
+// A lot that is used (fully or partly) is retired; its leftover capital is carried forward as a new row and
+// its accrued interest is carried forward as a separate non-earning interest row, so there is no
+// interest on interest. Lots that are not touched keep accruing as normal.
+async function deductCapitalFirst(userId,payments,amount,carryLabel){
+  const today=new Date().toISOString().split('T')[0];
+  const retire=id=>sb(`payments?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
+  const lots=(payments||[]).map(p=>({p,parts:lotParts(p,null)}));
+  const totalP=+lots.reduce((a,l)=>a+l.parts.P,0).toFixed(2);
+  let remaining=+Number(amount).toFixed(2);
+  if(remaining<=totalP+0.005){
+    // Capital covers it: only capital is withdrawn, all accrued interest stays
+    for(const l of lots){
+      if(remaining<=0.004)break;
+      if(l.p.is_interest)continue;
+      const take=Math.min(remaining,l.parts.P);
+      await retire(l.p.id);
+      await postCarryRows(userId,+(l.parts.P-take).toFixed(2),l.parts.I,null,carryLabel);
+      remaining=+(remaining-take).toFixed(2);
+    }
+    return;
+  }
+  // Capital is used up: every capital lot is retired, then the rest comes out of accrued interest, oldest first
+  let need=+(remaining-totalP).toFixed(2);
+  for(const l of lots){
+    if(l.p.is_interest){
+      if(need<=0.004)continue;
+      const have=l.parts.I, take=Math.min(have,need);
+      await retire(l.p.id);
+      if(have-take>0.004)await postCarryRows(userId,0,+(have-take).toFixed(2),null,carryLabel);
+      need=+(need-take).toFixed(2);
+    } else {
+      const have=l.parts.I, take=Math.min(have,Math.max(need,0));
+      await retire(l.p.id);
+      if(have-take>0.004)await postCarryRows(userId,0,+(have-take).toFixed(2),null,carryLabel);
+      need=+(need-take).toFixed(2);
+    }
+  }
+}
+// Interest accrued per calendar month across all contributors (same weekday rule as calcAccruedInterest).
+function monthlyInterestSummary(rows,months){
+  const perDay=RATE/WEEKDAYS_PER_YEAR;
+  const now=new Date();now.setHours(0,0,0,0);
+  const lots=(rows||[]).filter(p=>!p.is_interest).map(p=>{
+    const st=new Date(p.date);st.setHours(0,0,0,0);
+    const en=p.withdrawn_at?new Date(p.withdrawn_at):p.moved_at?new Date(p.moved_at):new Date(now);
+    en.setHours(0,0,0,0);
+    return {u:p.user_id,a:Number(p.amount),st,en};
+  }).filter(l=>l.en>l.st);
+  const out=[];let lifetime=0;
+  for(const l of lots)lifetime+=l.a*perDay*countWeekdays(l.st,l.en);
+  for(let i=months-1;i>=0;i--){
+    const ms=new Date(now.getFullYear(),now.getMonth()-i,1), me=new Date(now.getFullYear(),now.getMonth()-i+1,1);
+    let sum=0;const users=new Set();
+    for(const l of lots){
+      const s=l.st>ms?l.st:ms, e=l.en<me?l.en:me;
+      if(e>s){const d=countWeekdays(s,e);if(d>0){sum+=l.a*perDay*d;users.add(l.u);}}
+    }
+    out.push({month:ms,interest:+sum.toFixed(2),earners:users.size,current:i===0});
+  }
+  return {rows:out,lifetime:+lifetime.toFixed(2)};
+}
 function calcAccruedInterest(amount,payDate,withdrawnAt){
   const today=new Date();today.setHours(0,0,0,0);
   const start=new Date(payDate);start.setHours(0,0,0,0);
@@ -263,6 +326,21 @@ function calcAccruedInterest(amount,payDate,withdrawnAt){
   end.setHours(0,0,0,0);
   if(start>=end)return 0;
   return+(Number(amount)*RATE*(countWeekdays(start,end)/WEEKDAYS_PER_YEAR)).toFixed(2);
+}
+// Sensitive numbers (BVN, NIN, ID number) are hidden in admin screens until someone clicks to reveal them.
+// Every reveal is written to the KYC history with who looked and when.
+const _revealed={};
+function maskText(v){const t=String(v||'');return t.length<=4?'••••':'•'.repeat(Math.max(4,t.length-4))+t.slice(-4);}
+function maskedField(label,key,userId,val){
+  _revealed[userId+':'+key]=val;
+  const id='rv-'+key+'-'+String(userId).replace(/[^a-z0-9]/gi,'');
+  return `<span id="${id}" style="font-family:monospace;letter-spacing:.5px">${maskText(val)}</span> <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="revealSensitive('${key}','${String(userId).replace(/'/g,'')}','${label}','${id}',this)">Show</button>`;
+}
+async function revealSensitive(key,userId,label,spanId,btn){
+  const el=document.getElementById(spanId);if(!el)return;
+  if(btn.dataset.shown==='1'){el.textContent=maskText(_revealed[userId+':'+key]);btn.textContent='Show';btn.dataset.shown='0';return;}
+  el.textContent=_revealed[userId+':'+key];btn.textContent='Hide';btn.dataset.shown='1';
+  try{await sb('kyc_audit_log',{method:'POST',body:JSON.stringify({user_id:userId,changed_fields:'Admin viewed '+label+' ('+((currentUser&&currentUser.email)||'admin')+')',changed_at:new Date().toISOString()})});}catch(e){}
 }
 function fmt(n){return'₦'+Number(n).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(d){if(!d)return'&mdash;';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -1070,6 +1148,28 @@ async function renderAdmin(){
       </div>`;
     pageContent.appendChild(statsRow);
 
+    // ── MONTHLY INTEREST SUMMARY ──
+    try{
+      const ms=monthlyInterestSummary(allPayments,12);
+      const mCard=document.createElement('div');
+      mCard.style.cssText='background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2;margin-bottom:1.5rem';
+      const thisM=ms.rows[ms.rows.length-1], prevM=ms.rows[ms.rows.length-2];
+      mCard.innerHTML=`
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div><div style="font-size:14px;font-weight:700;color:#0D1F14">Monthly interest summary</div>
+          <div style="font-size:11px;color:#888">Interest accrued on contributors' capital each month. Accrued interest never earns interest.</div></div>
+          <div style="text-align:right"><div style="font-size:10px;color:#aaa">Lifetime accrued</div><div style="font-size:16px;font-weight:800;color:#C9961A">${fmt(ms.lifetime)}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="background:#F7F5F0;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#888">${thisM.month.toLocaleDateString('en-GB',{month:'long',year:'numeric'})} so far</div><div style="font-size:15px;font-weight:700;color:#0D1F14">${fmt(thisM.interest)}</div></div>
+          <div style="background:#F7F5F0;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#888">${prevM?prevM.month.toLocaleDateString('en-GB',{month:'long',year:'numeric'}):'Last month'}</div><div style="font-size:15px;font-weight:700;color:#0D1F14">${fmt(prevM?prevM.interest:0)}</div></div>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:#888;text-align:left"><th style="padding:6px 8px">Month</th><th style="padding:6px 8px;text-align:right">Interest accrued</th><th style="padding:6px 8px;text-align:right">Contributors earning</th></tr></thead><tbody>
+        ${ms.rows.slice().reverse().map(r=>`<tr style="border-top:1px solid #f0f0ee"><td style="padding:6px 8px">${r.month.toLocaleDateString('en-GB',{month:'short',year:'numeric'})}${r.current?' <span style="color:#aaa">(so far)</span>':''}</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(r.interest)}</td><td style="padding:6px 8px;text-align:right">${r.earners}</td></tr>`).join('')}
+        </tbody></table></div>`;
+      pageContent.appendChild(mCard);
+    }catch(e){console.error('monthly interest summary',e);}
+
     // ── AJO GROUP SAVINGS SUMMARY ── (separate "purse" from regular contributions —
     // Ajo money doesn't earn interest, so it's tracked here rather than folded into
     // the Money card above, which would misleadingly imply it's growing.)
@@ -1566,27 +1666,7 @@ async function updateRequest(id,status){
       const availableTotal=payments.reduce((a,p)=>a+rowValue(p,null),0);
       if(availableTotal+0.01<remaining)throw new Error('Insufficient balance: member has '+fmt(availableTotal)+' available, request is '+fmt(remaining));
 
-      const today=new Date().toISOString().split('T')[0];
-
-      for(const p of payments){
-        if(remaining<=0)break;
-        const lp=lotParts(p,null);const principal=lp.P;const interest=lp.I;
-        const totalValue=+(principal+interest).toFixed(2);
-
-        if(totalValue<=remaining){
-          // Mark this payment as fully withdrawn
-          await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
-          remaining=+(remaining-totalValue).toFixed(2);
-        } else {
-          // Partially consume this payment
-          // Mark original as withdrawn
-          await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
-          // Calculate leftover and create new active payment dated today
-          const sp=splitLot({P:principal,I:interest},remaining);
-          remaining=0;
-          await postCarryRows(req.user_id,sp.leftP,sp.leftI,null,'Balance carried forward after withdrawal');
-        }
-      }
+      await deductCapitalFirst(req.user_id,payments,remaining,'Balance carried forward after withdrawal');
     }
     const statusPatch={status};
     if(status==='approved')statusPatch.approved_at=new Date().toISOString();
@@ -1797,6 +1877,7 @@ async function renderContributor(){
     const currentTotal=+(principal+interest).toFixed(2);
     const totalPrincipal=principal; // unallocated/general savings only — this is what backs the withdrawal cap, unchanged behavior
     const totalInterest=interest;
+    window._wdSplit={capital:totalPrincipal,interest:totalInterest};
     // Goals totals — additive, doesn't touch anything the withdrawal flow relies on
     const goalsPrincipal=(goalPayments||[]).reduce((a,p)=>a+rowPrincipal(p),0);
     const goalsInterest=(goalPayments||[]).reduce((a,p)=>a+rowIntTotal(p),0);
@@ -1911,19 +1992,19 @@ async function renderContributor(){
         <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
         <div style="position:absolute;bottom:-60px;right:60px;width:150px;height:150px;border-radius:50%;background:rgba(201,150,26,.06)"></div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em">Total savings</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em">Total account value</div>
           <button onclick="toggleBalanceVisibility()" id="balance-eye-btn" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:0;display:flex;align-items:center" title="Hide/show balance"><i class="ti ti-eye" id="balance-eye-icon" style="font-size:15px"></i></button>
         </div>
         <div id="balance-value-visible" style="font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px">₦${(combinedPrincipal+combinedInterest).toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
         <div id="balance-value-hidden" style="display:none;font-size:40px;font-weight:800;color:#C9961A;margin-bottom:4px;letter-spacing:3px">₦••••••••</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:1.25rem">Interest grows every weekday automatically</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:1.25rem">Your capital earns interest every weekday. Accrued interest is kept separate and does not earn interest.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
-            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Principal</div>
+            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Capital balance</div>
             <div style="font-size:16px;font-weight:700;color:#fff">₦${combinedPrincipal.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px">
-            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Interest earned</div>
+            <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">Accrued interest</div>
             <div style="font-size:16px;font-weight:700;color:#1D9E75">₦${combinedInterest.toLocaleString('en-NG',{minimumFractionDigits:2})}</div>
           </div>
         </div>
@@ -2186,6 +2267,7 @@ function openWithdrawRequest(currentTotal){
   openModal(`
   <h3>Request withdrawal</h3>
   <p style="font-size:13px;color:#666">Your current total is <strong>${fmt(currentTotal)}</strong>. You cannot request more than this amount.</p>
+  ${window._wdSplit?`<p style="font-size:12px;color:#666;background:#F7F5F0;border-radius:8px;padding:8px 10px">Capital balance <strong>${fmt(window._wdSplit.capital)}</strong> &nbsp;·&nbsp; Accrued interest <strong>${fmt(window._wdSplit.interest)}</strong><br>Withdrawals come from your capital first, then from your accrued interest. Taking capital reduces the amount that earns interest.</p>`:''}
   <div class="field"><label>Amount to withdraw (₦)</label><input id="wr-amt" type="number" min="5000" step="0.01" placeholder="Minimum ₦5,000"></div>
   <div style="font-size:12px;color:#888;margin-top:-6px">Minimum: ₦5,000 &nbsp;·&nbsp; Maximum: ${fmt(currentTotal)}</div>
   <div class="field"><label>Note <span style="color:#aaa;font-weight:400">(optional)</span></label><textarea id="wr-note" placeholder="e.g. I need funds for school fees"></textarea></div>
@@ -3122,21 +3204,7 @@ async function updateReservation(resId,status,invId){
         let remaining=totalCost;
         const availableTotal=pays.reduce((a,p)=>a+rowValue(p,null),0);
         if(availableTotal+0.01<totalCost)throw new Error('Insufficient savings balance: member has '+fmt(availableTotal)+', investment costs '+fmt(totalCost));
-        const today=new Date().toISOString().split('T')[0];
-        for(const p of pays){
-          if(remaining<=0)break;
-          const lp=lotParts(p,null);const principal=lp.P;const interest=lp.I;
-          const totalValue=+(principal+interest).toFixed(2);
-          if(totalValue<=remaining){
-            await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
-            remaining=+(remaining-totalValue).toFixed(2);
-          } else {
-            await sb(`payments?id=eq.${p.id}`,{method:'PATCH',body:JSON.stringify({withdrawn:true,withdrawn_at:today})});
-            const sp=splitLot({P:principal,I:interest},remaining);
-            remaining=0;
-            await postCarryRows(res.user_id,sp.leftP,sp.leftI,null,'Balance carried forward after investment');
-          }
-        }
+        await deductCapitalFirst(res.user_id,pays,remaining,'Balance carried forward after investment');
       }
     }
     await sb(`investment_reservations?id=eq.${resId}`,{method:'PATCH',body:JSON.stringify({status})});
@@ -6343,11 +6411,11 @@ function renderTermsPage(){
         {title:'7. Investments', body:'From time to time, Fundova may offer group investment opportunities where members pool funds to purchase real assets. Participation in investments is voluntary. Investment income is distributed monthly based on unit ownership. If an investment goal is not reached, all contributions are refunded to participants. Members may request a refund of their investment at any time, subject to admin review. Investment participation does not affect your regular savings balance or interest accrual. Investments carry inherent risk and Fundova does not guarantee returns from investment activities.'},
         {title:'8. Group Savings (Coordinator Feature)', body:'Members may apply to become savings group coordinators. Coordinators are responsible for managing their group members, tracking contributions and initiating payouts. All group funds pass through Fundova account. Coordinators earn a bonus of 50% of the interest generated on group funds during the period held by Fundova. Coordinators are responsible for managing defaults within their groups. Fundova processes payouts on coordinator instruction and is not responsible for disputes between coordinators and group members.'},
         {title:'9. Referrals', body:'Members earn a ₦500 bonus when someone they refer joins Fundova and makes their first contribution. The referral bonus is credited to the referring members savings balance and begins earning interest immediately. Referral bonuses are subject to admin verification and may be withheld if fraudulent activity is suspected.'},
-        {title:'10. Account Termination', body:'Members who wish to leave Fundova must give 30 days notice by contacting us at fundovamultipurposecooperative@gmail.com or 08035257262. Upon exit, any outstanding savings balance plus accrued interest will be transferred to the members registered bank account within the notice period. Fundova reserves the right to suspend or terminate accounts that violate these terms, engage in fraudulent activity or provide false information. In such cases, funds will be returned minus any applicable charges.'},
+        {title:'10. Account Termination', body:'Members who wish to leave Fundova must give 30 days notice by contacting us at hello@fundova.africa or 08035257262. Upon exit, any outstanding savings balance plus accrued interest will be transferred to the members registered bank account within the notice period. Fundova reserves the right to suspend or terminate accounts that violate these terms, engage in fraudulent activity or provide false information. In such cases, funds will be returned minus any applicable charges.'},
         {title:'11. Liability', body:'Fundova Limited and Fundova Multipurpose Cooperative Society Ltd are committed to the responsible management of member funds. Fundova accepts liability for losses arising from negligence or mismanagement on its part. However, Fundova is not liable for losses arising from circumstances beyond its reasonable control including but not limited to regulatory changes, force majeure events or third party service failures. Members are encouraged to make informed decisions about their savings and investments.'},
-        {title:'12. Dispute Resolution', body:'In the event of a dispute between a member and Fundova, both parties agree to first attempt resolution through direct communication. Contact us at fundovamultipurposecooperative@gmail.com or 08035257262. If a resolution cannot be reached through direct communication, the dispute shall be referred to arbitration in accordance with the Arbitration and Conciliation Act (as amended) of Nigeria. If arbitration fails to resolve the matter, either party may seek resolution through the Nigerian courts. These terms are governed by the laws of the Federal Republic of Nigeria.'},
+        {title:'12. Dispute Resolution', body:'In the event of a dispute between a member and Fundova, both parties agree to first attempt resolution through direct communication. Contact us at hello@fundova.africa or 08035257262. If a resolution cannot be reached through direct communication, the dispute shall be referred to arbitration in accordance with the Arbitration and Conciliation Act (as amended) of Nigeria. If arbitration fails to resolve the matter, either party may seek resolution through the Nigerian courts. These terms are governed by the laws of the Federal Republic of Nigeria.'},
         {title:'13. Changes to These Terms', body:'Fundova may update these terms from time to time. When significant changes are made, members will be notified via email and through the platform dashboard. Continued use of Fundova after changes are published constitutes acceptance of the updated terms.'},
-        {title:'14. Contact Us', body:'For any questions about these terms, contact us at:<br>📧 fundovamultipurposecooperative@gmail.com<br>📱 08035257262<br>📸 @fundova_cooperative<br>🌐 www.fundova.africa'},
+        {title:'14. Contact Us', body:'For any questions about these terms, contact us at:<br>📧 hello@fundova.africa<br>📱 08035257262<br>📸 @fundova_cooperative<br>🌐 www.fundova.africa'},
       ].map(s=>`<div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 1px 6px rgba(0,0,0,.06);margin-bottom:1rem">
         <h2 style="font-size:15px;font-weight:700;color:#0D3D2A;margin-bottom:10px">${s.title}</h2>
         <div style="font-size:13px;color:#555;line-height:1.85">${s.body}</div>
@@ -6380,7 +6448,7 @@ This policy is prepared in compliance with the <strong>Nigeria Data Protection R
         {title:'2. Who We Are', body:`<strong>Fundova Limited</strong> is a registered company operating as a financial ecosystem for savings, investment and financial education.<br><br>
 <strong>Fundova Multipurpose Cooperative Society Ltd</strong> is a CAC-registered multipurpose cooperative society. Both entities are SCUML-registered and fully compliant with Nigerian anti-money laundering regulations.<br><br>
 For privacy-related questions contact us at:<br>
-📧 fundovamultipurposecooperative@gmail.com<br>
+📧 hello@fundova.africa<br>
 📱 08035257262`},
 
         {title:'3. Information We Collect', body:`<strong>Account & identity information:</strong> Full legal name, email address, phone number, WhatsApp number, date of birth.<br><br>
@@ -6412,11 +6480,11 @@ We do not sell your data to any of these providers or any other third party. We 
 If you request deletion of your data, we will review your request within <strong>30 days</strong>. Where deletion is not possible due to regulatory compliance obligations, we will inform you and retain only the minimum data required by law. All other data will be deleted.`},
 
         {title:'9. Your Rights', body:`Under the Nigeria Data Protection Regulation (NDPR), you have the right to: access your personal data; correct inaccurate data; request deletion of your data; object to certain uses of your data; request your data in a portable format; and withdraw consent where processing is based on consent.<br><br>
-To exercise any of these rights, contact us at <strong>fundovamultipurposecooperative@gmail.com</strong>. We will respond within <strong>30 days</strong>.`},
+To exercise any of these rights, contact us at <strong>hello@fundova.africa</strong>. We will respond within <strong>30 days</strong>.`},
 
         {title:'10. Cookies and Browser Storage', body:`Our platform uses browser localStorage to keep you logged in for up to 24 hours and to remember your email address for faster login. We do not use advertising cookies or tracking cookies. No data stored in your browser is shared with third parties.`},
 
-        {title:'11. Children Privacy', body:`Fundova services are intended for adults aged 18 and above. We do not knowingly collect personal information from anyone under 18. If you believe a minor has registered, please contact us immediately at fundovamultipurposecooperative@gmail.com.`},
+        {title:'11. Children Privacy', body:`Fundova services are intended for adults aged 18 and above. We do not knowingly collect personal information from anyone under 18. If you believe a minor has registered, please contact us immediately at hello@fundova.africa.`},
 
         {title:'12. Data Breach Notification', body:`In the unlikely event of a data breach, Fundova will notify relevant regulatory authorities within 72 hours, notify affected members as soon as reasonably practicable, take immediate steps to contain and remediate the breach, and provide guidance on protective steps you can take.`},
 
@@ -6425,7 +6493,7 @@ To exercise any of these rights, contact us at <strong>fundovamultipurposecooper
         {title:'14. Regulatory Compliance', body:`Fundova operates in compliance with: Nigeria Data Protection Regulation (NDPR) 2019; Nigerian Financial Intelligence Unit (NFIU) guidelines; SCUML requirements; CAC cooperative regulations; and CBN guidelines where applicable.`},
 
         {title:'15. Contact Us', body:`For any privacy questions, concerns or complaints:<br><br>
-📧 fundovamultipurposecooperative@gmail.com<br>
+📧 hello@fundova.africa<br>
 📱 08035257262<br>
 📸 @fundova_cooperative<br>
 🌐 www.fundova.africa<br><br>
@@ -7467,12 +7535,13 @@ async function openContributorKyc(userId, userName){
     const [kyc, bank, kycLog] = await Promise.all([
       sb(`kyc_details?user_id=eq.${userId}&select=*`),
       sb(`bank_details?user_id=eq.${userId}&select=*`),
-      sb(`kyc_audit_log?user_id=eq.${userId}&select=*&order=changed_at.desc&limit=5`)
+      sb(`kyc_audit_log?user_id=eq.${userId}&select=*&order=changed_at.desc&limit=10`)
     ]);
     const k = kyc&&kyc.length?kyc[0]:{};
     const b = bank&&bank.length?bank[0]:{};
     const logs = kycLog||[];
 
+    const SENSITIVE={'BVN':'bvn','NIN':'nin','ID number':'id_number'};
     const fields = [
       {label:'Bank name', val:b.bank_name},
       {label:'Account number', val:b.account_number},
@@ -7501,7 +7570,7 @@ async function openContributorKyc(userId, userName){
     <div style="display:grid;gap:6px;margin-bottom:14px">
       ${fields.map(f=>`<div style="display:flex;justify-content:space-between;padding:8px 12px;background:${f.val?'#F0FDF8':'#FEF2F2'};border-radius:8px;font-size:13px">
         <span style="color:#888">${f.label}</span>
-        <span style="font-weight:500;color:${f.val?'#0D1F14':'#aaa'}">${f.val||'Not provided'}</span>
+        <span style="font-weight:500;color:${f.val?'#0D1F14':'#aaa'}">${f.val?(SENSITIVE[f.label]?maskedField(f.label,SENSITIVE[f.label],userId,f.val):f.val):'Not provided'}</span>
       </div>`).join('')}
     </div>
 
