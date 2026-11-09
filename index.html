@@ -158,34 +158,45 @@ let currentUser=null;
 let adminTab='contributors';
 let signupStep=1;
 
-// Session persistence - 24 hours
-function saveSession(user){
-  const session={user,expiry:Date.now()+(24*60*60*1000)};
-  try{localStorage.setItem('fundova_session',JSON.stringify(session));}catch(e){}
+// Session persistence. The server sets the length: 72 hours for members, 24 hours for admins.
+function saveSession(user,token,exp){
+  try{localStorage.setItem('fundova_session',JSON.stringify({user,token,expiry:exp*1000}));}catch(e){}
 }
 function loadSession(){
   try{
     const raw=localStorage.getItem('fundova_session');
     if(!raw)return null;
     const session=JSON.parse(raw);
-    if(Date.now()>session.expiry){localStorage.removeItem('fundova_session');return null;}
+    if(!session.token||Date.now()>session.expiry){localStorage.removeItem('fundova_session');return null;}
     return session.user;
   }catch(e){return null;}
 }
+function getToken(){
+  try{const s=JSON.parse(localStorage.getItem('fundova_session')||'null');return s&&s.token&&Date.now()<=s.expiry?s.token:null;}catch(e){return null;}
+}
+function authHeaders(){const h={'Content-Type':'application/json'};const t=getToken();if(t)h['Authorization']='Bearer '+t;return h;}
 function clearSession(){
   try{localStorage.removeItem('fundova_session');}catch(e){}
+}
+// Called when the server says the sign-in has ended (expired, or the account was revoked/closed)
+function sessionExpired(){
+  if(!currentUser)return;
+  currentUser=null;clearSession();signupStep=1;
+  try{render();}catch(e){}
+  setTimeout(()=>{try{toast('Your session has ended. Please sign in again.','#A32D2D');openLoginModal();}catch(e){}},80);
 }
 
 async function sb(path, opts={}, _retryCount=0){
   const method = opts.method||'GET';
   const isReadOnly = method==='GET';
+  const hadToken = !!getToken();
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),20000); // 20s — was 10s, too aggressive on slow connections
   try{
     const res=await fetch('/.netlify/functions/db',{
       method:'POST',
       signal:controller.signal,
-      headers:{'Content-Type':'application/json'},
+      headers:authHeaders(),
       body:JSON.stringify({
         path,
         method,
@@ -193,6 +204,7 @@ async function sb(path, opts={}, _retryCount=0){
       })
     });
     clearTimeout(timeout);
+    if(res.status===401&&hadToken){sessionExpired();throw new Error('Session expired');}
     if(!res.ok){const e=await res.text();throw new Error(e);}
     const result=await res.json();
     if(result.status>=400)throw new Error(JSON.stringify(result.data));
@@ -216,7 +228,7 @@ async function sendEmail(payload){
   try{
     await fetch('/.netlify/functions/send-email',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:authHeaders(),
       body:JSON.stringify(payload)
     });
   }catch(e){console.error('Email error:',e);}
@@ -804,16 +816,13 @@ function renderLogin(){
         <h2 style="font-size:22px;font-weight:800;color:#0D1F14;margin:0">Sign in to your dashboard</h2>
       </div>
       <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" value="${localStorage.getItem('fundova_saved_email')||''}" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
-      <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">PIN</label><input id="l-pin" type="password" maxlength="6" placeholder="••••••" autocomplete="current-password" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
       <div class="error" id="l-err" style="margin-bottom:10px"></div>
-      <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
-      <div style="text-align:center;margin-top:12px">
-        <a onclick="openForgotPin()" style="font-size:12px;color:#1D9E75;cursor:pointer;text-decoration:underline">Forgot your PIN?</a>
-      </div>
+      <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-mail"></i> Email me a code</button>
+      <p style="text-align:center;font-size:12px;color:#888;margin:12px 0 0">We will email you a 6-digit code to sign in. No password or PIN needed.</p>
       <p style="text-align:center;font-size:12px;color:#888;margin-top:10px">Not a member yet? <button onclick="closeModal();renderSignup()" style="background:none;border:none;color:#0D3D2A;font-weight:600;cursor:pointer;font-size:12px">Apply to join</button></p>
     `);
     // Focus the email field once the modal is in the DOM
-    setTimeout(()=>{ const el=document.getElementById('l-email'); if(el) el.focus(); }, 50);
+    setTimeout(()=>{ const el=document.getElementById('l-email'); if(el){ el.focus(); el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();}); } }, 50);
   };
 
   // FAQ toggle
@@ -824,8 +833,6 @@ function renderLogin(){
     else{el.style.display='none';icon.textContent='+';}
   };
 
-  // PIN enter key
-  document.getElementById('l-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
   // Load featured deals
   // Fetch real member count
@@ -847,19 +854,82 @@ function renderLogin(){
 }
 
 
+let _loginEmail='';
+let _resendTimer=null;
+async function postAuth(fn,payload){
+  const res=await fetch('/.netlify/functions/'+fn,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  let j={};try{j=await res.json();}catch(e){}
+  return {ok:res.ok,status:res.status,data:j};
+}
+// Step 1: ask for a code
 async function doLogin(){
   const email=document.getElementById('l-email').value.trim().toLowerCase();
-  const pin=document.getElementById('l-pin').value.trim();
   const err=document.getElementById('l-err');
   const btn=document.getElementById('l-btn');
-  if(!email||!pin){err.textContent='Please enter your email and PIN.';return;}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err.textContent='Please enter a valid email address.';return;}
+  err.textContent='';
+  btn.innerHTML='<span class="spinner"></span> Sending code…';btn.disabled=true;
+  try{
+    const r=await postAuth('auth-request',{email});
+    if(!r.ok){err.textContent=(r.data&&r.data.error)||'Could not send the code. Please try again.';btn.innerHTML='<i class="ti ti-mail"></i> Email me a code';btn.disabled=false;return;}
+    _loginEmail=email;
+    try{localStorage.setItem('fundova_saved_email',email);}catch(e){}
+    openCodeStep();
+  }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-mail"></i> Email me a code';btn.disabled=false;}
+}
+function openCodeStep(){
+  openModal(`
+    <div style="text-align:center;margin-bottom:1.2rem">
+      <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Check your email</div>
+      <h2 style="font-size:22px;font-weight:800;color:#0D1F14;margin:0">Enter your 6-digit code</h2>
+      <p style="font-size:13px;color:#666;margin:10px 0 0">If <strong>${_loginEmail.replace(/</g,'&lt;')}</strong> belongs to a Fundova member, a code is on its way. It stays valid for 10 minutes.</p>
+    </div>
+    <div class="field" style="margin-bottom:14px"><input id="l-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-size:26px;letter-spacing:8px;text-align:center;border:1.5px solid #e5e5e2"></div>
+    <div class="error" id="l-err" style="margin-bottom:10px"></div>
+    <button id="l-vbtn" onclick="verifyLoginCode()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-login"></i> Sign in</button>
+    <div style="text-align:center;margin-top:12px;font-size:12px;color:#888">
+      <button id="l-resend" onclick="resendLoginCode()" disabled style="background:none;border:none;color:#1D9E75;cursor:pointer;font-size:12px;text-decoration:underline">Send a new code</button>
+      &nbsp;·&nbsp;
+      <button onclick="openLoginModal()" style="background:none;border:none;color:#1D9E75;cursor:pointer;font-size:12px;text-decoration:underline">Use a different email</button>
+    </div>`);
+  setTimeout(()=>{const el=document.getElementById('l-code');if(el){el.focus();el.addEventListener('keydown',e=>{if(e.key==='Enter')verifyLoginCode();});el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,6);if(el.value.length===6)verifyLoginCode();});}},50);
+  startResendCountdown(60);
+}
+function startResendCountdown(sec){
+  if(_resendTimer)clearInterval(_resendTimer);
+  let left=sec;
+  const tick=()=>{
+    const b=document.getElementById('l-resend');
+    if(!b){clearInterval(_resendTimer);return;}
+    if(left>0){b.disabled=true;b.style.opacity='.5';b.textContent='Send a new code in '+left+'s';left--;}
+    else{b.disabled=false;b.style.opacity='1';b.textContent='Send a new code';clearInterval(_resendTimer);}
+  };
+  tick();_resendTimer=setInterval(tick,1000);
+}
+async function resendLoginCode(){
+  const err=document.getElementById('l-err');
+  try{
+    const r=await postAuth('auth-request',{email:_loginEmail});
+    if(!r.ok){err.textContent=(r.data&&r.data.error)||'Could not send the code.';return;}
+    err.textContent='';toast('<i class="ti ti-mail"></i> A new code has been sent.');startResendCountdown(60);
+  }catch(e){err.textContent='Connection error. Please try again.';}
+}
+// Step 2: check the code
+async function verifyLoginCode(){
+  const el=document.getElementById('l-code');if(!el)return;
+  const code=el.value.trim();
+  const err=document.getElementById('l-err');
+  const btn=document.getElementById('l-vbtn');
+  if(btn.disabled)return;
+  if(!/^\d{6}$/.test(code)){err.textContent='Please enter the 6-digit code from your email.';return;}
+  err.textContent='';
   btn.innerHTML='<span class="spinner"></span> Signing in…';btn.disabled=true;
   try{
-    const users=await sb(`users?email=eq.${encodeURIComponent(email)}&pin=eq.${encodeURIComponent(pin)}&select=*`);
-    if(!users||!users.length){err.textContent='Invalid email or PIN.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    if(users[0].status==='revoked'){err.textContent='Your account access has been revoked. Please contact the administrator.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    if(users[0].status==='closed'){err.textContent='This account has been closed. Please contact the administrator if you believe this is a mistake.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
-    currentUser=users[0];saveSession(currentUser);localStorage.setItem('fundova_saved_email',email);closeModal();await render();
+    const r=await postAuth('auth-verify',{email:_loginEmail,code});
+    if(!r.ok||!r.data||!r.data.token){err.textContent=(r.data&&r.data.error)||'That code is not valid. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;return;}
+    currentUser=r.data.user;saveSession(currentUser,r.data.token,r.data.exp);
+    if(_resendTimer)clearInterval(_resendTimer);
+    closeModal();await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
 function doLogout(){currentUser=null;clearSession();signupStep=1;render();}
@@ -1580,14 +1650,13 @@ function buildSignupsTab(signups){
 function openApproveSignup(id,name,email,bankName,accountName,accountNumber,phone,whatsapp){
   openModal(`
   <h3>Approve application</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">Set a PIN for <strong>${name}</strong>. They'll receive an email with their login details.</p>
-  <div class="info-box"><i class="ti ti-info-circle"></i> An approval email will be sent to <strong>${email}</strong> with the sign-in link and PIN.</div>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Approve <strong>${name}</strong>. They'll receive a welcome email and sign in with a code sent to their email.</p>
+  <div class="info-box"><i class="ti ti-info-circle"></i> An approval email will be sent to <strong>${email}</strong> with the sign-in link. No PIN is needed.</div>
   <div style="background:#f5f5f3;border-radius:8px;padding:12px;font-size:13px">
     <div style="margin-bottom:4px"><span style="color:#888">Bank:</span> ${bankName}</div>
     <div style="margin-bottom:4px"><span style="color:#888">Account name:</span> ${accountName}</div>
     <div><span style="color:#888">Account number:</span> <span style="font-family:monospace">${accountNumber}</span></div>
   </div>
-  <div class="field"><label>Set PIN for contributor</label><input id="as-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
   <div class="error" id="as-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
@@ -1596,17 +1665,15 @@ function openApproveSignup(id,name,email,bankName,accountName,accountNumber,phon
 }
 
 async function approveSignup(id,name,email,bankName,accountName,accountNumber,phone,whatsapp){
-  const pin=document.getElementById('as-pin').value.trim();
   const err=document.getElementById('as-err');
   const btn=document.getElementById('as-btn');
-  if(!pin||pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}
   btn.innerHTML='<span class="spinner"></span> Approving…';btn.disabled=true;
   try{
     // Create user account
     // Get referred_by from signup request
     const signupReq = await sb(`signup_requests?id=eq.${id}&select=referred_by`);
     const referredBy = signupReq&&signupReq[0]?signupReq[0].referred_by:null;
-    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor',phone:phone||null,whatsapp:whatsapp||null,referred_by:referredBy||null})});
+    const newUsers=await sb('users',{method:'POST',body:JSON.stringify({name,email,role:'contributor',phone:phone||null,whatsapp:whatsapp||null,referred_by:referredBy||null})});
     const newUser=newUsers&&newUsers[0];
     // Save bank details
     if(newUser){
@@ -1615,7 +1682,7 @@ async function approveSignup(id,name,email,bankName,accountName,accountNumber,ph
     // Mark signup request approved
     await sb(`signup_requests?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
     // Send email
-    await sendEmail({type:'approval',to:email,name,pin});
+    await sendEmail({type:'approval',to:email,name});
     closeModal();
     toast('<i class="ti ti-check"></i> Approved and email sent!');
     await renderAdmin();
@@ -1644,10 +1711,6 @@ function buildCredentialsTab(contributors,kycMap={}){
     <td style="font-size:12px">${c.phone||'<span style="color:#ccc">&mdash;</span>'}</td>
     <td style="font-size:12px">${c.whatsapp?`<a href="https://wa.me/234${c.whatsapp.replace(/^0/,'')}" target="_blank" style="color:#065F46">${c.whatsapp}</a>`:'<span style="color:#ccc">&mdash;</span>'}</td>
     <td>${kycBadgeHTML(kycStatus)}</td>
-    <td><div style="display:flex;align-items:center;gap:8px">
-      <span id="pin-display-${c.id}" style="font-family:monospace;letter-spacing:2px">••••••</span>
-      <button class="btn btn-sm" onclick="togglePin('${c.id}','${c.pin}')" id="pin-toggle-${c.id}"><i class="ti ti-eye"></i></button>
-    </div></td>
     <td><div style="display:flex;gap:4px">
       <button class="btn btn-sm btn-edit" onclick="openEditCredentials('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.email}')"><i class="ti ti-pencil"></i> Edit</button>
       <button class="btn btn-sm" title="${needsReminder?'Send KYC reminder':'Already verified — no reminder needed'}" data-uid="${c.id}" data-uname="${c.name}" ${needsReminder?`onclick="sendKycNudge(this.dataset.uid,this.dataset.uname)"`:'disabled'} style="background:${needsReminder?'#856404':'#e5e5e2'};color:${needsReminder?'#fff':'#aaa'};cursor:${needsReminder?'pointer':'not-allowed'}"><i class="ti ti-id"></i></button>
@@ -1657,24 +1720,17 @@ function buildCredentialsTab(contributors,kycMap={}){
   }).join('');
   return`<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
-      <h3 style="margin:0">Contributor credentials</h3>
+      <h3 style="margin:0">Contributor contacts</h3>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:12px;color:#888"><i class="ti ti-lock"></i> Keep this confidential</span>
         <div style="position:relative"><i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px"></i><input id="credentials-search" type="text" placeholder="Search by name..." oninput="filterTableRows('credentials-search','credentials-table')" style="padding:7px 10px 7px 28px;border:1px solid #e5e5e2;border-radius:8px;font-size:12px;width:200px"></div>
       </div>
     </div>
     <div class="table-wrap"><table id="credentials-table">
-      <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>KYC Status</th><th>PIN</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Phone</th><th>WhatsApp</th><th>KYC Status</th><th></th></tr>
       ${rows}
     </table></div>
   </div>`;
-}
-
-function togglePin(id,pin){
-  const d=document.getElementById(`pin-display-${id}`);
-  const b=document.getElementById(`pin-toggle-${id}`);
-  if(d.textContent==='••••••'){d.textContent=pin;b.innerHTML='<i class="ti ti-eye-off"></i>';}
-  else{d.textContent='••••••';b.innerHTML='<i class="ti ti-eye"></i>';}
 }
 
 function openEditCredentials(userId,userName,userEmail){
@@ -1682,7 +1738,7 @@ function openEditCredentials(userId,userName,userEmail){
   <h3>Edit credentials</h3>
   <p style="font-size:13px;color:#666;margin-top:-6px">${userName}</p>
   <div class="field"><label>Email address</label><input id="ec-email" type="email" value="${userEmail}"></div>
-  <div class="field"><label>New PIN <span style="color:#aaa;font-weight:400">(leave blank to keep current)</span></label><input id="ec-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
+  <p style="font-size:12px;color:#888">Members sign in with a code sent to this email, so make sure it is correct.</p>
   <div class="error" id="ec-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
@@ -1692,12 +1748,10 @@ function openEditCredentials(userId,userName,userEmail){
 
 async function saveEditCredentials(userId){
   const email=document.getElementById('ec-email').value.trim().toLowerCase();
-  const pin=document.getElementById('ec-pin').value.trim();
   const err=document.getElementById('ec-err');
   const btn=document.getElementById('ec-btn');
   if(!email){err.textContent='Email is required.';return;}
   const update={email};
-  if(pin){if(pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}update.pin=pin;}
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
     await sb(`users?id=eq.${userId}`,{method:'PATCH',body:JSON.stringify(update)});
@@ -2042,7 +2096,6 @@ async function renderContributor(){
             </button>
             <div id="notif-panel" style="display:none;position:absolute;right:0;top:36px;width:300px;background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;overflow:hidden;max-height:400px;overflow-y:auto"></div>
           </div>
-          <button class="btn btn-sm" onclick="openChangePin()"><i class="ti ti-lock"></i></button>
           <button class="btn btn-sm" onclick="openEditProfile()"><i class="ti ti-user-edit"></i></button>
           <button class="btn btn-sm" onclick="doLogout()" title="Sign out" style="color:#A32D2D;border-color:#A32D2D"><i class="ti ti-logout"></i></button>
         </div>
@@ -2753,7 +2806,7 @@ function openAddContributor(){
   <h3>Add contributor</h3>
   <div class="field"><label>Full name</label><input id="nc-name" placeholder="e.g. Adaeze Okonkwo" autocomplete="off"></div>
   <div class="field"><label>Email address</label><input id="nc-email" type="email" placeholder="adaeze@email.com" autocomplete="off"></div>
-  <div class="field"><label>PIN</label><input id="nc-pin" type="text" maxlength="6" placeholder="e.g. 4521" autocomplete="off"></div>
+  <p style="font-size:12px;color:#888">They sign in with a code emailed to them. No PIN is needed.</p>
   <div class="error" id="nc-err"></div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
@@ -2764,13 +2817,12 @@ function openAddContributor(){
 async function saveContributor(){
   const name=document.getElementById('nc-name').value.trim();
   const email=document.getElementById('nc-email').value.trim().toLowerCase();
-  const pin=document.getElementById('nc-pin').value.trim();
   const err=document.getElementById('nc-err');
   const btn=document.getElementById('nc-btn');
-  if(!name||!email||!pin){err.textContent='All fields are required.';return;}
+  if(!name||!email){err.textContent='All fields are required.';return;}
   btn.innerHTML='<span class="spinner"></span> Saving…';btn.disabled=true;
   try{
-    await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role:'contributor'})});
+    await sb('users',{method:'POST',body:JSON.stringify({name,email,role:'contributor'})});
     closeModal();await renderAdmin();
   }catch(e){
     err.textContent=e.message.includes('unique')||e.message.includes('duplicate')?'That email already exists.':'Error saving.';
@@ -2978,39 +3030,6 @@ async function deletePaymentFromView(payId,userId,userName){
   catch(e){alert('Error deleting payment.');}
 }
 
-function openChangePin(){
-  openModal(`
-  <h3>Change PIN</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">Choose a new PIN you'll use to sign in.</p>
-  <div class="field"><label>Current PIN</label><input id="cp-current" type="password" maxlength="6" placeholder="Enter your current PIN"></div>
-  <div class="field"><label>New PIN</label><input id="cp-new" type="password" maxlength="6" placeholder="Choose a new PIN"></div>
-  <div class="field"><label>Confirm new PIN</label><input id="cp-confirm" type="password" maxlength="6" placeholder="Repeat new PIN"></div>
-  <div class="error" id="cp-err"></div>
-  <div class="modal-footer">
-    <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="cp-btn" onclick="saveChangePin()"><i class="ti ti-lock-check"></i> Update PIN</button>
-  </div>`);
-}
-
-async function saveChangePin(){
-  const current=document.getElementById('cp-current').value.trim();
-  const newPin=document.getElementById('cp-new').value.trim();
-  const confirm=document.getElementById('cp-confirm').value.trim();
-  const err=document.getElementById('cp-err');
-  const btn=document.getElementById('cp-btn');
-  if(!current||!newPin||!confirm){err.textContent='All fields are required.';return;}
-  if(current!==currentUser.pin){err.textContent='Current PIN is incorrect.';return;}
-  if(newPin.length<4){err.textContent='New PIN must be at least 4 digits.';return;}
-  if(newPin!==confirm){err.textContent='New PINs do not match.';return;}
-  if(newPin===current){err.textContent='New PIN must be different from your current PIN.';return;}
-  btn.innerHTML='<span class="spinner"></span> Updating…';btn.disabled=true;
-  try{
-    await sb(`users?id=eq.${currentUser.id}`,{method:'PATCH',body:JSON.stringify({pin:newPin})});
-    currentUser.pin=newPin;
-    closeModal();
-    toast('<i class="ti ti-check"></i> PIN updated successfully');
-  }catch(e){err.textContent='Error updating PIN.';btn.innerHTML='<i class="ti ti-lock-check"></i> Update PIN';btn.disabled=false;}
-}
 
 
 // ─── INVESTMENTS ──────────────────────────────────────────
@@ -3393,7 +3412,7 @@ async function renderContributorInvestments(){
     if(openNotInvested.length){
       try{
         const allOpenIds=openNotInvested.map(i=>i.id);
-        const allRes=await sb(`investment_reservations?investment_id=in.(${allOpenIds.join(',')})&status=eq.payment_confirmed&select=*`);
+        const allRes=await sb(`investment_reservations?investment_id=in.(${allOpenIds.join(',')})&status=eq.payment_confirmed&select=investment_id,units`);
         (allRes||[]).forEach(r=>{
           if(!allReservationsMap[r.investment_id])allReservationsMap[r.investment_id]=[];
           allReservationsMap[r.investment_id].push(r);
@@ -4204,7 +4223,7 @@ function openCreateAdminAccount(){
   <p style="font-size:13px;color:#666;margin-top:-6px">Create a view-only or full admin account.</p>
   <div class="field"><label>Full name</label><input id="ca-name" placeholder="e.g. Tunde Adeyemi" autocomplete="off"></div>
   <div class="field"><label>Email address</label><input id="ca-email" type="email" placeholder="tunde@email.com" autocomplete="off"></div>
-  <div class="field"><label>PIN</label><input id="ca-pin" type="text" maxlength="6" placeholder="e.g. 9876" autocomplete="off"></div>
+  <p style="font-size:12px;color:#888">They sign in with a code emailed to them (valid for 24 hours at a time). No PIN is needed.</p>
   <div class="field"><label>Role</label>
     <select id="ca-role">
       <option value="admin_view">View only &mdash; can see everything but cannot take any action</option>
@@ -4221,15 +4240,13 @@ function openCreateAdminAccount(){
 async function saveAdminAccount(){
   const name=document.getElementById('ca-name').value.trim();
   const email=document.getElementById('ca-email').value.trim().toLowerCase();
-  const pin=document.getElementById('ca-pin').value.trim();
   const role=document.getElementById('ca-role').value;
   const err=document.getElementById('ca-err');
   const btn=document.getElementById('ca-btn');
-  if(!name||!email||!pin){err.textContent='All fields are required.';return;}
-  if(pin.length<4){err.textContent='PIN must be at least 4 digits.';return;}
+  if(!name||!email){err.textContent='All fields are required.';return;}
   btn.innerHTML='<span class="spinner"></span> Creating…';btn.disabled=true;
   try{
-    await sb('users',{method:'POST',body:JSON.stringify({name,email,pin,role})});
+    await sb('users',{method:'POST',body:JSON.stringify({name,email,role})});
     closeModal();
     toast('<i class="ti ti-check"></i> Admin account created successfully.');
   }catch(e){
@@ -5825,7 +5842,7 @@ async function sendBroadcastEmail(){
       try{
         await fetch('/.netlify/functions/send-email',{
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:authHeaders(),
           body:JSON.stringify({type:'broadcast',to:u.email,name:u.name,subject,body,image_url})
         });
         sent++;
@@ -5889,7 +5906,7 @@ async function sendBirthdayWish(userId,userName,userEmail){
   try{
     await fetch('/.netlify/functions/send-email',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:authHeaders(),
       body:JSON.stringify({type:'birthday_wish',to:userEmail,name:userName,body,image_url})
     });
     closeModal();
@@ -5903,7 +5920,7 @@ async function notify(payload){
   try{
     await fetch('/.netlify/functions/send-email',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:authHeaders(),
       body:JSON.stringify(payload)
     });
   }catch(e){console.error('Notification error:',e);}
@@ -6438,7 +6455,7 @@ async function inviteGroupMember(groupId){
       // Send invitation email
       await fetch('/.netlify/functions/send-email',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:authHeaders(),
         body:JSON.stringify({
           type:'group_invitation',
           to:email, name, coordinator_name:currentUser.name,
@@ -6475,7 +6492,7 @@ function renderTermsPage(){
       ${[
         {title:'1. Introduction', body:'These Terms of Service govern your use of the Fundova platform at www.fundova.africa and your membership of Fundova Multipurpose Cooperative Society Ltd. By registering, you confirm that you have read, understood and agreed to these terms. These terms form a legally binding agreement between you and Fundova Limited and Fundova Multipurpose Cooperative Society Ltd (collectively "Fundova").'},
         {title:'2. Eligibility', body:'Membership is open to Nigerians aged 18 and above, whether residing in Nigeria or in the diaspora. By applying to join, you confirm that you are at least 18 years old, that the information you provide is accurate and complete, and that you have a valid Nigerian bank account in your name.'},
-        {title:'3. Account Responsibilities', body:'You are responsible for keeping your PIN confidential. Do not share your PIN with anyone, including Fundova staff. Fundova will never ask for your PIN. If you believe your account has been compromised, contact us immediately at 08035257262. You are responsible for all activity on your account. Use of another person identity or false information is a violation of these terms and may result in immediate account termination.'},
+        {title:'3. Account Responsibilities', body:'You sign in with a one-time code sent to your email address. You are responsible for keeping your email account secure and for not sharing your sign-in codes with anyone, including Fundova staff. Fundova will never ask you for a code. If you believe your account has been compromised, contact us immediately at 08035257262. You are responsible for all activity on your account. Use of another person identity or false information is a violation of these terms and may result in immediate account termination.'},
         {title:'4. Savings and Contributions', body:'There is no minimum contribution amount. Contributions can be made at any time by transferring funds to the Fundova cooperative account at FCMB (Account: 2009239208 — Fundova Multipurpose Cooperative Society Ltd). Interest accrues at approximately 10% per annum, calculated every weekday from the date your payment is recorded. Interest rates may be reviewed periodically and members will be notified of any changes. Savings are not a fixed deposit and returns are not guaranteed by any government agency. Fundova operates as a registered cooperative and manages funds responsibly on behalf of its members.'},
         {title:'5. Withdrawals', body:'Members may request withdrawals at any time from their dashboard. The minimum withdrawal amount is ₦5,000. Withdrawals are processed within 24 hours of approval. Approval is at the discretion of Fundova administration, subject to liquidity availability. Partial withdrawals are permitted — you may withdraw a portion of your savings and leave the remainder to continue earning interest. KYC verification and valid bank details on file are required before any withdrawal can be processed.'},
         {title:'6. KYC Requirements', body:'In compliance with Nigerian financial regulations including SCUML and NFIU requirements, members are required to complete KYC verification before withdrawals can be processed. Required KYC fields include: date of birth, home address, BVN, NIN and government ID type and number. KYC information is used solely for identity verification and regulatory compliance and is never shared with third parties. When KYC details are updated, the previous version is retained for audit purposes and verification status resets pending admin review.'},
@@ -9035,159 +9052,6 @@ function uploadFoodPackageImage(pkgId){
     reader.readAsDataURL(file);
   };
   input.click();
-}
-
-
-// ─── FORGOT PIN / RESET PIN ──────────────────────────────
-
-function openForgotPin(){
-  openModal(`
-  <h3>Reset your PIN</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">Enter your registered email address and we will send you a 6-digit reset code.</p>
-  <div class="field">
-    <label>Email address</label>
-    <input id="fp-email" type="email" placeholder="you@email.com" autocomplete="email">
-  </div>
-  <div class="error" id="fp-err"></div>
-  <div class="modal-footer">
-    <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="fp-btn" onclick="sendPinResetCode()">
-      <i class="ti ti-send"></i> Send reset code
-    </button>
-  </div>`);
-}
-
-async function sendPinResetCode(){
-  const email = document.getElementById('fp-email').value.trim().toLowerCase();
-  const err = document.getElementById('fp-err');
-  const btn = document.getElementById('fp-btn');
-
-  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    err.textContent = 'Please enter a valid email address.';
-    return;
-  }
-
-  btn.innerHTML = '<span class="spinner"></span> Sending…';
-  btn.disabled = true;
-
-  try{
-    // Check if email exists
-    const users = await sb('users?email=eq.'+email+'&select=id,name,email');
-    if(!users || !users.length){
-      err.textContent = 'No account found with this email address.';
-      btn.innerHTML = '<i class="ti ti-send"></i> Send reset code';
-      btn.disabled = false;
-      return;
-    }
-
-    // Generate 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 15*60*1000).toISOString(); // 15 minutes
-
-    // Clean up old codes for this email first
-    await sb('password_resets?email=eq.'+email, {method:'DELETE'}).catch(()=>{});
-    // Save reset code
-    await sb('password_resets', {method:'POST', body:JSON.stringify({
-      email, code, expires_at:expiresAt, used:false
-    })});
-
-    // Send email with code
-    await notify({
-      type:'pin_reset',
-      to:email,
-      name:users[0].name,
-      code
-    });
-
-    // Show code entry form
-    openModal(`
-    <h3>Enter reset code</h3>
-    <p style="font-size:13px;color:#666;margin-top:-6px">We sent a 6-digit code to <strong>${email}</strong>. It expires in 15 minutes.</p>
-    <div class="field">
-      <label>Reset code</label>
-      <input id="pr-code" type="text" maxlength="6" placeholder="e.g. 482931" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center">
-    </div>
-    <div class="field">
-      <label>New PIN</label>
-      <input id="pr-pin" type="password" maxlength="6" placeholder="Choose a new PIN" autocomplete="new-password">
-    </div>
-    <div class="field">
-      <label>Confirm new PIN</label>
-      <input id="pr-pin2" type="password" maxlength="6" placeholder="Repeat your new PIN" autocomplete="new-password">
-    </div>
-    <div class="error" id="pr-err"></div>
-    <div class="modal-footer">
-      <button class="btn" onclick="openForgotPin()">← Back</button>
-      <button class="btn btn-primary" id="pr-btn" onclick="confirmPinReset('${email}')">
-        <i class="ti ti-lock"></i> Reset PIN
-      </button>
-    </div>`);
-
-  }catch(e){
-    err.textContent = 'Error sending code. Please try again.';
-    btn.innerHTML = '<i class="ti ti-send"></i> Send reset code';
-    btn.disabled = false;
-  }
-}
-
-async function confirmPinReset(email){
-  const code = document.getElementById('pr-code').value.trim();
-  const pin = document.getElementById('pr-pin').value.trim();
-  const pin2 = document.getElementById('pr-pin2').value.trim();
-  const err = document.getElementById('pr-err');
-  const btn = document.getElementById('pr-btn');
-
-  if(!code || code.length !== 6){ err.textContent = 'Please enter the 6-digit code from your email.'; return; }
-  if(!pin || pin.length < 4){ err.textContent = 'PIN must be at least 4 digits.'; return; }
-  if(pin !== pin2){ err.textContent = 'PINs do not match. Please try again.'; return; }
-
-  btn.innerHTML = '<span class="spinner"></span> Resetting…';
-  btn.disabled = true;
-
-  try{
-    // Verify code - let the DATABASE check expiry to avoid browser timezone issues
-    // expires_at filter means Supabase compares server UTC time to stored UTC expires_at
-    const now = new Date().toISOString();
-    const resets = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&used=eq.false&expires_at=gt.'+now+'&select=*');
-    if(!resets || !resets.length){
-      // Check if code exists but expired vs wrong code
-      const anyCode = await sb('password_resets?email=eq.'+email+'&code=eq.'+code+'&select=id');
-      if(anyCode && anyCode.length){
-        err.textContent = 'This code has expired. Please request a new one.';
-      } else {
-        err.textContent = 'Invalid code. Please check your email or request a new code.';
-      }
-      btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
-      btn.disabled = false;
-      return;
-    }
-
-    const reset = resets[0];
-
-    // Update PIN
-    await sb('users?email=eq.'+email, {method:'PATCH', body:JSON.stringify({pin})});
-
-    // Mark reset code as used
-    await sb('password_resets?id=eq.'+reset.id, {method:'PATCH', body:JSON.stringify({used:true})});
-
-    // Send confirmation email
-    const users = await sb('users?email=eq.'+email+'&select=name');
-    if(users&&users[0]){
-      notify({
-        type:'pin_reset_confirm',
-        to:email,
-        name:users[0].name
-      }).catch(()=>{});
-    }
-
-    closeModal();
-    toast('<i class="ti ti-check"></i> PIN reset successfully! You can now sign in with your new PIN.');
-
-  }catch(e){
-    err.textContent = 'Error resetting PIN. Please try again.';
-    btn.innerHTML = '<i class="ti ti-lock"></i> Reset PIN';
-    btn.disabled = false;
-  }
 }
 
 
