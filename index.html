@@ -294,6 +294,64 @@ async function deductCapitalFirst(userId,payments,amount,carryLabel){
     }
   }
 }
+// ── FOOD SCHEME HELPERS ─────────────────────────────────
+function isFoodRow(p){return !!(p&&p.is_transfer&&/^Food Scheme deduction/i.test(p.purpose||''));}
+// DISPLAY ONLY. Earlier food deductions were stored as one negative row. For screens that list the active
+// (earning) payments, show that deduction against the oldest payments instead, so no negative row is listed.
+// The interest on the payments that were used is shown as one non-earning line. Totals are unchanged by
+// construction: that line is whatever is needed to make the interest total equal the stored figures.
+// If it cannot be netted cleanly the rows are returned exactly as stored.
+function netFoodRows(pays){
+  const rows=(pays||[]).map(p=>({...p}));
+  const negs=rows.filter(p=>isFoodRow(p)&&Number(p.amount)<0).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(!negs.length)return {rows,netted:false};
+  try{
+    const trueInt=rows.reduce((a,p)=>a+rowIntTotal(p),0);
+    const lots=rows.filter(p=>!(isFoodRow(p)&&Number(p.amount)<0)).map(p=>({...p,_rem:Number(p.amount),_used:0}));
+    const cand=lots.filter(p=>!p.is_interest&&Number(p.amount)>0).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    let short=0,est=0;
+    for(const n of negs){
+      let need=Math.abs(Number(n.amount));
+      for(const l of cand){
+        if(need<=0.004)break;
+        if(new Date(l.date)>new Date(n.date))continue; // only payments that existed at the time
+        const t=Math.min(l._rem,need);
+        if(t<=0)continue;
+        l._rem=+(l._rem-t).toFixed(2);l._used=+(l._used+t).toFixed(2);need=+(need-t).toFixed(2);
+        est+=t*RATE/WEEKDAYS_PER_YEAR*countWeekdays(new Date(l.date),new Date(n.date));
+      }
+      if(need>0.004)short+=need;
+    }
+    if(short>0.004)return {rows,netted:false};
+    const out=[];
+    for(const l of lots){
+      if(l.is_interest){out.push(l);continue;}
+      if(l._rem<=0.004)continue;
+      const {_rem,_used,...rest}=l;
+      out.push({...rest,amount:_rem,_locked:_used>0.004});
+    }
+    const keepInt=out.reduce((a,p)=>a+rowIntTotal(p),0);
+    const frozen=+(trueInt-keepInt).toFixed(2);
+    if(Math.abs(frozen-est)>1)return {rows,netted:false}; // does not reconcile: show as stored rather than risk a wrong figure
+    if(frozen>0.004)out.push({id:'food-int',user_id:negs[0].user_id,amount:frozen,date:negs[negs.length-1].date,is_interest:true,is_transfer:true,purpose:'Interest earned on amounts applied to Food Scheme',_virtual:true});
+    out.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    return {rows:out,netted:true};
+  }catch(e){return {rows,netted:false};}
+}
+function csvCell(v){let s=String(v==null?'':v);if(typeof v!=='number'&&/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
+function downloadCsv(name,rows){
+  const txt='﻿'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));
+  a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+}
+// Every food scheme event is written to food_scheme_history (who, what, when, how much).
+async function foodLog(userId,event,opt,extra){
+  const e=extra||{};
+  return sb('food_scheme_history',{method:'POST',body:JSON.stringify({user_id:String(userId),event,option_id:opt&&opt.id!=null?String(opt.id):null,option_name:opt&&opt.name||null,amount:e.amount==null?null:e.amount,ref:e.ref||null,note:e.note||null,actor:(typeof currentUser!=='undefined'&&currentUser&&currentUser.email)||null})});
+}
+function foodLogSafe(userId,event,opt,extra){return foodLog(userId,event,opt,extra).catch(()=>{});}
 // Interest accrued per calendar month across all contributors (same weekday rule as calcAccruedInterest).
 function monthlyInterestSummary(rows,months){
   const perDay=RATE/WEEKDAYS_PER_YEAR;
@@ -1438,17 +1496,18 @@ function buildPaymentsTab(payments,contributors){
     const endDate=p.withdrawn_at?new Date(p.withdrawn_at):today;
     const start=new Date(p.date);start.setHours(0,0,0,0);
     const weekdays=countWeekdays(start,endDate);
-    const wBadge=p.withdrawn?'<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:2px 6px;border-radius:4px;margin-left:5px">Withdrawn</span>':'';
+    const _food=isFoodRow(p)&&Number(p.amount)<0;
+    const wBadge=(p.withdrawn?'<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:2px 6px;border-radius:4px;margin-left:5px">Withdrawn</span>':'')+(_food?'<span style="font-size:10px;background:#FEF3C7;color:#856404;padding:2px 6px;border-radius:4px;margin-left:5px">Applied to Food Scheme</span>':'');
     return`<tr style="${p.withdrawn?'opacity:.6':''}">
       <td style="font-weight:500">${user?user.name:'Unknown'}${wBadge}</td>
       <td>${fmtDate(p.date)}</td>
       <td>${fmt(p.amount)}</td>
       <td style="color:#888;font-size:11px">${weekdays} weekdays${p.withdrawn?' (to withdrawal)':''}</td>
-      <td class="green">${fmt(interest)}</td>
-      <td><strong>${fmt(Number(p.amount)+interest)}</strong></td>
+      <td class="green">${_food?'—':fmt(interest)}</td>
+      <td><strong>${_food?'—':fmt(Number(p.amount)+interest)}</strong></td>
       <td><div style="display:flex;gap:5px;justify-content:flex-end">
-        ${!p.withdrawn&&!isViewOnly()?`<button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>`:''}
-        ${!p.withdrawn&&!isViewOnly()?`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+        ${!p.withdrawn&&!isViewOnly()&&!_food?`<button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${user?user.name.replace(/'/g,"\\'"):"Unknown"}')"><i class="ti ti-pencil"></i></button>`:''}
+        ${!p.withdrawn&&!isViewOnly()&&!_food?`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
       </div></td>
     </tr>`;
   }).join('');
@@ -1769,10 +1828,11 @@ async function openStatement(){
   openModal('<div style="padding:2rem;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;display:inline-block"></div> Preparing your statement…</div>');
   try{
     const uid=currentUser.id;
-    const [pays,reqs,res]=await Promise.all([
+    const [pays,reqs,res,fh]=await Promise.all([
       sb(`payments?user_id=eq.${uid}&select=*&order=date.asc`),
       sb(`withdrawal_requests?user_id=eq.${uid}&status=eq.approved&select=*`),
-      sb(`investment_reservations?user_id=eq.${uid}&status=eq.payment_confirmed&payment_method=eq.savings&select=*`).catch(()=>[])
+      sb(`investment_reservations?user_id=eq.${uid}&status=eq.payment_confirmed&payment_method=eq.savings&select=*`).catch(()=>[]),
+      sb(`food_scheme_history?user_id=eq.${uid}&event=eq.deducted&select=*`).catch(()=>[])
     ]);
     let invMap={};
     if(res&&res.length){
@@ -1805,6 +1865,7 @@ async function openStatement(){
       rows.push({d:r.updated_at||r.created_at,t:'used',desc:'Investment: '+inv.title,amt});
       totalUsed+=amt;
     });
+    (fh||[]).forEach(h=>{const a=Number(h.amount);if(a>0){rows.push({d:h.created_at,t:'used',desc:'Food Scheme: '+(h.option_name||'package'),amt:a});totalUsed+=a;}});
     rows.sort((a,b)=>new Date(b.d)-new Date(a.d));
     const held=(pays||[]).filter(p=>!p.withdrawn&&!p.moved_at).reduce((a,p)=>a+rowValue(p),0);
     const tag={in:['Contribution','#0F6E56'],out:['Withdrawal','#A32D2D'],used:['Applied','#856404']};
@@ -2157,7 +2218,7 @@ async function renderContributor(){
         </div>
         ${payments.length?`<div class="table-wrap"><table>
           <tr><th>Date</th><th>Amount</th><th>Details</th><th>Weekdays</th><th>Interest accrued</th></tr>
-          ${[...payments].reverse().slice(0,5).map(p=>{
+          ${[...netFoodRows(payments).rows].reverse().slice(0,5).map(p=>{
             const wd=countWeekdays(new Date(p.date),new Date());
             const interest=rowInterest(p);
             return`<tr>
@@ -2786,6 +2847,7 @@ function openEditPayment(payId,currentDate,currentAmount,userName){
 }
 
 async function saveEditPayment(payId){
+  if(await _foodRowGuard(payId))return;
   const date=document.getElementById('ep-date').value;
   const amount=parseFloat(document.getElementById('ep-amt').value);
   const err=document.getElementById('ep-err');
@@ -2799,7 +2861,12 @@ async function saveEditPayment(payId){
   }catch(e){err.textContent='Error saving.';btn.innerHTML='<i class="ti ti-device-floppy"></i> Save changes';btn.disabled=false;}
 }
 
+async function _foodRowGuard(id){
+  try{const r=await sb(`payments?id=eq.${id}&select=purpose,is_transfer`);if(r&&r[0]&&isFoodRow(r[0])){alert('This is a Food Scheme deduction. It cannot be edited or deleted here.');return true;}}catch(e){}
+  return false;
+}
 async function deletePayment(id){
+  if(await _foodRowGuard(id))return;
   if(!confirm('Delete this payment? This cannot be undone.'))return;
   try{await sb(`payments?id=eq.${id}`,{method:'DELETE'});await renderAdmin();}
   catch(e){alert('Error deleting payment.');}
@@ -2816,18 +2883,20 @@ async function openViewContributor(userId,userName){
     const principal=pays.reduce((a,p)=>a+rowPrincipal(p),0);
     const interest=pays.reduce((a,p)=>a+rowIntTotal(p),0);
     const today=new Date();today.setHours(0,0,0,0);
-    const rows=pays.length?pays.map(p=>{
+    const _net=netFoodRows(pays);
+    const rows=_net.rows.length?_net.rows.map(p=>{
       const int=rowInterest(p);
       const start=new Date(p.date);start.setHours(0,0,0,0);
       const weekdays=countWeekdays(start,today);
+      const lock=p._virtual?'Interest on amounts applied to Food Scheme':p._locked?'Part applied to Food Scheme':isFoodRow(p)?'Food Scheme':'';
       return`<tr>
         <td>${fmtDate(p.date)}</td><td>${fmt(p.amount)}</td>
-        <td style="color:#888">${weekdays}d</td>
+        <td style="color:#888">${p._virtual?'—':weekdays+'d'}</td>
         <td class="green">${fmt(int)}</td>
-        <td><div style="display:flex;gap:4px">
+        <td>${lock?`<span style="font-size:11px;color:#856404"><i class="ti ti-lock"></i> ${lock}</span>`:`<div style="display:flex;gap:4px">
           <button class="btn btn-sm btn-edit" onclick="openEditPayment('${p.id}','${p.date}',${p.amount},'${userName.replace(/'/g,"\\'")}')"><i class='ti ti-pencil'></i></button>
           <button class="btn btn-sm btn-danger" onclick="deletePaymentFromView('${p.id}','${userId}','${userName.replace(/'/g,"\\'")}')"><i class='ti ti-trash'></i></button>
-        </div></td>
+        </div>`}</td>
       </tr>`;
     }).join(''):`<tr><td colspan="5" style="text-align:center;color:#aaa;padding:1.5rem">No payments yet</td></tr>`;
 
@@ -2861,6 +2930,7 @@ async function openViewContributor(userId,userName){
       <tr><th>Date</th><th>Amount</th><th>Weekdays</th><th>Interest</th><th></th></tr>
       ${rows}
     </table></div>
+    ${_net.netted?'<div style="font-size:11px;color:#888;margin-top:6px">Amounts applied to the Food Scheme are taken from the oldest payments and are listed in the contributor\'s statement. The totals above are unchanged.</div>':''}
     <div class="modal-footer">
       <button class="btn" onclick="openAddPayment('${userId}','${userName.replace(/'/g,"\\'")}')"><i class="ti ti-plus"></i> Add payment</button>
       <button class="btn" onclick="closeModal()">Close</button>
@@ -2902,6 +2972,7 @@ async function saveBankDetails(userId,userName,bankId){
 }
 
 async function deletePaymentFromView(payId,userId,userName){
+  if(await _foodRowGuard(payId))return;
   if(!confirm('Delete this payment?'))return;
   try{await sb(`payments?id=eq.${payId}`,{method:'DELETE'});await openViewContributor(userId,userName);}
   catch(e){alert('Error deleting payment.');}
@@ -8519,7 +8590,10 @@ async function optInFoodScheme(optionId, packageName){
   const _price=_o&&_o.price!=null?' (₦'+Number(_o.price).toLocaleString()+')':'';
   if(!confirm('Please confirm: opt in to the Food Scheme — '+packageName+_price+'?\n\nThe cost will be deducted from your savings when the scheme is processed. You can opt out or change package before the deadline.')) return;
   try{
-    const existing = await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=id');
+    const existing = await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=id,status,option_id');
+    if(existing&&existing.length&&existing[0].status==='deducted'){ alert('Your food scheme payment has already been processed, so you cannot opt in again. Please contact Fundova if you need help.'); return; }
+    const _evt=(existing&&existing.length&&existing[0].option_id&&String(existing[0].option_id)!==String(optionId))?'package_changed':'opted_in';
+    foodLogSafe(currentUser.id,_evt,{id:optionId,name:packageName},{note:_evt==='package_changed'?'Changed package':''});
     if(existing&&existing.length){
       await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'PATCH', body:JSON.stringify({option_id:optionId, status:'opted_in', enrolled_at:new Date().toISOString()})});
     } else {
@@ -8543,6 +8617,7 @@ async function optOutFoodScheme(){
     if(cur&&cur.status==='deducted'){ alert('Your food scheme payment has already been processed, so you can no longer opt out. Please contact Fundova if you need help.'); return; }
     let pkgName = 'the Food Scheme';
     if(cur&&cur.option_id){ try{ const o = await sb('food_scheme_options?id=eq.'+cur.option_id+'&select=name'); if(o&&o.length) pkgName = o[0].name; }catch(e){} }
+    foodLogSafe(currentUser.id,'opted_out',{id:cur&&cur.option_id,name:pkgName},{});
     await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'DELETE'});
     await addNotification(currentUser.id, '🧺 You have opted out of the Fundova Food Scheme. Nothing will be deducted from your savings.');
     notify({type:'broadcast', to:currentUser.email, name:currentUser.name,
@@ -8556,6 +8631,11 @@ async function optOutFoodScheme(){
 
 async function changeFoodPackage(newOptionId){
   try{
+    const _cur=await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id+'&select=status,option_id');
+    if(_cur&&_cur[0]&&_cur[0].status==='deducted'){ alert('Your food scheme payment has already been processed, so the package cannot be changed.'); return; }
+    const _all=(window._foodOptions||[]).concat(window._dashFoodOptions||[]);
+    const _no=_all.find(o=>String(o.id)===String(newOptionId)),_oo=_all.find(o=>_cur&&_cur[0]&&String(o.id)===String(_cur[0].option_id));
+    foodLogSafe(currentUser.id,'package_changed',{id:newOptionId,name:_no&&_no.name||null},{note:'From '+((_oo&&_oo.name)||'previous package')});
     await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'PATCH', body:JSON.stringify({option_id:newOptionId})});
     closeModal();
     toast('<i class="ti ti-check"></i> Package updated!');
@@ -8564,58 +8644,192 @@ async function changeFoodPackage(newOptionId){
 
 // ─── FOOD SCHEME ADMIN ────────────────────────────────────
 
+let _foodRunning=false;
+async function triggerFoodSchemeDeduction(skippedOnly=false){
+  if(_foodRunning)return;
+  const label=skippedOnly?'the skipped members':'everyone who is pending (opted in or skipped)';
+  if(!confirm('Run the food scheme deduction for '+label+'?\n\nEach member is charged once only. Capital is used first, then interest if the capital runs out.'))return;
+  _foodRunning=true;
+  const result={charged:[],skipped:[],already:[],review:[],failed:[]};
+  try{
+    try{await sb('food_scheme_history?select=id&limit=1');}
+    catch(e){alert('Nothing was charged. The food scheme history table is not set up yet. Run food_scheme_history.sql in Supabase first.');return;}
+    const query=skippedOnly?'food_scheme_enrollments?status=eq.skipped&select=*':'food_scheme_enrollments?status=in.(opted_in,skipped)&select=*';
+    const [enrollments,options]=await Promise.all([sb(query),sb('food_scheme_options?select=*')]);
+    const optionMap={};(options||[]).forEach(o=>{optionMap[o.id]=o;});
+    const ids=[...new Set((enrollments||[]).map(e=>e.user_id))];
+    const users=ids.length?await sb('users?id=in.('+ids.join(',')+')&select=id,name,email'):[];
+    const userMap={};(users||[]).forEach(u=>{userMap[u.id]=u;});
+    const money=n=>'₦'+Number(n).toLocaleString('en-NG',{maximumFractionDigits:2});
+    for(const e of (enrollments||[])){
+      const u=userMap[e.user_id]||{name:'Unknown',email:''};
+      const opt=optionMap[e.option_id];
+      if(!opt){result.failed.push({name:u.name,why:'Their package no longer exists'});continue;}
+      const price=Number(opt.price);
+      const ref=e.id+'|'+(e.enrolled_at||'');
+      try{
+        // Never charge twice: check the history for this same enrolment first
+        const prior=await sb('food_scheme_history?user_id=eq.'+encodeURIComponent(e.user_id)+'&ref=eq.'+encodeURIComponent(ref)+'&event=in.(deduction_started,deducted)&select=event');
+        const evs=(prior||[]).map(x=>x.event);
+        if(evs.includes('deducted')){
+          await sb('food_scheme_enrollments?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'deducted',deducted_at:e.deducted_at||new Date().toISOString()})});
+          result.already.push({name:u.name});continue;
+        }
+        if(evs.includes('deduction_started')){
+          result.review.push({name:u.name,why:'A deduction was started earlier but never confirmed. Check their statement before running it again.'});continue;
+        }
+        const pays=await sb('payments?user_id=eq.'+e.user_id+'&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*&order=date.asc');
+        const parts=(pays||[]).map(p=>lotParts(p,null));
+        const capital=+parts.reduce((a,l)=>a+l.P,0).toFixed(2);
+        const interest=+parts.reduce((a,l)=>a+l.I,0).toFixed(2);
+        const available=+(capital+interest).toFixed(2);
+        if(available+0.005>=price){
+          await foodLog(e.user_id,'deduction_started',opt,{amount:price,ref,note:'Capital '+capital.toFixed(2)+', interest '+interest.toFixed(2)});
+          await deductCapitalFirst(e.user_id,pays,price,'Balance carried forward after Food Scheme ('+opt.name+')');
+          await foodLog(e.user_id,'deducted',opt,{amount:price,ref,note:'Capital before '+capital.toFixed(2)+', interest before '+interest.toFixed(2)+(price>capital+0.005?'; interest used '+(price-capital).toFixed(2):'')});
+          await sb('food_scheme_enrollments?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'deducted',deducted_at:new Date().toISOString()})});
+          result.charged.push({name:u.name,pkg:opt.name,price,usedInterest:price>capital+0.005?+(price-capital).toFixed(2):0});
+          try{
+            await addNotification(e.user_id,'🧺 Your food scheme payment of '+money(price)+' ('+opt.name+') has been deducted from your savings. Admin will be in touch with pickup details.');
+            if(u.email)notify({type:'broadcast',to:u.email,name:u.name,
+              subject:'Food Scheme — Payment processed 🧺',
+              body:'Your food scheme payment of '+money(price)+' for the '+opt.name+' has been successfully deducted from your savings balance. Our team will contact you separately with pickup details. Thank you for participating in the Fundova Food Scheme! Fundova Limited'
+            }).catch(()=>{});
+          }catch(_n){}
+        } else {
+          const firstTime=e.status!=='skipped';
+          if(firstTime){
+            await sb('food_scheme_enrollments?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'skipped'})});
+            foodLogSafe(e.user_id,'skipped',opt,{amount:price,ref,note:'Available '+available.toFixed(2)+' (capital '+capital.toFixed(2)+', interest '+interest.toFixed(2)+')'});
+            try{
+              await addNotification(e.user_id,'⚠️ Your food scheme deduction could not be processed — your available savings of '+money(available)+' is not enough for the '+opt.name+' ('+money(price)+'). Please top up your savings to qualify.');
+              if(u.email)notify({type:'broadcast',to:u.email,name:u.name,
+                subject:'Food Scheme — Action needed ⚠️',
+                body:'Unfortunately your food scheme payment could not be processed. Your available savings of '+money(available)+' is not enough to cover the cost of the '+opt.name+' ('+money(price)+'). Please top up your Fundova savings as soon as possible. Once your balance is sufficient, the admin can retrigger the deduction for you. Fundova Limited'
+              }).catch(()=>{});
+            }catch(_n){}
+          }
+          result.skipped.push({name:u.name,pkg:opt.name,price,available});
+        }
+      }catch(err){
+        result.failed.push({name:u.name,why:(err&&err.message)||'Unknown error'});
+        foodLogSafe(e.user_id,'deduction_failed',opt,{amount:price,ref,note:String((err&&err.message)||'').slice(0,300)});
+      }
+    }
+    const li=(arr,fn)=>arr.length?'<ul style="margin:4px 0 10px 18px;padding:0;font-size:13px">'+arr.map(x=>'<li>'+fn(x)+'</li>').join('')+'</ul>':'';
+    const sec=(title,color,arr,fn)=>arr.length?`<div style="font-weight:600;color:${color};margin-top:8px">${title} (${arr.length})</div>${li(arr,fn)}`:'';
+    openModal(`
+    <h3>Food scheme deduction finished</h3>
+    <div style="font-size:13px;color:#555;margin-bottom:6px">Charged ${result.charged.length} · Skipped ${result.skipped.length} · Already done ${result.already.length}${result.review.length?` · Need checking ${result.review.length}`:''}${result.failed.length?` · Failed ${result.failed.length}`:''}</div>
+    ${sec('Charged','#0F6E56',result.charged,x=>_stEsc(x.name)+' — '+_stEsc(x.pkg)+' '+money(x.price)+(x.usedInterest?' (including '+money(x.usedInterest)+' of interest, as capital ran out)':''))}
+    ${sec('Skipped: not enough savings','#A32D2D',result.skipped,x=>_stEsc(x.name)+' — needs '+money(x.price)+' for '+_stEsc(x.pkg)+', has '+money(x.available)+' available')}
+    ${sec('Already deducted earlier (not charged again)','#555',result.already,x=>_stEsc(x.name))}
+    ${sec('Need checking, nothing was charged','#856404',result.review,x=>_stEsc(x.name)+' — '+_stEsc(x.why))}
+    ${sec('Failed, nothing further was charged','#A32D2D',result.failed,x=>_stEsc(x.name)+' — '+_stEsc(x.why))}
+    <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal();renderAdmin()">Close</button></div>`);
+  }catch(e){ alert('Error: '+e.message); }
+  finally{ _foodRunning=false; }
+}
+
+let _foodCsvRows=[];
+function downloadFoodList(){
+  if(!_foodCsvRows.length){alert('Nothing to download yet.');return;}
+  downloadCsv('food-scheme-'+new Date().toISOString().split('T')[0]+'.csv',_foodCsvRows);
+}
+
+async function openFoodHistory(){
+  openModal('<div style="padding:2rem;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:20px;height:20px;display:inline-block"></div> Loading history…</div>');
+  try{
+    const hist=await sb('food_scheme_history?select=*&order=created_at.desc&limit=1000');
+    const ids=[...new Set((hist||[]).map(h=>h.user_id))];
+    const users=ids.length?await sb('users?id=in.('+ids.join(',')+')&select=id,name,email'):[];
+    const um={};(users||[]).forEach(u=>{um[u.id]=u;});
+    const label={opted_in:'Opted in',package_changed:'Changed package',opted_out:'Opted out',deduction_started:'Deduction started',deducted:'Deducted',skipped:'Skipped (not enough)',deduction_failed:'Failed'};
+    const fm=n=>n==null?'':'₦'+Number(n).toLocaleString('en-NG',{maximumFractionDigits:2});
+    window._foodHistRows=[['Date','Contributor','Email','Event','Package','Amount','Note']].concat((hist||[]).map(h=>{
+      const u=um[h.user_id]||{name:'Unknown',email:''};
+      return [new Date(h.created_at).toLocaleString('en-GB'),u.name,u.email,label[h.event]||h.event,h.option_name||'',h.amount==null?'':Number(h.amount),h.note||''];
+    }));
+    const body=(hist||[]).slice(0,150).map(h=>{
+      const u=um[h.user_id]||{name:'Unknown'};
+      return `<tr><td style="white-space:nowrap;font-size:12px">${new Date(h.created_at).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td><td>${_stEsc(u.name)}</td><td>${_stEsc(label[h.event]||h.event)}</td><td>${_stEsc(h.option_name||'')}</td><td style="text-align:right">${fm(h.amount)}</td></tr>`;
+    }).join('');
+    openModal(`
+    <h3>Food scheme history</h3>
+    <p style="font-size:12px;color:#888;margin-top:-6px">Every opt-in, change, opt-out and deduction. Showing the latest 150${(hist||[]).length>150?' (the download has all)':''}.</p>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto"><table>
+      <tr><th>When</th><th>Contributor</th><th>What happened</th><th>Package</th><th style="text-align:right">Amount</th></tr>
+      ${body||'<tr><td colspan="5" class="empty">Nothing recorded yet.</td></tr>'}
+    </table></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="downloadCsv('food-scheme-history-'+new Date().toISOString().split('T')[0]+'.csv',window._foodHistRows)"><i class="ti ti-download"></i> Download (CSV)</button>
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>`);
+  }catch(e){openModal('<div style="color:#A32D2D;padding:1rem">Could not load the history. Has food_scheme_history.sql been run? ('+_stEsc(e.message)+')</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>');}
+}
+
 async function buildFoodSchemeAdminTab(){
   try{
-    const [options, enrollments, settings] = await Promise.all([
-      sb('food_scheme_options?active=eq.true&select=*&order=price.asc'),
+    const [allOptions, enrollments, settings] = await Promise.all([
+      sb('food_scheme_options?select=*&order=price.asc'),
       sb('food_scheme_enrollments?select=*'),
       sb('food_scheme_settings?select=*&order=created_at.desc&limit=1')
     ]);
-
-    // Get contributor details and balances
-    const userIds = (enrollments||[]).map(e=>e.user_id);
-    let users = []; let payments = [];
+    const options=(allOptions||[]).filter(o=>o.active===true);
+    const userIds=[...new Set((enrollments||[]).map(e=>e.user_id))];
+    let users=[],payments=[];
     if(userIds.length){
-      [users, payments] = await Promise.all([
-        sb('users?id=in.('+userIds.join(',')+')'+'&select=id,name,email'),
-        sb('payments?withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=user_id,amount')
+      [users,payments]=await Promise.all([
+        sb('users?id=in.('+userIds.join(',')+')&select=id,name,email'),
+        sb('payments?user_id=in.('+userIds.join(',')+')&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=*')
       ]);
     }
-
-    const balanceMap = {};
-    (payments||[]).forEach(p=>{ balanceMap[p.user_id]=(balanceMap[p.user_id]||0)+Number(p.amount); });
-    const userMap = {};
-    (users||[]).forEach(u=>{ userMap[u.id]=u; });
-    const optionMap = {};
-    (options||[]).forEach(o=>{ optionMap[o.id]=o; });
-
-    const settings0 = settings&&settings.length?settings[0]:null;
-    const deadline = settings0&&settings0.opt_in_deadline?new Date(settings0.opt_in_deadline):null;
-    const totalOpted = (enrollments||[]).filter(e=>e.status==='opted_in'||e.status==='skipped').length;
-    const totalDeducted = (enrollments||[]).filter(e=>e.status==='deducted').length;
-    const totalSkipped = (enrollments||[]).filter(e=>e.status==='skipped').length;
-
-    const rows = (enrollments||[]).map(e=>{
-      const u = userMap[e.user_id]||{name:'Unknown',email:''};
-      const opt = optionMap[e.option_id]||{name:'Unknown',price:0};
-      const bal = balanceMap[e.user_id]||0;
-      const sufficient = bal >= opt.price;
-      const statusPill = e.status==='deducted'?'<span class="status-pill pill-approved">Deducted</span>':
-        e.status==='skipped'?'<span class="status-pill pill-rejected">Skipped</span>':
-        '<span class="status-pill pill-pending">Opted in</span>';
+    const capMap={},intMap={};
+    (payments||[]).forEach(p=>{capMap[p.user_id]=(capMap[p.user_id]||0)+rowPrincipal(p);intMap[p.user_id]=(intMap[p.user_id]||0)+rowIntTotal(p);});
+    const userMap={};(users||[]).forEach(u=>{userMap[u.id]=u;});
+    const optionMap={};(allOptions||[]).forEach(o=>{optionMap[o.id]=o;});
+    const settings0=settings&&settings.length?settings[0]:null;
+    const deadline=settings0&&settings0.opt_in_deadline?new Date(settings0.opt_in_deadline):null;
+    const fm=n=>'₦'+Number(n).toLocaleString('en-NG',{minimumFractionDigits:0,maximumFractionDigits:2});
+    const pending=(enrollments||[]).filter(e=>e.status!=='deducted');
+    const done=(enrollments||[]).filter(e=>e.status==='deducted');
+    const nWaiting=pending.filter(e=>e.status!=='skipped').length;
+    const nSkipped=pending.filter(e=>e.status==='skipped').length;
+    const info=e=>{
+      const u=userMap[e.user_id]||{name:'Unknown',email:''};
+      const opt=optionMap[e.option_id]||{name:'Unknown',price:0};
+      const cap=+(capMap[e.user_id]||0).toFixed(2),int=+(intMap[e.user_id]||0).toFixed(2);
+      return {e,u,opt,cap,int,avail:+(cap+int).toFixed(2),price:Number(opt.price)};
+    };
+    const P=pending.map(info),D=done.map(info);
+    // download rows
+    _foodCsvRows=[['Contributor','Email','Package','Cost','Capital now','Interest now','Available now','Status','Deducted on']]
+      .concat(P.map(x=>[x.u.name,x.u.email,x.opt.name,x.price,x.cap,x.int,x.avail,x.e.status==='skipped'?'Skipped':'Opted in','']))
+      .concat(D.map(x=>[x.u.name,x.u.email,x.opt.name,x.price,x.cap,x.int,x.avail,'Deducted',x.e.deducted_at?new Date(x.e.deducted_at).toLocaleDateString('en-GB'):'']));
+    const pendRows=P.map(x=>{
+      const ok=x.avail+0.005>=x.price;
+      const pill=x.e.status==='skipped'?'<span class="status-pill pill-rejected">Skipped</span>':'<span class="status-pill pill-pending">Opted in</span>';
       return `<tr>
-        <td><div style="font-weight:500">${u.name}</div><div style="font-size:11px;color:#aaa">${u.email}</div></td>
-        <td>${opt.name}</td>
-        <td style="font-weight:600">₦${Number(opt.price).toLocaleString()}</td>
-        <td style="color:${sufficient?'#0F6E56':'#A32D2D'};font-weight:600">₦${bal.toLocaleString()} ${sufficient?'<i class="ti ti-check" style="color:#0F6E56"></i>':'<i class="ti ti-alert-triangle" style="color:#A32D2D"></i>'}</td>
-        <td>${statusPill}</td>
+        <td><div style="font-weight:500">${_stEsc(x.u.name)}</div><div style="font-size:11px;color:#aaa">${_stEsc(x.u.email)}</div></td>
+        <td>${_stEsc(x.opt.name)}</td>
+        <td style="font-weight:600">${fm(x.price)}</td>
+        <td>${fm(x.cap)}</td>
+        <td>${fm(x.int)}</td>
+        <td style="color:${ok?'#0F6E56':'#A32D2D'};font-weight:600">${fm(x.avail)} ${ok?'<i class="ti ti-check"></i>':'<span style="font-size:11px;font-weight:500">('+fm(x.price-x.avail)+' short)</span>'}</td>
+        <td>${pill}</td>
       </tr>`;
     }).join('');
-
-    // Build package management cards
-    const pkgCards = (options||[]).map((pkg,i) => {
-      const emoji = ['🧺','🛒','🎁'][i]||'🎁';
-      const opted = (enrollments||[]).filter(e=>e.option_id===pkg.id).length;
+    const doneRows=D.map(x=>`<tr>
+        <td><div style="font-weight:500">${_stEsc(x.u.name)}</div><div style="font-size:11px;color:#aaa">${_stEsc(x.u.email)}</div></td>
+        <td>${_stEsc(x.opt.name)}</td>
+        <td style="font-weight:600">${fm(x.price)}</td>
+        <td>${x.e.deducted_at?new Date(x.e.deducted_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
+        <td>${fm(x.avail)}</td>
+        <td><span class="status-pill pill-approved">Deducted</span></td>
+      </tr>`).join('');
+    const pkgCards=(options||[]).map((pkg,i)=>{
+      const emoji=['🧺','🛒','🎁'][i]||'🎁';
+      const opted=(enrollments||[]).filter(e=>e.option_id===pkg.id).length;
       return `<div style="background:#f9f9f7;border-radius:12px;padding:1rem;border:1px solid #e5e5e2">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
           ${pkg.image_url
@@ -8624,7 +8838,7 @@ async function buildFoodSchemeAdminTab(){
           <div style="flex:1">
             <div style="font-size:14px;font-weight:600;color:#0D1F14">${pkg.name}</div>
             <div style="font-size:13px;color:#0F6E56;font-weight:600">₦${Number(pkg.price).toLocaleString()}</div>
-            <div style="font-size:11px;color:#888">${opted} member${opted!==1?'s':''} opted in</div>
+            <div style="font-size:11px;color:#888">${opted} member${opted!==1?'s':''} in this package</div>
           </div>
         </div>
         <div style="font-size:12px;color:#666;margin-bottom:10px">${pkg.description||''}</div>
@@ -8634,9 +8848,7 @@ async function buildFoodSchemeAdminTab(){
         </div>
       </div>`;
     }).join('');
-
     return `<div>
-      <!-- Package Management -->
       <div class="card" style="margin-bottom:1rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
           <h3 style="margin:0">Food Scheme Packages</h3>
@@ -8648,24 +8860,37 @@ async function buildFoodSchemeAdminTab(){
       </div>
 
       <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">Enrollments & Deductions</h3>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-sm" onclick="openFoodSchemeSettings()"><i class="ti ti-clock"></i> Set deadline</button>
-          <button class="btn btn-sm btn-primary" onclick="triggerFoodSchemeDeduction(false)"><i class="ti ti-bolt"></i> Trigger deduction</button>
-          ${totalSkipped>0?`<button class="btn btn-sm btn-warn" onclick="triggerFoodSchemeDeduction(true)"><i class="ti ti-refresh"></i> Retrigger skipped (${totalSkipped})</button>`:''}
+          <button class="btn btn-sm" onclick="downloadFoodList()"><i class="ti ti-download"></i> Download list (CSV)</button>
+          <button class="btn btn-sm" onclick="openFoodHistory()"><i class="ti ti-history"></i> History</button>
+          ${pending.length?`<button class="btn btn-sm btn-primary" onclick="triggerFoodSchemeDeduction(false)"><i class="ti ti-bolt"></i> Trigger deduction (${pending.length})</button>`:''}
+          ${nSkipped>0?`<button class="btn btn-sm btn-warn" onclick="triggerFoodSchemeDeduction(true)"><i class="ti ti-refresh"></i> Retrigger skipped (${nSkipped})</button>`:''}
         </div>
       </div>
-      ${deadline?`<div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12px;color:#856404;margin-bottom:12px"><i class="ti ti-clock"></i> Opt-in deadline: <strong>${deadline.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</strong></div>`:''}
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem">
-        <div style="background:#E8F5EE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#065F46">${totalOpted}</div><div style="font-size:12px;color:#065F46">Opted in</div></div>
-        <div style="background:#D1FAE5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#0F6E56">${totalDeducted}</div><div style="font-size:12px;color:#0F6E56">Deducted</div></div>
-        <div style="background:#FEE2E2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#A32D2D">${totalSkipped}</div><div style="font-size:12px;color:#A32D2D">Skipped</div></div>
+      ${deadline?`<div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12px;color:#856404;margin-bottom:12px"><i class="ti ti-clock"></i> Opt-in deadline: <strong>${deadline.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</strong></div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:.4rem">
+        <div style="background:#E8F5EE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#065F46">${nWaiting}</div><div style="font-size:12px;color:#065F46">Waiting to be charged</div></div>
+        <div style="background:#FEE2E2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#A32D2D">${nSkipped}</div><div style="font-size:12px;color:#A32D2D">Skipped (not enough)</div></div>
+        <div style="background:#D1FAE5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#0F6E56">${done.length}</div><div style="font-size:12px;color:#0F6E56">Deducted</div></div>
       </div>
-      ${rows?`<div class="table-wrap"><table>
-        <tr><th>Contributor</th><th>Package</th><th>Cost</th><th>Current balance</th><th>Status</th></tr>
-        ${rows}
-      </table></div>`:'<div class="empty">No contributors have opted in yet.</div>'}
+      <div style="font-size:12px;color:#888;text-align:center;margin-bottom:1rem">${(enrollments||[]).length} contributor${(enrollments||[]).length!==1?'s':''} in the scheme. Deducted members move to the Completed list below and are never charged again.</div>
+
+      <div style="font-size:13px;font-weight:700;color:#0D1F14;margin:6px 0">Pending (${pending.length})</div>
+      ${pendRows?`<div class="table-wrap"><table>
+        <tr><th>Contributor</th><th>Package</th><th>Cost</th><th>Capital</th><th>Interest</th><th>Available</th><th>Status</th></tr>
+        ${pendRows}
+      </table></div><div style="font-size:11px;color:#888;margin-top:6px">Available = capital plus interest. Capital is used first, and interest only if capital runs out.</div>`:'<div class="empty">Nobody is waiting. Everyone has been charged.</div>'}
+
+      <details style="margin-top:1.2rem" ${pending.length?'':'open'}>
+        <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#0D1F14">Completed (${done.length})</summary>
+        ${doneRows?`<div class="table-wrap" style="margin-top:8px"><table>
+          <tr><th>Contributor</th><th>Package</th><th>Deducted</th><th>Date</th><th>Balance now</th><th>Status</th></tr>
+          ${doneRows}
+        </table></div>`:'<div class="empty" style="margin-top:8px">Nobody has been deducted yet.</div>'}
+      </details>
     </div>
     </div>`;
   }catch(e){ return `<div class="card"><div class="empty">Error loading food scheme: ${e.message}</div></div>`; }
@@ -8702,67 +8927,6 @@ async function saveFoodSchemeSettings(){
     renderAdmin();
   }catch(e){ alert('Error: '+e.message); }
 }
-
-async function triggerFoodSchemeDeduction(skippedOnly=false){
-  const label = skippedOnly ? 'skipped members' : 'all opted-in members';
-  if(!confirm('Trigger food scheme deduction for '+label+'? This cannot be undone.')) return;
-
-  try{
-    const query = skippedOnly
-      ? 'food_scheme_enrollments?status=eq.skipped&select=*'
-      : 'food_scheme_enrollments?status=in.(opted_in,skipped)&select=*';
-
-    const enrollments = await sb(query);
-    const options = await sb('food_scheme_options?select=*');
-    const optionMap = {};
-    (options||[]).forEach(o=>{ optionMap[o.id]=o; });
-
-    let deducted=0, skipped=0;
-    const today = new Date().toISOString().split('T')[0];
-
-    for(const e of (enrollments||[])){
-      const opt = optionMap[e.option_id];
-      if(!opt) continue;
-      // Check balance
-      const pArr = await sb('payments?user_id=eq.'+e.user_id+'&withdrawn=eq.false&goal_id=is.null&moved_at=is.null&select=amount');
-      const balance = (pArr||[]).reduce((a,p)=>a+Number(p.amount),0);
-
-      if(balance >= opt.price){
-        // Deduct from savings as a withdrawal-type payment (negative)
-        await sb('payments', {method:'POST', body:JSON.stringify({
-          user_id:e.user_id, amount:-opt.price, date:today, withdrawn:false, is_transfer:true,
-          purpose:'Food Scheme deduction — '+opt.name
-        })});
-        await sb('food_scheme_enrollments?id=eq.'+e.id, {method:'PATCH', body:JSON.stringify({status:'deducted', deducted_at:new Date().toISOString()})});
-        // Notify contributor
-        const uArr = await sb('users?id=eq.'+e.user_id+'&select=name,email');
-        if(uArr&&uArr[0]){
-          await addNotification(e.user_id, '🧺 Your food scheme payment of ₦'+Number(opt.price).toLocaleString()+' ('+opt.name+') has been deducted from your savings. Admin will be in touch with pickup details.');
-          notify({type:'broadcast', to:uArr[0].email, name:uArr[0].name,
-            subject:'Food Scheme — Payment processed 🧺',
-            body:'Your food scheme payment of ₦'+Number(opt.price).toLocaleString()+' for the '+opt.name+' has been successfully deducted from your savings balance. Our team will contact you separately with pickup details. Thank you for participating in the Fundova Food Scheme! Fundova Limited'
-          }).catch(()=>{});
-        }
-        deducted++;
-      } else {
-        await sb('food_scheme_enrollments?id=eq.'+e.id, {method:'PATCH', body:JSON.stringify({status:'skipped'})});
-        // Notify contributor they were skipped
-        const uArr = await sb('users?id=eq.'+e.user_id+'&select=name,email');
-        if(uArr&&uArr[0]){
-          await addNotification(e.user_id, '⚠️ Your food scheme deduction could not be processed — your savings balance of ₦'+balance.toLocaleString()+' is insufficient for the '+opt.name+' (₦'+Number(opt.price).toLocaleString()+'). Please top up your savings to qualify.');
-          notify({type:'broadcast', to:uArr[0].email, name:uArr[0].name,
-            subject:'Food Scheme — Action needed ⚠️',
-            body:'Unfortunately your food scheme payment could not be processed. Your current savings balance of ₦'+balance.toLocaleString()+' is insufficient to cover the cost of the '+opt.name+' (₦'+Number(opt.price).toLocaleString()+'). Please top up your Fundova savings as soon as possible. Once your balance is sufficient, the admin can retrigger the deduction for you. Fundova Limited'
-          }).catch(()=>{});
-        }
-        skipped++;
-      }
-    }
-    alert('Done! Deducted: '+deducted+' members. Skipped: '+skipped+' (insufficient balance).');
-    renderAdmin();
-  }catch(e){ alert('Error: '+e.message); }
-}
-
 
 // ─── FOOD SCHEME PACKAGE MANAGEMENT ─────────────────────
 
