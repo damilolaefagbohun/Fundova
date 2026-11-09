@@ -1,38 +1,9 @@
-const https = require('https');
+const A = require('./_lib/auth');
 
-const RESEND_KEY = process.env.RESEND_API_KEY;
 const SITE_URL = 'https://www.fundova.africa';
 const ADMIN_EMAIL = 'fundovamultipurposecooperative@gmail.com';
 
-function sendResendEmail(to, subject, html) {
-  return new Promise((resolve, reject) => {
-    const emailBody = JSON.stringify({
-      from: 'Fundova <no-reply@fundova.africa>',
-      to: [to],
-      subject: subject,
-      html: html
-    });
-
-    const req = https.request({
-      hostname: 'api.resend.com',
-      path: '/emails',
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + RESEND_KEY,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(emailBody)
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve({ status: res.statusCode, body: data }));
-    });
-
-    req.on('error', reject);
-    req.write(emailBody);
-    req.end();
-  });
-}
+const sendResendEmail = A.sendResend;
 
 function wrap(content) {
   return `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:32px 24px;background:#fff">
@@ -58,41 +29,92 @@ function pill(text, color) {
   return `<span style="display:inline-block;background:${bg};color:${tc};font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px">${text}</span>`;
 }
 
-exports.handler = async (event) => {
-  console.log('Function called, method:', event.httpMethod);
-  console.log('Body received:', event.body);
+// who may send which kind of email
+const PUBLIC_TYPES = ['admin_new_signup'];
+const ADMIN_ONLY = ['approval','payment','withdrawal_approved','withdrawal_rejected','investment_approved','investment_payment_confirmed','investment_cancelled','investment_refund_approved','deal_featured','deal_approved','deal_rejected','profile_approved','coordinator_approved','kyc_reminder','birthday','birthday_wish','broadcast'];
+const ANY_SIGNED_IN = ['admin_withdrawal_request','admin_profile_update_request','admin_investment_reservation','admin_deal_submission','admin_kyc_update','admin_coordinator_application','contributor_action','nok_welcome','group_invitation'];
+const SELF_ONLY_FOR_MEMBERS = ['contributor_action'];   // members may only email themselves with these
+const hits = new Map();
+function limited(key, max) {
+  const now = Date.now(); const arr = (hits.get(key) || []).filter(t => now - t < 3600 * 1000);
+  arr.push(now); hits.set(key, arr); if (hits.size > 5000) hits.clear();
+  return arr.length > max;
+}
+const J = (event, code, obj) => A.reply(event, code, obj);
 
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: A.corsHeaders(event), body: '' };
+  if (event.httpMethod !== 'POST') return J(event, 405, { error: 'Method not allowed' });
 
   try {
-    const body = JSON.parse(event.body);
-    const type = body.type || 'approval';
-    console.log('Parsed body type:', type, 'to:', body.to);
+    let raw;
+    try { raw = JSON.parse(event.body || '{}'); } catch (e) { return J(event, 400, { error: 'Bad request' }); }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return J(event, 400, { error: 'Bad request' });
+    const type = raw.type || 'approval';
+    if (typeof type !== 'string') return J(event, 400, { error: 'Bad request' });
+
+    // ── who is asking ──
+    const ip = A.clientIp(event);
+    let caller = null;
+    const tok = A.bearer(event);
+    if (tok) {
+      const p = A.verifyToken(tok);
+      if (!p) return J(event, 401, { error: 'session_expired' });
+      const r = await A.supa('users?id=eq.' + encodeURIComponent(p.uid) + '&select=id,role,status,email&limit=1', 'GET');
+      const row = (r.status === 200 && Array.isArray(r.data) && r.data[0]) || null;
+      if (!row || row.status === 'revoked' || row.status === 'closed') return J(event, 401, { error: 'session_expired' });
+      caller = { uid: String(row.id), role: row.role, email: String(row.email || '').toLowerCase() };
+    }
+    const isAdmin = !!caller && caller.role === 'admin';
+    if (PUBLIC_TYPES.includes(type)) {
+      if (!caller && limited('pub|' + ip, 10)) return J(event, 429, { error: 'Too many requests' });
+    } else if (!caller) {
+      return J(event, 401, { error: 'session_expired' });
+    } else if (ADMIN_ONLY.includes(type)) {
+      const ownTest = type === 'broadcast' && String(raw.to || '').toLowerCase() === caller.email;
+      if (!isAdmin && !ownTest) return J(event, 403, { error: 'Not allowed' });
+    } else if (ANY_SIGNED_IN.includes(type)) {
+      if (SELF_ONLY_FOR_MEMBERS.includes(type) && !isAdmin && String(raw.to || '').toLowerCase() !== caller.email) return J(event, 403, { error: 'Not allowed' });
+      if (!isAdmin && limited('u|' + caller.uid + '|' + type, 30)) return J(event, 429, { error: 'Too many requests' });
+    } else {
+      return J(event, 400, { error: 'Unknown email type' });
+    }
+
+    // ── clean the input: anything typed by a person is escaped before it goes into the email ──
+    const body = {};
+    for (const k of Object.keys(raw)) body[k] = typeof raw[k] === 'string' ? A.esc(raw[k]).slice(0, 5000) : raw[k];
+    if (raw.to !== undefined) {
+      const t = String(raw.to).trim();
+      if (!A.EMAIL_RE.test(t) || t.length > 200) return J(event, 400, { error: 'Invalid recipient' });
+      body.to = t;
+    }
+    if (raw.image_url) {
+      body.image_url = /^https:\/\/[^\s"'<>]+$/.test(String(raw.image_url)) && String(raw.image_url).length < 1000 ? A.esc(raw.image_url) : '';
+    }
 
     let to, subject, html;
 
     // ── APPROVAL ──
     if (type === 'approval') {
-      to = body.to; const name = body.name; const pin = body.pin;
-      if (!to || !name || !pin) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      to = body.to; const name = body.name;
+      if (!to || !name) return J(event, 400, { error: 'Missing fields' });
       subject = 'Welcome to Fundova — Your account is ready!';
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">Welcome to Fundova, ${name}!</h2>
         <p style="color:#555;line-height:1.7">Your account has been approved. You are all set to start your savings journey.</p>
         <div style="background:#F0FDF8;border:1px solid #BBF7D0;border-radius:10px;padding:16px;margin:16px 0">
-          <div style="font-size:11px;color:#065F46;font-weight:600;text-transform:uppercase;margin-bottom:10px">Your login details</div>
-          <div style="font-size:14px;margin-bottom:6px"><span style="color:#555">Email:</span> <strong>${to}</strong></div>
-          <div style="font-size:14px"><span style="color:#555">Default PIN:</span> <strong style="font-family:monospace;font-size:22px;letter-spacing:4px">${pin}</strong></div>
+          <div style="font-size:11px;color:#065F46;font-weight:600;text-transform:uppercase;margin-bottom:10px">How to sign in</div>
+          <div style="font-size:14px;margin-bottom:6px"><span style="color:#555">Your email:</span> <strong>${to}</strong></div>
+          <div style="font-size:13px;color:#555;line-height:1.7">There is no password or PIN to remember. Enter your email on the sign-in page and we will email you a 6-digit code each time you sign in.</div>
         </div>
         <div style="background:#FFF8E6;border:1px solid #FDEFC3;border-radius:10px;padding:16px;margin-bottom:16px">
           <div style="font-size:12px;font-weight:600;color:#856404;margin-bottom:8px">Getting started</div>
           <div style="font-size:13px;color:#555;line-height:2">
-            <strong>1. Sign in</strong> at ${SITE_URL} with your email and default PIN.<br>
-            <strong>2. Change your PIN</strong> immediately for security.<br>
-            <strong>3. Explore your dashboard</strong> — see everything Fundova offers.<br>
-            <strong>4. Complete your KYC</strong> — this keeps your withdrawals ready whenever you need them.<br>
-            <strong>5. Create a Savings Box</strong> — give your money a destination.<br>
-            <strong>6. Start saving!</strong> Pay into your account below and earn 10% ROI per annum.
+            <strong>1. Sign in</strong> at ${SITE_URL} with your email. A code will be sent to you.<br>
+            <strong>2. Explore your dashboard</strong> — see everything Fundova offers.<br>
+            <strong>3. Complete your KYC</strong> — this keeps your withdrawals ready whenever you need them.<br>
+            <strong>4. Create a Savings Box</strong> — give your money a destination.<br>
+            <strong>5. Start saving!</strong> Pay into your account below and earn 10% ROI per annum.
           </div>
         </div>
         <div style="background:#f5f5f3;border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.8">
@@ -105,7 +127,7 @@ exports.handler = async (event) => {
     // ── PAYMENT ──
     } else if (type === 'payment') {
       to = body.to; const name = body.name; const amount = body.amount; const date = body.date;
-      if (!to || !name || !amount || !date) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      if (!to || !name || !amount || !date) return J(event, 400, { error: 'Missing fields' });
       subject = 'Payment recorded — Fundova';
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">Payment recorded</h2>
@@ -342,7 +364,7 @@ exports.handler = async (event) => {
     // ── KYC REMINDER (admin-triggered, sent to the contributor) ──
     } else if (type === 'kyc_reminder') {
       to = body.to; const name = body.name;
-      if (!to) return { statusCode: 400, body: JSON.stringify({ error: 'Missing recipient' }) };
+      if (!to) return J(event, 400, { error: 'Missing recipient' });
       subject = 'Please complete your KYC on Fundova';
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">A quick reminder, ${name}</h2>
@@ -356,7 +378,7 @@ exports.handler = async (event) => {
     // ── CONTRIBUTOR ACTION CONFIRMATION (generic — one action, one plain email) ──
     } else if (type === 'contributor_action') {
       to = body.to; const name = body.name; const actionTitle = body.title; const detail = body.detail;
-      if (!to) return { statusCode: 400, body: JSON.stringify({ error: 'Missing recipient' }) };
+      if (!to) return J(event, 400, { error: 'Missing recipient' });
       subject = actionTitle;
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">${actionTitle}</h2>
@@ -368,7 +390,7 @@ exports.handler = async (event) => {
     // ── BIRTHDAY WISH (admin-drafted, sent to one contributor) ──
     } else if (type === 'birthday_wish') {
       to = body.to; const name = body.name; const msg = body.body; const image_url = body.image_url;
-      if (!to || !msg) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      if (!to || !msg) return J(event, 400, { error: 'Missing fields' });
       subject = `🎂 Happy Birthday, ${name.split(' ')[0]}!`;
       html = wrap(`
         ${image_url ? `<img src="${image_url}" alt="" style="width:100%;border-radius:10px;margin-bottom:16px;display:block">` : ''}
@@ -378,7 +400,7 @@ exports.handler = async (event) => {
     // ── BROADCAST ──
     } else if (type === 'broadcast') {
       to = body.to; const name = body.name; const subj = body.subject; const msg = body.body; const image_url = body.image_url;
-      if (!to || !subj || !msg) return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+      if (!to || !subj || !msg) return J(event, 400, { error: 'Missing fields' });
       subject = subj;
       html = wrap(`
         <h2 style="color:#1a1a1a;margin-bottom:8px">${subj}</h2>
@@ -422,36 +444,6 @@ exports.handler = async (event) => {
         <p style="color:#aaa;font-size:12px;text-align:center">You received this because ${member_name} added you as their next of kin on Fundova. Contact us at fundovamultipurposecooperative@gmail.com to unsubscribe.</p>
       `);
 
-    // ── PIN RESET CODE ──
-    } else if (type === 'pin_reset') {
-      to = body.to; const name = body.name; const code = body.code;
-      subject = 'Your Fundova PIN reset code';
-      html = wrap(`
-        <h2 style="color:#1a1a1a;margin-bottom:8px">Reset your PIN</h2>
-        <p style="color:#555;line-height:1.7">Hi ${name}, we received a request to reset your Fundova PIN. Use the code below to set a new one.</p>
-        <div style="background:#0D3D2A;border-radius:12px;padding:1.5rem;text-align:center;margin:1.5rem 0">
-          <div style="font-size:11px;color:#aaa;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Your reset code</div>
-          <div style="font-size:40px;font-weight:800;color:#C9961A;letter-spacing:10px">${code}</div>
-          <div style="font-size:12px;color:#aaa;margin-top:8px">Expires in 15 minutes</div>
-        </div>
-        <p style="color:#555;line-height:1.7">If you did not request a PIN reset, please ignore this email. Your account remains secure.</p>
-        <p style="color:#888;font-size:12px">For security, never share this code with anyone — including Fundova staff.</p>
-        ${btn('Go to Fundova', SITE_URL)}
-      `);
-
-    // ── PIN RESET CONFIRMATION ──
-    } else if (type === 'pin_reset_confirm') {
-      to = body.to; const name = body.name;
-      subject = 'Your Fundova PIN has been reset';
-      html = wrap(`
-        <h2 style="color:#1a1a1a;margin-bottom:8px">PIN reset successful</h2>
-        <p style="color:#555;line-height:1.7">Hi ${name}, your Fundova PIN has been successfully reset. You can now sign in with your new PIN.</p>
-        <div style="background:#D1FAE5;border-radius:10px;padding:14px;margin:1rem 0;font-size:13px;color:#065F46">
-          <strong>✅ Your account is secure.</strong> If you did not make this change, please contact us immediately on WhatsApp: 08035257262.
-        </div>
-        ${btn('Sign in to Fundova', SITE_URL)}
-      `);
-
     // ── BIRTHDAY ──
     } else if (type === 'birthday') {
       to = body.to; const name = body.name;
@@ -471,22 +463,20 @@ exports.handler = async (event) => {
       `);
 
     } else {
-      console.log('Unknown type:', type);
-      return { statusCode: 400, body: JSON.stringify({ error: 'Unknown email type: ' + type }) };
+      return J(event, 400, { error: 'Unknown email type' });
     }
 
-    console.log('Calling Resend API...');
+    // subject lines are plain text: undo the escaping and remove line breaks
+    subject = String(subject).replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[\r\n]+/g, ' ').slice(0, 200);
     const result = await sendResendEmail(to, subject, html);
-    console.log('Resend response status:', result.status, 'body:', result.body);
-
     if (result.status >= 400) {
-      return { statusCode: 500, body: JSON.stringify({ error: result.body }) };
+      console.log('Resend refused the email, status', result.status);
+      return J(event, 500, { error: 'Email could not be sent' });
     }
-
-    return { statusCode: 200, body: JSON.stringify({ success: true }) };
+    return J(event, 200, { success: true });
 
   } catch (err) {
-    console.log('Caught error:', err.message);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    console.log('send-email error:', err.message);
+    return J(event, 500, { error: 'Email could not be sent' });
   }
 };
