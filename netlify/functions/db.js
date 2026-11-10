@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const A = require('./_lib/auth');
 const P = require('./_lib/policy');
+const PUSH = require('./_lib/push');
 
 // remember who is who for a minute, so a revoked or closed account is cut off quickly
 const userCache = new Map();
@@ -24,6 +25,13 @@ function publicLimited(ip, key) {
   arr.push(now); pubHits.set(k, arr);
   if (pubHits.size > 5000) pubHits.clear();
   return arr.length > 15;
+}
+
+const pushHits = new Map();
+function pushLimited(uid) {
+  const now = Date.now(); const arr = (pushHits.get(uid) || []).filter(t => now - t < 60 * 1000);
+  arr.push(now); pushHits.set(uid, arr); if (pushHits.size > 500) pushHits.clear();
+  return arr.length > 120;
 }
 
 function stripPin(x) {
@@ -82,6 +90,15 @@ exports.handler = async (event) => {
     const r = await A.supa(v.path, method, outBody == null ? null : outBody);
     let data = stripPin(r.data);
     if (v.countOnly && Array.isArray(data)) data = data.map(() => ({}));
+    // an admin writing a bell notice for someone else also buzzes that person's phone (members never can)
+    if (user && user.role === 'admin' && method === 'POST' && parsed.table === 'notifications' && r.status >= 200 && r.status < 300 && Array.isArray(outBody ? (Array.isArray(outBody) ? outBody : [outBody]) : null)) {
+      try {
+        const rowsIn = Array.isArray(outBody) ? outBody : [outBody];
+        const ids = [...new Set(rowsIn.map(x => String(x.user_id || '')).filter(x => x && x !== user.uid))];
+        const kind = (rowsIn.find(x => x.kind) || {}).kind;
+        if (ids.length && ids.length <= 50 && !pushLimited(user.uid)) await PUSH.pushToUsers(ids, PUSH.HINTS[kind] ? kind : 'general');
+      } catch (e) { console.log('push after notice failed:', e.message); }
+    }
     // same reply shape the app already expects: {status, data}
     return A.reply(event, 200, { status: r.status, data: data == null ? null : data });
   } catch (e) {
