@@ -494,7 +494,7 @@ function renderLogin(){
   if(refCode&&!IS_COOP){window.location.replace('/cooperative'+window.location.search);return;}
   try{document.title=IS_COOP?'Fundova Cooperative — Save, grow and belong':document.title;}catch(e){}
   const NAV_LINKS=IS_COOP
-    ?[['About','about'],['How it works','how'],['Learn','learn'],['FAQ','faq'],['Fundova Limited','/']]
+    ?[['About','cooperative'],['How it works','how'],['Learn','learn'],['FAQ','faq'],['Fundova Limited','/']]
     :[['Home','top'],['About','company'],['Our Products','products'],['Cooperative','/cooperative']];
   const navLink=(x,st)=>x[1].charAt(0)==='/'?`<a href="${x[1]}" style="${st}">${x[0]}</a>`:`<a style="${st}" onclick="smoothScroll('${x[1]}')">${x[0]}</a>`;
   const LNK='font-size:13px;color:#444;text-decoration:none;font-weight:500;cursor:pointer';
@@ -613,45 +613,8 @@ function renderLogin(){
       </div>
     </section>
 
-    <!-- THREE PILLARS -->
-    <section id="about" style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
-      <div style="text-align:center;margin-bottom:3rem">
-        <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Our Pillars</div>
-        <h2 style="font-size:clamp(24px,3vw,38px);font-weight:800;color:#0D1F14;margin-bottom:12px">One Company. Many Ways to Grow.</h2>
-        <p style="font-size:15px;color:#666;max-width:520px;margin:0 auto;line-height:1.7">Fundova Limited is a financial ecosystem built for Africans who want to save smarter, invest together and learn how money really works.</p>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
-        <div style="background:#0D3D2A;border-radius:20px;padding:2rem;color:#fff;position:relative;overflow:hidden">
-          <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
-          <div style="font-size:32px;margin-bottom:1rem">🏦</div>
-          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Fundova Cooperative</div>
-          <h3 style="font-size:20px;font-weight:700;margin-bottom:10px">Save. Invest. Grow.</h3>
-          <p style="font-size:13px;color:#aaa;line-height:1.7;margin-bottom:1.25rem">A registered multipurpose cooperative where your savings earn about 10% interest per annum — calculated every weekday from the day your money is recorded.</p>
-          ${['No fixed amounts — save what you can','Daily interest accrual — weekdays','Group investment opportunities','Flexible withdrawals anytime'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ccc"><span style="color:#1D9E75;font-size:14px">✓</span>${f}</div>`).join('')}
-          <button onclick="renderSignup()" style="margin-top:1.25rem;background:#C9961A;color:#0D1F14;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Join the Cooperative →</button>
-        </div>
-        <div style="background:#fff;border-radius:20px;padding:2rem;border:2px solid #e5e5e2;position:relative;overflow:hidden">
-          <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:#F7F5F0"></div>
-          <div style="font-size:32px;margin-bottom:1rem">📚</div>
-          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Fundova Learn</div>
-          <h3 style="font-size:20px;font-weight:700;color:#0D1F14;margin-bottom:10px">Money. Mindset. Growth.</h3>
-          <p style="font-size:13px;color:#666;line-height:1.7;margin-bottom:1.25rem">Financial education for real life. We break down complex money concepts into practical lessons that help you make smarter decisions every day.</p>
-          ${['Monthly webinars with finance experts','Practical savings & investment tips','Financial literacy for all levels','Free — open to everyone'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#444"><span style="color:#0D3D2A;font-size:14px">✓</span>${f}</div>`).join('')}
-          <button onclick="window.location.pathname='/webinar'" style="margin-top:1.25rem;background:#0D3D2A;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">Explore Fundova Learn →</button>
-        </div>
-        <div style="background:#F7F5F0;border-radius:20px;padding:2rem;border:2px solid #e5e5e2;position:relative;overflow:hidden;opacity:.85">
-          <div style="position:absolute;top:12px;right:12px;background:#C9961A;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px">Coming Soon</div>
-          <div style="font-size:32px;margin-bottom:1rem">🏘️</div>
-          <div style="font-size:11px;font-weight:600;color:#C9961A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Future Investments</div>
-          <h3 style="font-size:20px;font-weight:700;color:#0D1F14;margin-bottom:10px">Beyond Saving.</h3>
-          <p style="font-size:13px;color:#666;line-height:1.7;margin-bottom:1.25rem">We are building more ways for you to grow your wealth as a community — real estate, vehicles, capital and more.</p>
-          ${['Fundova Properties','Fundova Capital','Fundova Insurance','Fundova Foundation'].map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#888"><span style="color:#C9961A;font-size:14px">◎</span>${f}</div>`).join('')}
-        </div>
-      </div>
-    </section>
-
     <!-- HOW IT WORKS -->
-    <section id="how" style="background:#0D1F14;padding:5rem 1.5rem">
+    <section id="how" style="background:#0D1F14;padding:3.5rem 1.5rem">
       <div style="max-width:1100px;margin:0 auto">
         <div style="text-align:center;margin-bottom:3rem">
           <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">How It Works</div>
@@ -674,7 +637,7 @@ function renderLogin(){
     </section>
 
     <!-- COOPERATIVE SECTION -->
-    <section id="cooperative" style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
+    <section id="cooperative" style="padding:3.5rem 1.5rem;max-width:1100px;margin:0 auto">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center">
         <div>
           <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Fundova Cooperative</div>
@@ -708,7 +671,7 @@ function renderLogin(){
     </section>
 
     <!-- LEARN SECTION -->
-    <section id="learn" style="background:#F0EDE6;padding:5rem 1.5rem">
+    <section id="learn" style="background:#F0EDE6;padding:3.5rem 1.5rem">
       <div style="max-width:1100px;margin:0 auto;text-align:center">
         <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Fundova Learn</div>
         <h2 style="font-size:clamp(24px,3vw,38px);font-weight:800;color:#0D1F14;margin-bottom:12px">Financial education for real life.</h2>
@@ -730,7 +693,7 @@ function renderLogin(){
     </section>
 
     <!-- DEALS SECTION -->
-    <section style="padding:5rem 1.5rem;max-width:1100px;margin:0 auto">
+    <section style="padding:3.5rem 1.5rem;max-width:1100px;margin:0 auto">
       <div style="text-align:center;margin-bottom:2.5rem">
         <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Marketplace</div>
         <h2 style="font-size:clamp(22px,3vw,34px);font-weight:800;color:#0D1F14;margin-bottom:8px">🏷️ Deals of the Week</h2>
@@ -740,7 +703,7 @@ function renderLogin(){
     </section>
 
     <!-- FAQ SECTION -->
-    <section id="faq" style="background:#0D1F14;padding:5rem 1.5rem">
+    <section id="faq" style="background:#0D1F14;padding:3.5rem 1.5rem">
       <div style="max-width:700px;margin:0 auto">
         <div style="text-align:center;margin-bottom:3rem">
           <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">FAQ</div>
@@ -1077,7 +1040,7 @@ async function verifyLoginCode(){
     closeModal();await render();
   }catch(e){err.textContent='Connection error. Please try again.';btn.innerHTML='<i class="ti ti-login"></i> Sign in';btn.disabled=false;}
 }
-function doLogout(){currentUser=null;clearSession();signupStep=1;render();}
+function doLogout(){try{alertsDetachPhone();}catch(e){}currentUser=null;clearSession();signupStep=1;render();}
 function setAdminTab(tab){adminTab=tab;renderAdmin();}
 
 // ─── SIGNUP ───────────────────────────────────────────────
@@ -1222,6 +1185,7 @@ async function renderAdmin(){
       await buildInvestmentsAdminTab(investments,contributors);
     // Load admin notifications
   loadAdminNotifications().catch(()=>{});
+  setTimeout(()=>{alertsOnSignIn().catch(()=>{});},2500);
   // Init sidebar state and render chart
   setTimeout(()=>{
     initAdminSidebar();
@@ -2471,6 +2435,7 @@ async function renderContributor(){
   loadCooperativeBonuses();
   // Load notifications
   loadNotifications().catch(()=>{});
+  setTimeout(()=>{alertsOnSignIn().catch(()=>{});},2500);
   // Load profile completion
   (async()=>{
     try{
@@ -2559,7 +2524,7 @@ async function saveWithdrawRequest(currentTotal){
   try{
     await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount,note,status:'pending'})});
     notify({type:'admin_withdrawal_request',name:currentUser.name,amount,note}).catch(e=>logSystemError('notify:withdrawal_request',e));
-    notifyContributorAction('Withdrawal request submitted','Your request to withdraw '+fmt(amount)+' has been submitted and is pending admin approval. You\'ll get another email once it\'s processed.');
+    notifyContributorAction('Withdrawal request submitted','Your request to withdraw '+fmt(amount)+' has been received. A decision will be made in less than 24 hours.');
     closeModal();await renderContributor();
   }catch(e){err.textContent='Error submitting. Please try again.';btn.innerHTML='<i class="ti ti-cash"></i> Submit request';btn.disabled=false;}
 }
@@ -5164,8 +5129,7 @@ async function adminRecordGroupContribution(memberId,groupId,amount,cycle,userId
           const mem=memberArr[0];
           const title=`Ajo contribution recorded — ${groupName}`;
           const detail=`Your contribution of ${fmt(amount)} to "${groupName}" (cycle ${cycle}) has been recorded. ${posText}`;
-          await addNotification(userId,title+': '+detail);
-          await notify({type:'contributor_action',to:mem.email,name:mem.name,title,detail});
+          await addNotification(userId,title+': '+detail,'ajo');
         }
       }catch(e){logSystemError('notify:group_contribution:member',e);}
 
@@ -5179,8 +5143,7 @@ async function adminRecordGroupContribution(memberId,groupId,amount,cycle,userId
             const coord=coordArr[0];
             const title=`Contribution recorded in ${groupName}`;
             const detail=`${memberName}'s contribution of ${fmt(amount)} for cycle ${cycle} in "${groupName}" has been recorded by the admin.`;
-            await addNotification(coordinatorId,title+': '+detail);
-            await notify({type:'contributor_action',to:coord.email,name:coord.name,title,detail});
+            await addNotification(coordinatorId,title+': '+detail,'coordinator');
           }
         }catch(e){logSystemError('notify:group_contribution:coordinator',e);}
       }
@@ -5923,26 +5886,78 @@ async function uploadDealImage(input){
 
 // ─── BROADCAST EMAIL ──────────────────────────────────────
 
+const ANN_AUDIENCES=[
+  {k:'all',label:'All cooperative members'},
+  {k:'active',label:'Active members (those with savings)'},
+  {k:'inactive',label:'Inactive members (never contributed)'},
+  {k:'food',label:'Food scheme members'},
+  {k:'ajo',label:'Ajo members'},
+  {k:'invest',label:'Investment subscribers'}
+];
+let _annBase=null;
+async function annFetchAll(path){
+  const out=[];let off=0;
+  for(let i=0;i<20;i++){
+    const part=await sb(path+(path.includes('?')?'&':'?')+`limit=5000&offset=${off}`).catch(()=>[]);
+    if(!Array.isArray(part))break;
+    out.push(...part);if(part.length<5000)break;off+=5000;
+  }
+  return out;
+}
+async function annLoadBase(){
+  const [users,pays,food,gm,inv]=await Promise.all([
+    annFetchAll('users?role=eq.contributor&select=id,name,email,status'),
+    annFetchAll('payments?select=user_id,withdrawn'),
+    annFetchAll('food_scheme_enrollments?status=eq.opted_in&select=user_id'),
+    annFetchAll('group_members?status=eq.active&select=user_id'),
+    annFetchAll('investment_reservations?status=not.in.(cancelled,rejected)&select=user_id')
+  ]);
+  const members=users.filter(u=>u.status!=='revoked'&&u.status!=='closed'&&u.email);
+  const set=a=>new Set(a.map(x=>String(x.user_id)));
+  const ever=set(pays), active=set(pays.filter(x=>x.withdrawn!==true));
+  _annBase={members,sets:{all:null,active,inactive:null,food:set(food),ajo:set(gm),invest:set(inv)},ever};
+}
+// people in several selected groups appear once
+function annResolve(keys){
+  if(!_annBase)return [];
+  const seen=new Set(), out=[];
+  for(const u of _annBase.members){
+    const id=String(u.id);
+    const hit=keys.some(k=>k==='all'||(k==='inactive'?!_annBase.ever.has(id):_annBase.sets[k].has(id)));
+    if(hit&&!seen.has(id)){seen.add(id);out.push(u);}
+  }
+  return out;
+}
+function annSelectedKeys(){return ANN_AUDIENCES.map(a=>a.k).filter(k=>{const e=document.getElementById('ann-aud-'+k);return e&&e.checked;});}
+function annUpdateCount(){
+  const el=document.getElementById('be-count');if(!el)return;
+  if(!_annBase){el.textContent='Loading recipient count...';return;}
+  const keys=annSelectedKeys();
+  const n=keys.length?annResolve(keys).length:0;
+  el.innerHTML=keys.length?`This will reach <strong>${n}</strong> member${n!==1?'s':''}.`:'Choose at least one audience.';
+}
 function openBroadcastEmail(){
+  _annBase=null;
   openModal(`
-  <h3>Send announcement to all contributors</h3>
-  <p style="font-size:13px;color:#666;margin-top:-6px">This will send an email to every active contributor on Fundova.</p>
+  <h3>Send announcement</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Choose who should get it and how.</p>
+  <div class="field"><label>Audience <span style="color:#aaa;font-weight:400">(pick one or more; each person gets it once)</span></label>
+    <div style="display:grid;gap:6px;margin-top:4px">${ANN_AUDIENCES.map(a=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer"><input type="checkbox" id="ann-aud-${a.k}" ${a.k==='all'?'checked':''} onchange="annUpdateCount()"> ${a.label}</label>`).join('')}</div>
+    <div style="font-size:12px;color:#888;margin-top:8px" id="be-count">Loading recipient count...</div>
+  </div>
+  <div class="field"><label>How to send</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;margin-top:4px"><input type="checkbox" id="ann-ch-email" checked> Email</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;margin-top:6px"><input type="checkbox" id="ann-ch-app" checked> In-app notice and phone alert</label>
+  </div>
   <div class="field"><label>Subject</label><input id="be-subject" placeholder="e.g. December payout update"></div>
-  <div class="field"><label>Message</label><textarea id="be-body" rows="8" placeholder="Write your announcement here..."></textarea></div>
-  <div class="field"><label>Image <span style="color:#aaa;font-weight:400">(optional)</span></label><input id="be-image" type="file" accept="image/*" onchange="uploadBroadcastImage(this)"><div id="be-image-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
-  <div class="warn-box" style="margin-bottom:4px"><i class="ti ti-alert-triangle" style="flex-shrink:0;margin-top:1px"></i><div>This will send to ALL contributors. Review carefully before sending.</div></div>
+  <div class="field"><label>Message</label><textarea id="be-body" rows="7" placeholder="Write your announcement here..."></textarea></div>
+  <div class="field"><label>Image <span style="color:#aaa;font-weight:400">(optional, email only)</span></label><input id="be-image" type="file" accept="image/*" onchange="uploadBroadcastImage(this)"><div id="be-image-url" style="font-size:11px;color:#888;margin-top:4px"></div></div>
   <div class="error" id="be-err"></div>
-  <div style="font-size:12px;color:#888;margin-bottom:8px" id="be-count">Loading recipient count...</div>
   <div class="modal-footer">
     <button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="be-btn" onclick="sendBroadcastEmail()"><i class="ti ti-send"></i> Send to all contributors</button>
+    <button class="btn btn-primary" id="be-btn" onclick="sendBroadcastEmail()"><i class="ti ti-send"></i> Send announcement</button>
   </div>`);
-
-  // Load contributor count
-  sb('users?role=eq.contributor&select=id,email').then(users=>{
-    const el=document.getElementById('be-count');
-    if(el)el.textContent=`This will send to ${users.length} contributor${users.length!==1?'s':''}.`;
-  }).catch(()=>{});
+  annLoadBase().then(annUpdateCount).catch(()=>{const el=document.getElementById('be-count');if(el)el.textContent='Could not load the member list.';});
 }
 
 // ── Broadcast email image upload ──
@@ -5974,38 +5989,43 @@ async function sendBroadcastEmail(){
   const image_url=document.getElementById('be-image')?.dataset?.url||null;
   const err=document.getElementById('be-err');
   const btn=document.getElementById('be-btn');
-
+  const label='<i class="ti ti-send"></i> Send announcement';
+  const keys=annSelectedKeys();
+  const byEmail=document.getElementById('ann-ch-email').checked, byApp=document.getElementById('ann-ch-app').checked;
+  err.textContent='';
+  if(!_annBase){err.textContent='Still loading the member list. Please wait a moment.';return;}
+  if(!keys.length){err.textContent='Choose at least one audience.';return;}
+  if(!byEmail&&!byApp){err.textContent='Choose email, in-app and phone alert, or both.';return;}
   if(!subject){err.textContent='Please enter a subject.';return;}
   if(!body){err.textContent='Please write a message.';return;}
-
-  if(!confirm('Are you sure you want to send this email to all contributors? This cannot be undone.')){return;}
-
+  const users=annResolve(keys);
+  if(!users.length){err.textContent='No members match this audience.';return;}
+  if(!confirm(`Send this announcement to ${users.length} member${users.length!==1?'s':''}${byEmail&&byApp?' by email and in-app/phone alert':byEmail?' by email':' as an in-app notice and phone alert'}? This cannot be undone.`))return;
   btn.innerHTML='<span class="spinner"></span> Sending…';btn.disabled=true;
-
   try{
-    const users=await sb('users?role=eq.contributor&select=id,name,email');
-    if(!users||!users.length){err.textContent='No contributors found.';btn.innerHTML='<i class="ti ti-send"></i> Send to all contributors';btn.disabled=false;return;}
-
-    let sent=0;let failed=0;
-    for(const u of users){
-      try{
-        await fetch('/.netlify/functions/send-email',{
-          method:'POST',
-          headers:authHeaders(),
-          body:JSON.stringify({type:'broadcast',to:u.email,name:u.name,subject,body,image_url})
-        });
-        sent++;
-      }catch(e){failed++;}
-      // Update progress
-      btn.innerHTML=`<span class="spinner"></span> Sending… ${sent+failed}/${users.length}`;
+    let emailed=0,failed=0,inApp=0;
+    if(byApp){
+      const ids=users.map(u=>String(u.id));
+      const text='📣 '+subject+' — '+body.replace(/\s+/g,' ').slice(0,260);
+      for(let i=0;i<ids.length;i+=500){
+        const r=await alertsPost({action:'announce',user_ids:ids.slice(i,i+500),message:text});
+        if(r.ok){const j=await r.json().catch(()=>({}));inApp+=j.saved||0;}
+      }
     }
-
+    if(byEmail){
+      let done=0;
+      for(const u of users){
+        try{
+          const r=await fetch('/.netlify/functions/send-email',{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'announcement',to:u.email,name:u.name,subject,body,image_url})});
+          if(r.ok)emailed++;else failed++;
+        }catch(e){failed++;}
+        done++;btn.innerHTML=`<span class="spinner"></span> Sending emails… ${done}/${users.length}`;
+      }
+    }
     closeModal();
-    toast(`<i class="ti ti-check"></i> Sent to ${sent} contributor${sent!==1?'s':''}${failed>0?' ('+failed+' failed)':''}.`);
+    toast(`<i class="ti ti-check"></i> Announcement sent${byApp?' · '+inApp+' in-app':''}${byEmail?' · '+emailed+' emailed':''}${failed>0?' ('+failed+' emails failed)':''}.`);
   }catch(e){
-    err.textContent='Error: '+e.message;
-    btn.innerHTML='<i class="ti ti-send"></i> Send to all contributors';
-    btn.disabled=false;
+    err.textContent='Error: '+e.message;btn.innerHTML=label;btn.disabled=false;
   }
 }
 
@@ -6355,6 +6375,7 @@ async function withdrawBonus(){
     // Create withdrawal request
     await sb('withdrawal_requests',{method:'POST',body:JSON.stringify({user_id:currentUser.id,amount:total,note:'Cooperative bonus withdrawal',status:'pending'})});
     notify({type:'admin_withdrawal_request',name:currentUser.name,amount:total,note:'Cooperative bonus withdrawal'}).catch(e=>logSystemError('notify:bonus_withdrawal_request',e));
+    notifyContributorAction('Withdrawal request submitted','Your request to withdraw '+fmt(total)+' has been received. A decision will be made in less than 24 hours.');
     // Mark bonuses as pending withdrawal
     for(const b of bonuses){
       await sb(`cooperative_bonuses?id=eq.${b.id}`,{method:'PATCH',body:JSON.stringify({status:'withdrawal_requested'})});
@@ -6435,8 +6456,7 @@ async function approveGroupPayout(payoutId,groupId,memberId,recipientUserId,amou
         const u=userArr[0];
         const title=`Ajo payout approved — ${groupName}`;
         const detail=`Your payout of ${fmt(amount)} from "${groupName}" (period ${cycle}) has been approved. You will be credited within 24 hours or less.`;
-        await addNotification(recipientUserId,title+': '+detail);
-        await notify({type:'contributor_action',to:u.email,name:u.name,title,detail});
+        await addNotification(recipientUserId,title+': '+detail,'ajo');
       }
     }catch(e){logSystemError('notify:group_payout_approved',e);}
   }catch(e){alert('Error approving payout: '+e.message);}
@@ -6456,8 +6476,7 @@ async function rejectGroupPayout(payoutId,groupId,memberName,groupName,coordinat
           const c=coordArr[0];
           const title=`Payout request rejected — ${groupName}`;
           const detail=`The payout request for ${memberName} in "${groupName}" was rejected by admin. Please check the group and resubmit if needed.`;
-          await addNotification(coordinatorId,title+': '+detail);
-          await notify({type:'contributor_action',to:c.email,name:c.name,title,detail});
+          await addNotification(coordinatorId,title+': '+detail,'ajo');
         }
       }catch(e){logSystemError('notify:group_payout_rejected',e);}
     }
@@ -6807,6 +6826,7 @@ function getMemberFaqs(){return [
           {q:'How do I refer someone?',a:'Once you are a member, you will have a unique referral link on your dashboard. When someone joins and makes their first contribution via your link, you earn ₦500 credited to your account.'},
           {q:'What is a group savings coordinator?',a:'A coordinator is a Fundova member who runs a rotating savings group (ajo) using the Fundova platform. They invite members, track contributions and initiate payouts. Coordinators earn a bonus from the interest generated while group funds are held in Fundova account.'},
           {q:'Is my money safe?',a:'Yes. Fundova is a registered cooperative and company. Your funds are held in a dedicated FCMB account in the name of Fundova Multipurpose Cooperative Society Ltd. We have a 100% payout success record.'},
+          {q:'Phone alerts: how do they work?',a:'We now send you a short alert on your phone when something happens on your account, instead of an email. The alert only says what kind of update it is, for example "Fundova: an update on your withdrawal", and the details are inside the app. To turn alerts on, open Fundova and tap Turn on when asked, or tap the bell and choose Turn on. On iPhone, first tap Share, then Add to Home Screen, and open Fundova from your Home Screen. You can turn alerts off any time from the bell. Every update is also saved in the bell, so you can read it later.'},
           {q:'How do I contact Fundova?',a:'WhatsApp: 08035257262 | Instagram: @fundova_cooperative | Email: hello@fundova.africa'},
         ];}
 
@@ -6850,6 +6870,115 @@ function getRefFromUrl(){
   return params.get('ref') || '';
 }
 
+// ─── PHONE ALERTS ─────────────────────────────────────────
+const ALERTS_SNOOZE_KEY='fv_alerts_snooze', ALERTS_OFF_KEY='fv_alerts_off';
+let _alertsOn=false;
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+function alertsSupported(){return ('serviceWorker' in navigator)&&('PushManager' in window)&&('Notification' in window);}
+function isIos(){return /iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
+function isStandalone(){try{return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;}catch(e){return false;}}
+function needsHomeScreen(){return isIos()&&!isStandalone();}
+function b64uToBytes(b){const pad='='.repeat((4-b.length%4)%4);const raw=atob((b+pad).replace(/-/g,'+').replace(/_/g,'/'));const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
+async function alertsGetSub(){try{const reg=await navigator.serviceWorker.ready;return await reg.pushManager.getSubscription();}catch(e){return null;}}
+async function alertsRefreshState(){_alertsOn=false;if(!alertsSupported()||Notification.permission!=='granted')return;_alertsOn=!!(await alertsGetSub());}
+async function alertsPost(obj){return fetch('/.netlify/functions/push',{method:'POST',headers:authHeaders(),body:JSON.stringify(obj)});}
+function alertsRowHtml(){
+  if(needsHomeScreen())return '<span style="font-size:11px;color:#888">Phone alerts: <button onclick="showIosAlertSteps()" style="background:none;border:none;color:#0D3D2A;font-size:11px;font-weight:700;cursor:pointer;padding:0">How to turn on</button></span>';
+  if(!alertsSupported())return '<span style="font-size:11px;color:#aaa">Phone alerts are not available on this browser</span>';
+  return _alertsOn
+    ?'<span style="font-size:11px;color:#888"><i class="ti ti-bell-ringing" style="color:#1D9E75"></i> Phone alerts on · <button onclick="disableAlerts()" style="background:none;border:none;color:#A32D2D;font-size:11px;font-weight:700;cursor:pointer;padding:0">Turn off</button></span>'
+    :'<span style="font-size:11px;color:#888">Phone alerts off · <button onclick="enableAlerts()" style="background:none;border:none;color:#0D3D2A;font-size:11px;font-weight:700;cursor:pointer;padding:0">Turn on</button></span>';
+}
+function showIosAlertSteps(){
+  hideAlertsPrompt();
+  openModal(`<h3>Turn on phone alerts on iPhone</h3>
+  <p style="font-size:13px;color:#666;margin-top:-6px">Apple only allows alerts for apps added to your Home Screen. It takes under a minute.</p>
+  <ol style="font-size:14px;color:#333;line-height:2;padding-left:20px;margin:12px 0">
+    <li>Open fundova.africa in <strong>Safari</strong>.</li>
+    <li>Tap the <strong>Share</strong> button (the square with an arrow).</li>
+    <li>Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+    <li>Open <strong>Fundova</strong> from your Home Screen, sign in, and tap <strong>Turn on</strong> when asked.</li>
+  </ol>
+  <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal()">Got it</button></div>`);
+}
+function hideAlertsPrompt(){const e=document.getElementById('alerts-prompt');if(e)e.remove();}
+function snoozeAlertsPrompt(){lsSet(ALERTS_SNOOZE_KEY,String(Date.now()));hideAlertsPrompt();}
+function showAlertsPrompt(){
+  if(document.getElementById('alerts-prompt'))return;
+  const ios=needsHomeScreen();
+  const d=document.createElement('div');d.id='alerts-prompt';
+  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:84px;width:min(92vw,420px);background:#0D3D2A;color:#fff;border-radius:14px;padding:16px;z-index:9400;box-shadow:0 10px 32px rgba(0,0,0,.28);font-family:inherit';
+  d.innerHTML=`<div style="display:flex;gap:12px;align-items:flex-start"><div style="font-size:26px;line-height:1">🔔</div><div style="flex:1">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px">Turn on phone alerts</div>
+    <div style="font-size:12.5px;color:#cfe3d8;line-height:1.55">We now send fewer emails. Turn on alerts so your phone tells you when something happens on your account, like a payment or a withdrawal decision.</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="${ios?'showIosAlertSteps()':'enableAlerts()'}" style="background:#C9961A;color:#0D1F14;border:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">${ios?'Show me how':'Turn on'}</button>
+      <button onclick="snoozeAlertsPrompt()" style="background:transparent;color:#cfe3d8;border:1px solid rgba(255,255,255,.3);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer">Not now</button>
+    </div></div></div>`;
+  document.body.appendChild(d);
+}
+async function enableAlerts(){
+  if(needsHomeScreen()){showIosAlertSteps();return false;}
+  if(!alertsSupported()){toast('Phone alerts are not available on this browser.');return false;}
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Alerts are blocked. Allow notifications for Fundova in your phone or browser settings, then try again.');return false;}
+    const kr=await fetch('/.netlify/functions/push');const kj=await kr.json();
+    if(!kj||!kj.key){toast('Phone alerts are not ready yet. Please try again later.');return false;}
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uToBytes(kj.key)});
+    const r=await alertsPost({action:'subscribe',subscription:sub.toJSON()});
+    if(!r.ok)throw new Error('save failed');
+    _alertsOn=true;lsDel(ALERTS_OFF_KEY);lsDel(ALERTS_SNOOZE_KEY);hideAlertsPrompt();
+    alertsPost({action:'test'}).catch(()=>{});
+    toast('<i class="ti ti-bell-ringing"></i> Phone alerts are on.');
+    closeAlertPanels();
+    return true;
+  }catch(e){toast('Could not turn on alerts. Please try again.');return false;}
+}
+async function disableAlerts(){
+  try{
+    const sub=await alertsGetSub();
+    if(sub){await alertsPost({action:'unsubscribe',endpoint:sub.endpoint}).catch(()=>{});await sub.unsubscribe().catch(()=>{});}
+  }catch(e){}
+  _alertsOn=false;lsSet(ALERTS_OFF_KEY,'1');
+  toast('Phone alerts are off. You can still read every update in the bell.');
+  closeAlertPanels();
+}
+function closeAlertPanels(){['notif-panel','admin-notif-panel'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});}
+// after sign-in: refresh this phone's registration, or gently invite the person to turn alerts on (again after 7 days)
+async function alertsOnSignIn(){
+  if(!currentUser)return;
+  await alertsRefreshState();
+  if(_alertsOn){const sub=await alertsGetSub();if(sub)alertsPost({action:'subscribe',subscription:sub.toJSON()}).catch(()=>{});return;}
+  if(lsGet(ALERTS_OFF_KEY))return;
+  if(alertsSupported()&&Notification.permission==='denied')return;
+  if(!alertsSupported()&&!needsHomeScreen())return;
+  const t=Number(lsGet(ALERTS_SNOOZE_KEY)||0);
+  if(t&&Date.now()-t<7*24*3600*1000)return;
+  showAlertsPrompt();
+}
+// signing out stops this phone getting that person's alerts (it re-registers when someone signs in again)
+function alertsDetachPhone(){
+  if(!alertsSupported())return;
+  const h=authHeaders();
+  navigator.serviceWorker.ready.then(r=>r.pushManager.getSubscription()).then(sub=>{
+    if(sub)fetch('/.netlify/functions/push',{method:'POST',headers:h,body:JSON.stringify({action:'unsubscribe',endpoint:sub.endpoint})}).catch(()=>{});
+  }).catch(()=>{});
+}
+async function openAllNotifications(){
+  closeAlertPanels();
+  openModal('<h3>All notifications</h3><div id="all-notifs" style="max-height:60vh;overflow-y:auto;margin:0 -4px"><div style="padding:1.5rem;text-align:center;color:#888">Loading…</div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>');
+  try{
+    const rows=await sb(`notifications?user_id=eq.${currentUser.id}&select=*&order=created_at.desc&limit=300`);
+    const el=document.getElementById('all-notifs');if(!el)return;
+    el.innerHTML=(rows&&rows.length)?rows.map(n=>`<div style="padding:10px 6px;border-bottom:1px solid #f0f0ee"><div style="font-size:13px;color:#1a1a1a;margin-bottom:2px">${n.message}</div><div style="font-size:11px;color:#aaa">${fmtDate(n.created_at)}</div></div>`).join(''):'<div style="padding:1.5rem;text-align:center;color:#888">No notifications yet</div>';
+  }catch(e){const el=document.getElementById('all-notifs');if(el)el.textContent='Could not load notifications.';}
+}
+
 // ─── NOTIFICATION CENTRE ──────────────────────────────────
 
 let notifCount = 0;
@@ -6880,9 +7009,10 @@ async function openNotifications(){
     panel.innerHTML = '<div style="padding:1rem;text-align:center;color:#888"><div class="spinner spinner-dark" style="width:16px;height:16px;display:inline-block"></div></div>';
     const notifs = await loadNotifications();
     if(!notifs.length){
-      panel.innerHTML = '<div style="padding:2rem;text-align:center;color:#888"><i class="ti ti-bell-off" style="font-size:28px;display:block;margin-bottom:8px"></i>No notifications yet</div>';
+      panel.innerHTML = '<div style="padding:2rem;text-align:center;color:#888"><i class="ti ti-bell-off" style="font-size:28px;display:block;margin-bottom:8px"></i>No notifications yet</div><div style="padding:10px 14px;text-align:right;background:#fafaf8">'+alertsRowHtml()+'</div>';
       return;
     }
+    const footer = `<div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fafaf8;position:sticky;bottom:0"><button onclick="openAllNotifications()" style="background:none;border:none;color:#0D3D2A;font-size:12px;font-weight:700;cursor:pointer;padding:0">View all</button>${alertsRowHtml()}</div>`;
     panel.innerHTML = notifs.map(n=>`
       <div style="padding:12px 14px;border-bottom:1px solid #f0f0ee;display:flex;gap:10px;align-items:flex-start;background:${n.read?'#fff':'#F0FDF8'}">
         <div style="width:8px;height:8px;border-radius:50%;background:${n.read?'#ddd':'#1D9E75'};margin-top:5px;flex-shrink:0"></div>
@@ -6890,7 +7020,7 @@ async function openNotifications(){
           <div style="font-size:13px;color:#1a1a1a;margin-bottom:2px">${n.message}</div>
           <div style="font-size:11px;color:#aaa">${fmtDate(n.created_at)}</div>
         </div>
-      </div>`).join('');
+      </div>`).join('') + footer;
     // Mark all as read
     await sb(`notifications?user_id=eq.${currentUser.id}&read=eq.false`,{method:'PATCH',body:JSON.stringify({read:true})}).catch(()=>{});
     notifCount = 0;
@@ -6898,9 +7028,9 @@ async function openNotifications(){
   }
 }
 
-async function addNotification(userId, message){
+async function addNotification(userId, message, kind){
   try{
-    await sb('notifications',{method:'POST',body:JSON.stringify({user_id:userId,message,read:false})});
+    await sb('notifications',{method:'POST',body:JSON.stringify({user_id:userId,message,read:false,kind:kind||'general'})});
   }catch(e){console.error('Notification error:',e);}
 }
 
@@ -7713,21 +7843,6 @@ async function checkMilestones(totalSavings){
           const years = m/12;
           const label = m < 12 ? `${m} months` : years === 1 ? '1 year' : `${years} years`;
           await addNotification(currentUser.id,`🎉 Happy ${label} anniversary with Fundova! You have saved ${fmt(totalSavings)} since joining. Thank you for being part of our community!`);
-          notify({
-            type:'broadcast',
-            to:currentUser.email,
-            name:currentUser.name,
-            subject:`Happy ${label} anniversary with Fundova! 🎉`,
-            body:`Congratulations on ${label} of saving with Fundova!
-
-You have saved ${fmt(totalSavings)} since joining. That is something to be proud of.
-
-Keep saving, keep growing. We are honoured to be part of your financial journey.
-
-Helping you build wealth, one smart decision at a time.
-
-Fundova Limited`
-          }).catch(()=>{});
         }
       }
     }
@@ -7770,10 +7885,9 @@ async function sendKycNudge(userId, userName){
   try{
     const userArr = await sb(`users?id=eq.${userId}&select=email,name`);
     const email = userArr&&userArr.length?userArr[0].email:null;
-    await addNotification(userId,'📋 Please complete your KYC details to unlock withdrawals. Go to your dashboard and click "Update profile & KYC".');
+    await addNotification(userId,'📋 Please complete your KYC details to unlock withdrawals. Go to your dashboard and click "Update profile & KYC".','kyc');
     if(email){
-      await notify({type:'kyc_reminder',to:email,name:userName}).catch(e=>logSystemError('notify:kyc_reminder',e));
-      toast('<i class="ti ti-check"></i> KYC reminder emailed to '+userName);
+      toast('<i class="ti ti-check"></i> KYC reminder sent to '+userName+' (in-app and phone alert)');
     } else {
       toast('<i class="ti ti-alert-triangle"></i> In-app notification sent, but no email found for '+userName);
     }
@@ -7899,10 +8013,7 @@ async function verifyKyc(userId, userName){
     // Notify contributor
     const userArr = await sb(`users?id=eq.${userId}&select=name,email`);
     if(userArr&&userArr.length){
-      await notify({type:'broadcast',to:userArr[0].email,name:userArr[0].name,
-        subject:'Your KYC has been verified — Fundova',
-        body:'Great news! Your KYC details have been verified by our team. Your withdrawals are now fully unlocked. Thank you for completing your profile. Fundova Limited'
-      });
+      await addNotification(userId,'✅ Your KYC has been verified. Your withdrawals are now fully unlocked. Thank you for completing your profile.','kyc');
     }
     toast('<i class="ti ti-check"></i> KYC verified for '+userName);
     closeModal();
@@ -8219,6 +8330,7 @@ function renderAdminNotifPanel(){
         <i class="ti ti-check" style="font-size:28px;display:block;margin-bottom:8px;color:#1D9E75"></i>
         All tasks are up to date!
       </div>`;
+  panel.innerHTML += '<div style="padding:10px 14px;text-align:right;background:#fafaf8;border-top:1px solid #f0f0ee">'+alertsRowHtml()+'</div>';
 }
 
 function closeAdminNotifPanel(){
@@ -8654,14 +8766,7 @@ async function processReferralBonus(newUserId){
     // Notify referrer
     const referrerFull = await sb(`users?id=eq.${referrer.id}&select=name,email`);
     if(referrerFull&&referrerFull[0]){
-      await addNotification(referrer.id, '🎉 You earned a ₦500 referral bonus! '+user.name+' just made their first contribution via your referral link.');
-      notify({
-        type:'broadcast',
-        to:referrerFull[0].email,
-        name:referrerFull[0].name,
-        subject:'You earned a ₦500 referral bonus! 🎉',
-        body:'Great news! '+user.name+' just made their first contribution on Fundova via your referral link. Your ₦500 referral bonus has been credited to your account and is already earning interest. Keep sharing your link to earn more! Fundova Limited'
-      }).catch(()=>{});
+      await addNotification(referrer.id, '🎉 You earned a ₦500 referral bonus! '+user.name+' just made their first contribution via your referral link.','referral');
     }
   }catch(e){ console.error('Referral bonus error:', e); }
 }
@@ -8818,11 +8923,7 @@ async function optInFoodScheme(optionId, packageName){
     } else {
       await sb('food_scheme_enrollments', {method:'POST', body:JSON.stringify({user_id:currentUser.id, option_id:optionId, status:'opted_in'})});
     }
-    await addNotification(currentUser.id, '🧺 You have opted in to the Fundova Food Scheme — '+packageName+'. The cost will be deducted from your savings when the scheme is processed.');
-    notify({type:'broadcast', to:currentUser.email, name:currentUser.name,
-      subject:'Food Scheme — You are in! 🧺',
-      body:'You have successfully opted in to the Fundova Food Scheme ('+packageName+'). The cost will be deducted from your savings balance when admin processes the scheme. You can change your package or opt out before the deadline. Fundova Limited'
-    }).catch(()=>{});
+    await addNotification(currentUser.id, '🧺 You have opted in to the Fundova Food Scheme — '+packageName+'. The cost will be deducted from your savings when the scheme is processed.','food');
     closeModal();
     toast('<i class="ti ti-check"></i> Opted in to '+packageName+'!');
   }catch(e){ alert('Error: '+e.message); }
@@ -8838,11 +8939,7 @@ async function optOutFoodScheme(){
     if(cur&&cur.option_id){ try{ const o = await sb('food_scheme_options?id=eq.'+cur.option_id+'&select=name'); if(o&&o.length) pkgName = o[0].name; }catch(e){} }
     foodLogSafe(currentUser.id,'opted_out',{id:cur&&cur.option_id,name:pkgName},{});
     await sb('food_scheme_enrollments?user_id=eq.'+currentUser.id, {method:'DELETE'});
-    await addNotification(currentUser.id, '🧺 You have opted out of the Fundova Food Scheme. Nothing will be deducted from your savings.');
-    notify({type:'broadcast', to:currentUser.email, name:currentUser.name,
-      subject:'Food Scheme — You have opted out',
-      body:'You have opted out of the Fundova Food Scheme ('+pkgName+'). Nothing will be deducted from your savings. If this was a mistake, you can opt in again before the deadline. Fundova Limited'
-    }).catch(()=>{});
+    await addNotification(currentUser.id, '🧺 You have opted out of the Fundova Food Scheme. Nothing will be deducted from your savings.','food');
     closeModal();
     toast('<i class="ti ti-check"></i> Opted out of food scheme.');
   }catch(e){ alert('Error: '+e.message); }
@@ -8909,11 +9006,7 @@ async function triggerFoodSchemeDeduction(skippedOnly=false){
           await sb('food_scheme_enrollments?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'deducted',deducted_at:new Date().toISOString()})});
           result.charged.push({name:u.name,pkg:opt.name,price,usedInterest:price>capital+0.005?+(price-capital).toFixed(2):0});
           try{
-            await addNotification(e.user_id,'🧺 Your food scheme payment of '+money(price)+' ('+opt.name+') has been deducted from your savings. Admin will be in touch with pickup details.');
-            if(u.email)notify({type:'broadcast',to:u.email,name:u.name,
-              subject:'Food Scheme — Payment processed 🧺',
-              body:'Your food scheme payment of '+money(price)+' for the '+opt.name+' has been successfully deducted from your savings balance. Our team will contact you separately with pickup details. Thank you for participating in the Fundova Food Scheme! Fundova Limited'
-            }).catch(()=>{});
+            await addNotification(e.user_id,'🧺 Your food scheme payment of '+money(price)+' ('+opt.name+') has been deducted from your savings. Admin will be in touch with pickup details.','food');
           }catch(_n){}
         } else {
           const firstTime=e.status!=='skipped';
@@ -8921,11 +9014,7 @@ async function triggerFoodSchemeDeduction(skippedOnly=false){
             await sb('food_scheme_enrollments?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'skipped'})});
             foodLogSafe(e.user_id,'skipped',opt,{amount:price,ref,note:'Available '+available.toFixed(2)+' (capital '+capital.toFixed(2)+', interest '+interest.toFixed(2)+')'});
             try{
-              await addNotification(e.user_id,'⚠️ Your food scheme deduction could not be processed — your available savings of '+money(available)+' is not enough for the '+opt.name+' ('+money(price)+'). Please top up your savings to qualify.');
-              if(u.email)notify({type:'broadcast',to:u.email,name:u.name,
-                subject:'Food Scheme — Action needed ⚠️',
-                body:'Unfortunately your food scheme payment could not be processed. Your available savings of '+money(available)+' is not enough to cover the cost of the '+opt.name+' ('+money(price)+'). Please top up your Fundova savings as soon as possible. Once your balance is sufficient, the admin can retrigger the deduction for you. Fundova Limited'
-              }).catch(()=>{});
+              await addNotification(e.user_id,'⚠️ Your food scheme deduction could not be processed — your available savings of '+money(available)+' is not enough for the '+opt.name+' ('+money(price)+'). Please top up your savings to qualify.','food');
             }catch(_n){}
           }
           result.skipped.push({name:u.name,pkg:opt.name,price,available});
