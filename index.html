@@ -35,6 +35,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 input,select,textarea{width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;font-size:14px;font-family:inherit;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{outline:none;border-color:#1D9E75;box-shadow:0 0 0 3px #1D9E7515}
 input.warn{border-color:#D97706;background:#FFFBEB}
+.two-col-row>div{min-width:0}
+@media(max-width:760px){.two-col-row{grid-template-columns:1fr!important}}
+.qa-grid>div{min-width:0}
+.ann-opt{display:flex;align-items:center;justify-content:flex-start;gap:10px;font-size:13px;font-weight:400;color:#333;cursor:pointer;text-align:left}
+.ann-opt input[type=checkbox]{width:18px;height:18px;flex:none;margin:0;padding:0}
 textarea{resize:vertical;min-height:70px}
 .btn{padding:9px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:14px;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
 .btn:hover{background:#f5f5f3}
@@ -2282,7 +2287,7 @@ async function renderContributor(){
       </div>
 
       <!-- TWO COLUMN ROW -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
+      <div class="two-col-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
 
         <!-- CONTRIBUTION ACCOUNT -->
         <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
@@ -2302,7 +2307,7 @@ async function renderContributor(){
         <!-- QUICK ACTIONS -->
         <div style="background:#fff;border-radius:16px;padding:1.25rem;border:1px solid #e5e5e2">
           <div style="font-size:13px;font-weight:600;color:#0D1F14;margin-bottom:12px">Quick actions</div>
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+          <div class="qa-grid" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">
             ${[
               {icon:'ti-plus',label:'Contribute',action:'scrollToSection(\'dash\')'},
               {icon:'ti-cash',label:'Withdraw',action:'checkKycBeforeWithdrawal('+Math.round(totalPrincipal+totalInterest)+')'},
@@ -5942,12 +5947,12 @@ function openBroadcastEmail(){
   <h3>Send announcement</h3>
   <p style="font-size:13px;color:#666;margin-top:-6px">Choose who should get it and how.</p>
   <div class="field"><label>Audience <span style="color:#aaa;font-weight:400">(pick one or more; each person gets it once)</span></label>
-    <div style="display:grid;gap:6px;margin-top:4px">${ANN_AUDIENCES.map(a=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer"><input type="checkbox" id="ann-aud-${a.k}" ${a.k==='all'?'checked':''} onchange="annUpdateCount()"> ${a.label}</label>`).join('')}</div>
+    <div style="display:grid;gap:6px;margin-top:4px">${ANN_AUDIENCES.map(a=>`<label class="ann-opt"><input type="checkbox" id="ann-aud-${a.k}" ${a.k==='all'?'checked':''} onchange="annUpdateCount()"> ${a.label}</label>`).join('')}</div>
     <div style="font-size:12px;color:#888;margin-top:8px" id="be-count">Loading recipient count...</div>
   </div>
   <div class="field"><label>How to send</label>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;margin-top:4px"><input type="checkbox" id="ann-ch-email" checked> Email</label>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;margin-top:6px"><input type="checkbox" id="ann-ch-app" checked> In-app notice and phone alert</label>
+    <label class="ann-opt" style="margin-top:4px"><input type="checkbox" id="ann-ch-email" checked> Email</label>
+    <label class="ann-opt" style="margin-top:6px"><input type="checkbox" id="ann-ch-app" checked> In-app notice and phone alert</label>
   </div>
   <div class="field"><label>Subject</label><input id="be-subject" placeholder="e.g. December payout update"></div>
   <div class="field"><label>Message</label><textarea id="be-body" rows="7" placeholder="Write your announcement here..."></textarea></div>
