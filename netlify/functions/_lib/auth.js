@@ -3,7 +3,7 @@
 const https = require('https');
 const crypto = require('crypto');
 
-const ADMIN_TTL_S = 24 * 3600;      // admins and read-only admins: 24 hours
+const ADMIN_TTL_S = 72 * 3600;      // admins and read-only admins: 3 days, same as members
 const MEMBER_TTL_S = 72 * 3600;     // contributors and everyone else: 72 hours
 const CODE_TTL_MIN = 10;            // email login code validity
 const ALLOWED_ORIGINS = ['https://www.fundova.africa', 'https://fundova.africa', 'https://cooperative.fundova.africa'];
@@ -58,6 +58,19 @@ function safeEqualHex(a, b) {
 function clientIp(event) {
   const h = event.headers || {};
   return h['x-nf-client-connection-ip'] || (h['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+}
+
+// Who is calling: checks the signed token, then confirms the account is still open.
+// Returns {uid, role, email}, or null when there is no token. Throws 'session_expired' for a bad or closed one.
+async function getCaller(event) {
+  const tok = bearer(event);
+  if (!tok) return null;
+  const p = verifyToken(tok);
+  if (!p) throw new Error('session_expired');
+  const r = await module.exports.supa('users?id=eq.' + encodeURIComponent(p.uid) + '&select=id,role,status,email&limit=1', 'GET');
+  const row = (r.status === 200 && Array.isArray(r.data) && r.data[0]) || null;
+  if (!row || row.status === 'revoked' || row.status === 'closed') throw new Error('session_expired');
+  return { uid: String(row.id), role: row.role, email: String(row.email || '').toLowerCase() };
 }
 
 function corsHeaders(event) {
@@ -115,5 +128,5 @@ const EMAIL_RE = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/;
 module.exports = {
   ADMIN_TTL_S, MEMBER_TTL_S, CODE_TTL_MIN, ALLOWED_ORIGINS,
   signToken, verifyToken, bearer, hashCode, newCode, safeEqualHex, clientIp,
-  corsHeaders, reply, supa, sendResend, esc, EMAIL_RE, ttlFor
+  corsHeaders, reply, supa, sendResend, esc, EMAIL_RE, ttlFor, getCaller
 };
