@@ -1,4 +1,5 @@
 const A = require('./_lib/auth');
+const PUSH = require('./_lib/push');
 
 const SITE_URL = 'https://www.fundova.africa';
 const ADMIN_EMAIL = 'fundovamultipurposecooperative@gmail.com';
@@ -31,9 +32,30 @@ function pill(text, color) {
 
 // who may send which kind of email
 const PUBLIC_TYPES = ['admin_new_signup'];
-const ADMIN_ONLY = ['approval','payment','withdrawal_approved','withdrawal_rejected','investment_approved','investment_payment_confirmed','investment_cancelled','investment_refund_approved','deal_featured','deal_approved','deal_rejected','profile_approved','coordinator_approved','kyc_reminder','birthday','birthday_wish','broadcast'];
+const ADMIN_ONLY = ['approval','payment','withdrawal_approved','withdrawal_rejected','investment_approved','investment_payment_confirmed','investment_cancelled','investment_refund_approved','deal_featured','deal_approved','deal_rejected','profile_approved','coordinator_approved','kyc_reminder','birthday','birthday_wish','broadcast','announcement'];
 const ANY_SIGNED_IN = ['admin_withdrawal_request','admin_profile_update_request','admin_investment_reservation','admin_deal_submission','admin_kyc_update','admin_coordinator_application','contributor_action','nok_welcome','group_invitation'];
 const SELF_ONLY_FOR_MEMBERS = ['contributor_action'];   // members may only email themselves with these
+
+// ── phone alerts instead of email ──
+// These used to be emails. Now they go to the person's bell and phone. If the person has no account, the email is still sent.
+const NOTICE_TYPES = {
+  payment:                      { kind: 'payment',    text: b => `A payment of ${money(b.amount)} was recorded on your account${b.date ? ' (' + b.date + ')' : ''}.` },
+  withdrawal_approved:          { kind: 'withdrawal_approved', text: b => `Your withdrawal of ${money(b.amount)} was approved. Funds arrive in under 24 hours.` },
+  withdrawal_rejected:          { kind: 'withdrawal', text: b => `Your withdrawal request of ${money(b.amount)} was not approved. Please contact support if you have questions.` },
+  investment_approved:          { kind: 'investment', text: b => `Your investment${b.investment ? ' in ' + b.investment : ''} was approved.` },
+  investment_payment_confirmed: { kind: 'investment', text: b => `Your payment${b.investment ? ' for ' + b.investment : ''} was confirmed.` },
+  investment_cancelled:         { kind: 'investment', text: b => `Your investment reservation${b.investment ? ' for ' + b.investment : ''} was cancelled.` },
+  investment_refund_approved:   { kind: 'investment', text: b => `Your refund${b.investment ? ' for ' + b.investment : ''} was approved.` },
+  deal_featured:                { kind: 'deal',       text: b => `Your deal${b.deal ? ' "' + b.deal + '"' : ''} is now featured.` },
+  deal_approved:                { kind: 'deal',       text: b => `Your deal${b.deal ? ' "' + b.deal + '"' : ''} was approved.` },
+  deal_rejected:                { kind: 'deal',       text: b => `Your deal${b.deal ? ' "' + b.deal + '"' : ''} was not approved.` },
+  profile_approved:             { kind: 'profile',    text: () => 'Your profile update was approved.' },
+  coordinator_approved:         { kind: 'coordinator', text: () => 'Congratulations, you are now a group coordinator.' },
+  kyc_reminder:                 { kind: 'kyc',        text: () => 'Please complete your KYC details to unlock withdrawals. Open your dashboard and choose "Update profile & KYC".' }
+};
+const ADMIN_PUSH_TYPES = { admin_new_signup: 'admin_signup', admin_withdrawal_request: 'admin_withdrawal', admin_profile_update_request: 'admin_profile', admin_investment_reservation: 'admin_investment', admin_deal_submission: 'admin_deal', admin_kyc_update: 'admin_kyc', admin_coordinator_application: 'admin_coordinator' };
+const money = v => { const n = Number(v); return isFinite(n) ? '₦' + n.toLocaleString('en-NG') : 'an amount'; };
+const plain = v => String(v == null ? '' : v).replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const hits = new Map();
 function limited(key, max) {
   const now = Date.now(); const arr = (hits.get(key) || []).filter(t => now - t < 3600 * 1000);
@@ -71,7 +93,7 @@ exports.handler = async (event) => {
     } else if (!caller) {
       return J(event, 401, { error: 'session_expired' });
     } else if (ADMIN_ONLY.includes(type)) {
-      const ownTest = type === 'broadcast' && String(raw.to || '').toLowerCase() === caller.email;
+      const ownTest = (type === 'broadcast' || type === 'announcement') && String(raw.to || '').toLowerCase() === caller.email;
       if (!isAdmin && !ownTest) return J(event, 403, { error: 'Not allowed' });
     } else if (ANY_SIGNED_IN.includes(type)) {
       if (SELF_ONLY_FOR_MEMBERS.includes(type) && !isAdmin && String(raw.to || '').toLowerCase() !== caller.email) return J(event, 403, { error: 'Not allowed' });
@@ -90,6 +112,36 @@ exports.handler = async (event) => {
     }
     if (raw.image_url) {
       body.image_url = /^https:\/\/[^\s"'<>]+$/.test(String(raw.image_url)) && String(raw.image_url).length < 1000 ? A.esc(raw.image_url) : '';
+    }
+
+    // ── legacy internal "broadcast" emails: the bell already carries these, so no email goes out ──
+    if (type === 'broadcast') return J(event, 200, { success: true, skipped: true });
+
+    // ── contributor self-actions: bell only (no email, no phone alert) ──
+    if (type === 'contributor_action') {
+      const uid = await PUSH.userIdByEmail(body.to);
+      if (uid) { await PUSH.addBellNotice(uid, plain(body.title) + (body.detail ? ': ' + plain(body.detail) : ''), 'general'); return J(event, 200, { success: true, bell: true }); }
+    }
+
+    // ── admin alerts: phones first; email only if no admin phone is registered ──
+    if (ADMIN_PUSH_TYPES[type]) {
+      try {
+        const ids = await PUSH.adminIds();
+        const n = ids.length ? await PUSH.pushToUsers(ids, ADMIN_PUSH_TYPES[type]) : 0;
+        if (n > 0) return J(event, 200, { success: true, phones: n });
+      } catch (e) { console.log('admin push failed:', e.message); }
+    }
+
+    // ── member notices: bell + phone instead of email ──
+    if (NOTICE_TYPES[type] && body.to) {
+      const def = NOTICE_TYPES[type];
+      const uid = await PUSH.userIdByEmail(body.to);
+      if (uid) {
+        const b2 = {}; for (const k of Object.keys(body)) b2[k] = plain(body[k]);
+        await PUSH.addBellNotice(uid, def.text(b2), def.kind);
+        const phones = await PUSH.pushToUsers([uid], def.kind);
+        return J(event, 200, { success: true, bell: true, phones });
+      }
     }
 
     let to, subject, html;
@@ -397,8 +449,8 @@ exports.handler = async (event) => {
         <div style="color:#444;font-size:14px;line-height:1.8;white-space:pre-wrap">${msg}</div>
       `);
 
-    // ── BROADCAST ──
-    } else if (type === 'broadcast') {
+    // ── ANNOUNCEMENT (email) ──
+    } else if (type === 'announcement') {
       to = body.to; const name = body.name; const subj = body.subject; const msg = body.body; const image_url = body.image_url;
       if (!to || !subj || !msg) return J(event, 400, { error: 'Missing fields' });
       subject = subj;
@@ -472,6 +524,9 @@ exports.handler = async (event) => {
     if (result.status >= 400) {
       console.log('Resend refused the email, status', result.status);
       return J(event, 500, { error: 'Email could not be sent' });
+    }
+    if (type === 'birthday' || type === 'birthday_wish') {
+      try { const uid = await PUSH.userIdByEmail(to); if (uid) { await PUSH.addBellNotice(uid, 'Happy Birthday from all of us at Fundova! 🎂', 'birthday'); await PUSH.pushToUsers([uid], 'birthday'); } } catch (e) { /* email already sent */ }
     }
     return J(event, 200, { success: true });
 
