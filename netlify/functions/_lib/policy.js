@@ -153,7 +153,11 @@ const MEMBER = {
   notifications: async (c) => {
     if (c.method === 'GET') return ownScope(c) || 'own only';
     if (c.method === 'PATCH') return (ownScope(c) && onlyKeys(c.body, ['read'])) || 'own only';
-    if (c.method === 'POST') return rows(c.body).every(r => JSON.stringify(r).length < 4000) || 'too large';
+    if (c.method === 'POST') {
+      if (!rows(c.body).every(r => JSON.stringify(r).length < 4000)) return 'too large';
+      if (!rows(c.body).every(r => r.kind === undefined || /^[a-z_]{1,30}$/.test(String(r.kind)))) return 'bad kind';
+      return onlyKeys(c.body, ['user_id', 'message', 'read', 'kind']) || 'fields';
+    }
     return 'not allowed';
   },
   goals: async (c) => {
