@@ -116,7 +116,7 @@ tr:hover td{background:#fafafa}
   .login-card{width:95vw}
 }
 
-.contact-footer{background:#fff;border-top:1px solid #e5e5e2;padding:14px 1rem;display:flex;align-items:center;justify-content:center;gap:12px;position:fixed;bottom:0;left:0;right:0;z-index:50;flex-wrap:wrap}
+.contact-footer{background:#fff;border-top:1px solid #e5e5e2;padding:14px 1rem calc(14px + env(safe-area-inset-bottom));-webkit-transform:translate3d(0,0,0);transform:translate3d(0,0,0);display:flex;align-items:center;justify-content:center;gap:12px;position:fixed;bottom:0;left:0;right:0;z-index:50;flex-wrap:wrap}
 .contact-footer a{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;text-decoration:none;padding:6px 12px;border-radius:20px;transition:background .15s}
 .cf-phone{color:#0F6E56;background:#E1F5EE}.cf-phone:hover{background:#BBF7D0}
 .cf-wa{color:#065F46;background:#D1FAE5}.cf-wa:hover{background:#A7F3D0}
@@ -130,10 +130,11 @@ tr:hover td{background:#fafafa}
   #cooperative>div{grid-template-columns:1fr!important;}
   nav>div:nth-child(2){display:none!important;}
   footer>div>div:first-child>div{grid-template-columns:1fr 1fr!important;}
-  #contrib-sidebar{transform:translateX(-100%);transition:transform .25s ease;width:250px!important;box-shadow:0 0 40px rgba(0,0,0,.35);z-index:150!important}
-  #contrib-sidebar.mobile-open{transform:translateX(0)}
+  #contrib-sidebar{transform:translateX(-100%);transition:transform .25s ease,box-shadow .25s ease;width:250px!important;box-shadow:none;z-index:150!important}
+  #contrib-sidebar.mobile-open{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.35)}
   #contrib-sidebar .sidebar-label{display:inline!important}
-  #contrib-main{margin-left:0!important;max-width:100vw!important;padding:1rem!important;}
+  #contrib-main{margin-left:0!important;width:100%!important;min-width:0!important;max-width:100vw!important;padding:1rem!important;box-sizing:border-box;overflow-x:hidden;overflow-x:clip}
+  #contrib-main img,#contrib-main table{max-width:100%}
   #contrib-toggle-btn{display:none!important;}
   #contrib-hamburger{display:flex!important;}
 }
@@ -166,7 +167,15 @@ let signupStep=1;
 
 // Session persistence. The server sets the length: 72 hours for members, 24 hours for admins.
 function saveSession(user,token,exp){
-  try{localStorage.setItem('fundova_session',JSON.stringify({user,token,expiry:exp*1000}));}catch(e){}
+  try{
+    // when only the profile changes (token not given), keep the existing sign-in instead of wiping it
+    if(!token){
+      const cur=JSON.parse(localStorage.getItem('fundova_session')||'null');
+      if(cur&&cur.token){localStorage.setItem('fundova_session',JSON.stringify({user,token:cur.token,expiry:cur.expiry}));}
+      return;
+    }
+    localStorage.setItem('fundova_session',JSON.stringify({user,token,expiry:exp*1000}));
+  }catch(e){}
 }
 function loadSession(){
   try{
