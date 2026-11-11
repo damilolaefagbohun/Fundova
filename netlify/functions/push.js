@@ -24,7 +24,7 @@ exports.handler = async (event) => {
     let req; try { req = JSON.parse(event.body || '{}'); } catch (e) { return J(event, 400, { error: 'Bad request' }); }
     if (!req || typeof req !== 'object' || Array.isArray(req)) return J(event, 400, { error: 'Bad request' });
     let caller;
-    try { caller = await A.getCaller(event); } catch (e) { return J(event, 401, { error: 'session_expired' }); }
+    try { caller = await A.getCaller(event); } catch (e) { return J(event, e.message === 'session_expired' ? 401 : 503, { error: e.message === 'session_expired' ? 'session_expired' : 'Please try again' }); }
     if (!caller) return J(event, 401, { error: 'session_expired' });
     const action = String(req.action || '');
 
