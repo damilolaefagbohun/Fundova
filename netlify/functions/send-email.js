@@ -83,7 +83,8 @@ exports.handler = async (event) => {
       const p = A.verifyToken(tok);
       if (!p) return J(event, 401, { error: 'session_expired' });
       const r = await A.supa('users?id=eq.' + encodeURIComponent(p.uid) + '&select=id,role,status,email&limit=1', 'GET');
-      const row = (r.status === 200 && Array.isArray(r.data) && r.data[0]) || null;
+      if (r.status !== 200 || !Array.isArray(r.data)) return J(event, 503, { error: 'Please try again' });
+      const row = r.data[0] || null;
       if (!row || row.status === 'revoked' || row.status === 'closed') return J(event, 401, { error: 'session_expired' });
       caller = { uid: String(row.id), role: row.role, email: String(row.email || '').toLowerCase() };
     }
