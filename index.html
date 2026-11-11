@@ -182,7 +182,7 @@ function loadSession(){
     const raw=localStorage.getItem('fundova_session');
     if(!raw)return null;
     const session=JSON.parse(raw);
-    if(!session.token||Date.now()>session.expiry){localStorage.removeItem('fundova_session');return null;}
+    if(!session.token||Date.now()>session.expiry){localStorage.removeItem('fundova_session');noteSignout('the sign-in time on this device ran out');return null;}
     return session.user;
   }catch(e){return null;}
 }
@@ -193,15 +193,27 @@ function authHeaders(){const h={'Content-Type':'application/json'};const t=getTo
 function clearSession(){
   try{localStorage.removeItem('fundova_session');}catch(e){}
 }
+// Remember WHY a sign-in ended, so the sign-in box can say so (shown once, within a day)
+function noteSignout(why){try{localStorage.setItem('fundova_signout_note',JSON.stringify({t:Date.now(),why:String(why||'')}));}catch(e){}}
+function signoutNoteHtml(){
+  try{
+    const n=JSON.parse(localStorage.getItem('fundova_signout_note')||'null');if(!n)return '';
+    localStorage.removeItem('fundova_signout_note');
+    if(Date.now()-n.t>24*3600e3)return '';
+    const tm=new Date(n.t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return `<div style="background:#FFF7E0;border:1px solid #E8D28A;color:#5A4500;border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;text-align:left">You were signed out at ${tm}: ${n.why}.</div>`;
+  }catch(e){return '';}
+}
 // Called when the server says the sign-in has ended (expired, or the account was revoked/closed)
-function sessionExpired(){
+function sessionExpired(why){
   if(!currentUser)return;
+  noteSignout(why||'the server ended your sign-in');
   currentUser=null;clearSession();signupStep=1;
   try{render();}catch(e){}
   setTimeout(()=>{try{toast('Your session has ended. Please sign in again.','#A32D2D');openLoginModal();}catch(e){}},80);
 }
 
-async function sb(path, opts={}, _retryCount=0){
+async function sb(path, opts={}, _retryCount=0, _auth401=false){
   const method = opts.method||'GET';
   const isReadOnly = method==='GET';
   const hadToken = !!getToken();
@@ -219,7 +231,14 @@ async function sb(path, opts={}, _retryCount=0){
       })
     });
     clearTimeout(timeout);
-    if(res.status===401&&hadToken){sessionExpired();throw new Error('Session expired');}
+    if(res.status===401&&hadToken){
+      // A 401 right after a laptop wakes can be a one-off. A rejected request was never carried out, so it is safe to
+      // ask once more after a short wait before signing anyone out.
+      if(!_auth401){await new Promise(r=>setTimeout(r,2500));return sb(path,opts,_retryCount,true);}
+      let why='the server did not accept your sign-in';
+      try{const b=JSON.parse(await res.text());if(b&&b.error==='session_expired')why='your sign-in time ran out or was ended on the server';}catch(e){}
+      sessionExpired(why);throw new Error('Session expired');
+    }
     if(!res.ok){const e=await res.text();throw new Error(e);}
     const result=await res.json();
     if(result.status>=400)throw new Error(JSON.stringify(result.data));
@@ -938,6 +957,7 @@ function renderLogin(){
         <div style="font-size:12px;font-weight:700;color:#C9961A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Member Access</div>
         <h2 style="font-size:22px;font-weight:800;color:#0D1F14;margin:0">Sign in to your dashboard</h2>
       </div>
+      ${signoutNoteHtml()}
       <div class="field" style="margin-bottom:14px"><label style="color:#444;font-size:13px">Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email" value="${localStorage.getItem('fundova_saved_email')||''}" style="border:1.5px solid #e5e5e2;border-radius:8px;padding:11px 14px;width:100%;font-size:14px;box-sizing:border-box"></div>
       <div class="error" id="l-err" style="margin-bottom:10px"></div>
       <button id="l-btn" onclick="doLogin()" style="width:100%;background:#0D3D2A;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer"><i class="ti ti-mail"></i> Email me a code</button>
@@ -8686,9 +8706,14 @@ function startAdminRealtime(){
   // Poll every 30 seconds for new notifications
   // Much more responsive than the old 25-minute refresh
   let lastCounts = {};
+  let _lastPoll = Date.now();
 
   async function pollForUpdates(){
     if(!currentUser||(currentUser.role!=='admin'&&currentUser.role!=='admin_view'&&currentUser.role!=='super_admin')) return;
+    // If the computer has been asleep (a long gap since the last check) or the network is down, wait for the next tick:
+    // the connection is often not back for the first few seconds after waking.
+    const _now = Date.now(), _gap = _now - _lastPoll; _lastPoll = _now;
+    if(_gap > 75000 || !navigator.onLine) return;
     try{
       const [signups, withdrawals, kyc, reservations] = await Promise.all([
         sb('signup_requests?status=eq.pending&select=id'),
