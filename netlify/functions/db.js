@@ -10,8 +10,15 @@ const userCache = new Map();
 async function currentUserRow(uid) {
   const hit = userCache.get(uid);
   if (hit && hit.t > Date.now()) return hit.row;
-  const r = await A.supa(`users?id=eq.${encodeURIComponent(uid)}&select=id,role,status,email&limit=1`, 'GET');
-  const row = (r.status === 200 && Array.isArray(r.data) && r.data[0]) || null;
+  // A failed lookup (database busy or slow) is NOT the same as "no such user": never sign someone out because of it.
+  let r = null;
+  for (let i = 0; i < 3; i++) {
+    try { r = await A.supa(`users?id=eq.${encodeURIComponent(uid)}&select=id,role,status,email&limit=1`, 'GET'); } catch (e) { r = null; }
+    if (r && r.status === 200 && Array.isArray(r.data)) break;
+    await new Promise(res => setTimeout(res, 150 * (i + 1)));
+  }
+  if (!r || r.status !== 200 || !Array.isArray(r.data)) { console.log('USER_LOOKUP_FAILED', r && r.status); const e = new Error('lookup_failed'); throw e; }
+  const row = r.data[0] || null;
   userCache.set(uid, { row, t: Date.now() + 60 * 1000 });
   if (userCache.size > 2000) userCache.clear();
   return row;
