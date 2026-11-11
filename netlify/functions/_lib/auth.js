@@ -68,7 +68,8 @@ async function getCaller(event) {
   const p = verifyToken(tok);
   if (!p) throw new Error('session_expired');
   const r = await module.exports.supa('users?id=eq.' + encodeURIComponent(p.uid) + '&select=id,role,status,email&limit=1', 'GET');
-  const row = (r.status === 200 && Array.isArray(r.data) && r.data[0]) || null;
+  if (r.status !== 200 || !Array.isArray(r.data)) throw new Error('lookup_failed');
+  const row = r.data[0] || null;
   if (!row || row.status === 'revoked' || row.status === 'closed') throw new Error('session_expired');
   return { uid: String(row.id), role: row.role, email: String(row.email || '').toLowerCase() };
 }
